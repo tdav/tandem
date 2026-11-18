@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Tandem.App.Resources;
 
 namespace Tandem.App.Tests;
@@ -10,14 +11,21 @@ public sealed class LanguageCollection
     public const string Name = "Language";
 }
 
-/// <summary>Restores the language that was current when the test started.</summary>
+/// <summary>Puts every test back on <see cref="TestLanguage.Default"/> when it ends.</summary>
 public abstract class LanguageTestBase : IDisposable
 {
-    private readonly string _saved = Loc.Language;
-
     public void Dispose()
     {
-        Loc.SetLanguage(_saved);
+        Loc.SetLanguage(TestLanguage.Default);
         GC.SuppressFinalize(this);
     }
+}
+
+/// <summary>Tests run in English whatever the machine's system language is.</summary>
+public static class TestLanguage
+{
+    public const string Default = "en";
+
+    [ModuleInitializer]
+    internal static void Initialize() => Loc.SetLanguage(Default);
 }

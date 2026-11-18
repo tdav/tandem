@@ -70,13 +70,13 @@
     <value>ОК</value>
   </data>
   <data name="Button_Cancel" xml:space="preserve">
-    <value>Отмена</value>
+    <value>Отменить</value>
   </data>
   <data name="Button_Copy" xml:space="preserve">
     <value>Копировать</value>
   </data>
   <data name="Button_Move" xml:space="preserve">
-    <value>Переместить</value>
+    <value>Перенести</value>
   </data>
   <data name="Button_Delete" xml:space="preserve">
     <value>Удалить</value>
@@ -100,7 +100,7 @@
     <value>Продолжить</value>
   </data>
   <data name="Button_Background" xml:space="preserve">
-    <value>Свернуть в фон</value>
+    <value>В фон</value>
   </data>
 
   <!-- Column headers -->
@@ -120,7 +120,7 @@
     <value>Права</value>
   </data>
 
-  <!-- Function-key bar -->
+  <!-- Function-key bar: short labels from the main-window design; exempt from the buttons-are-verbs rule -->
   <data name="FKey_View" xml:space="preserve">
     <value>Просмотр</value>
   </data>
@@ -128,13 +128,13 @@
     <value>Правка</value>
   </data>
   <data name="FKey_Copy" xml:space="preserve">
-    <value>Копировать</value>
+    <value>Копия</value>
   </data>
   <data name="FKey_Move" xml:space="preserve">
-    <value>Переместить</value>
+    <value>Перенос</value>
   </data>
   <data name="FKey_NewFolder" xml:space="preserve">
-    <value>Новая папка</value>
+    <value>Папка</value>
   </data>
   <data name="FKey_Delete" xml:space="preserve">
     <value>Удалить</value>
@@ -148,7 +148,7 @@
     <value>Папка назначения находится внутри исходной папки</value>
   </data>
   <data name="RejectionReason_SourceEqualsDestination" xml:space="preserve">
-    <value>Источник и назначение совпадают</value>
+    <value>Объект уже находится в папке назначения под этим именем</value>
   </data>
   <data name="RejectionReason_InvalidName" xml:space="preserve">
     <value>Недопустимое имя</value>
@@ -162,16 +162,16 @@
     <value>Пропущено: объект уже есть в папке назначения</value>
   </data>
   <data name="SkipReason_OlderThanDestination" xml:space="preserve">
-    <value>Пропущено: объект в папке назначения не старше</value>
+    <value>Пропущено: файл в папке назначения не старше исходного</value>
   </data>
   <data name="SkipReason_Error" xml:space="preserve">
     <value>Пропущено после ошибки</value>
   </data>
   <data name="SkipReason_SymlinksNotSupported" xml:space="preserve">
-    <value>Пропущено: назначение не поддерживает символические ссылки</value>
+    <value>Пропущено: папка назначения не поддерживает символические ссылки</value>
   </data>
   <data name="SkipReason_SourceIsDestination" xml:space="preserve">
-    <value>Не удалено: назначение совпадает с источником</value>
+    <value>Не удалено: папка назначения совпадает с источником</value>
   </data>
 
   <!-- Tandem.Core.Operations.OperationKind (names of operations, not buttons) -->
@@ -179,7 +179,7 @@
     <value>Копирование</value>
   </data>
   <data name="OperationKind_Move" xml:space="preserve">
-    <value>Перемещение</value>
+    <value>Перенос</value>
   </data>
   <data name="OperationKind_Delete" xml:space="preserve">
     <value>Удаление</value>
@@ -222,7 +222,7 @@
     <value>Переименовать</value>
   </data>
   <data name="ConflictAction_Cancel" xml:space="preserve">
-    <value>Отмена</value>
+    <value>Отменить</value>
   </data>
 
   <!-- Tandem.Core.Operations.ErrorAction (buttons) -->

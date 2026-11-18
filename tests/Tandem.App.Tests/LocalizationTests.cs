@@ -156,6 +156,6 @@ public class LocalizationTests : LanguageTestBase
     {
         Loc.SetLanguage("ru");
         var probe = new LocProbe();
-        Assert.Equal("Отмена", probe.FindControl<TextBlock>("Text")!.Text);
+        Assert.Equal("Отменить", probe.FindControl<TextBlock>("Text")!.Text);
     }
 }

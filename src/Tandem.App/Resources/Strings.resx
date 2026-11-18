@@ -102,7 +102,7 @@
     <value>Resume</value>
   </data>
   <data name="Button_Background" xml:space="preserve">
-    <value>Run in background</value>
+    <value>Background</value>
     <comment>Sends a running operation to the background</comment>
   </data>
 
@@ -125,7 +125,7 @@
     <comment>Unix permissions</comment>
   </data>
 
-  <!-- Function-key bar -->
+  <!-- Function-key bar: short labels from the main-window design; exempt from the buttons-are-verbs rule -->
   <data name="FKey_View" xml:space="preserve">
     <value>View</value>
   </data>
@@ -139,7 +139,7 @@
     <value>Move</value>
   </data>
   <data name="FKey_NewFolder" xml:space="preserve">
-    <value>New folder</value>
+    <value>Folder</value>
   </data>
   <data name="FKey_Delete" xml:space="preserve">
     <value>Delete</value>
@@ -153,7 +153,7 @@
     <value>The destination folder is inside the source folder</value>
   </data>
   <data name="RejectionReason_SourceEqualsDestination" xml:space="preserve">
-    <value>The source and the destination are the same</value>
+    <value>The item is already in the destination folder under this name</value>
   </data>
   <data name="RejectionReason_InvalidName" xml:space="preserve">
     <value>The name is not valid</value>
@@ -167,16 +167,16 @@
     <value>Skipped: the destination already exists</value>
   </data>
   <data name="SkipReason_OlderThanDestination" xml:space="preserve">
-    <value>Skipped: the destination is not older</value>
+    <value>Skipped: the destination file is not older than the source</value>
   </data>
   <data name="SkipReason_Error" xml:space="preserve">
     <value>Skipped after an error</value>
   </data>
   <data name="SkipReason_SymlinksNotSupported" xml:space="preserve">
-    <value>Skipped: the destination does not support symbolic links</value>
+    <value>Skipped: the destination folder does not support symbolic links</value>
   </data>
   <data name="SkipReason_SourceIsDestination" xml:space="preserve">
-    <value>Not deleted: the destination is the source itself</value>
+    <value>Not deleted: the destination folder is the source itself</value>
   </data>
 
   <!-- Tandem.Core.Operations.OperationKind (names of operations, not buttons) -->
