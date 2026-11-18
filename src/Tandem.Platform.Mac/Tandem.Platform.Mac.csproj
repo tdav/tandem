@@ -1,4 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- Interop/: source-generated P/Invoke into libobjc and libc -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Tandem.Platform.Mac.Tests" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Tandem.Core\Tandem.Core.csproj" />
   </ItemGroup>
