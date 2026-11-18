@@ -2,7 +2,8 @@ namespace Tandem.Core.Vfs;
 
 /// <summary>
 /// An absolute path inside a file-system provider. The path is normalized on construction:
-/// '/' separators, repeated '/' collapsed, no trailing '/' except for the root "/".
+/// '/' separators, repeated '/' collapsed, "." dropped, ".." resolved against the previous segment
+/// (going above the root throws), no trailing '/' except for the root "/".
 /// </summary>
 public readonly record struct VfsPath(string ProviderId, string Path)
 {
@@ -50,7 +51,19 @@ public readonly record struct VfsPath(string ProviderId, string Path)
         if (!path.StartsWith('/'))
             throw new ArgumentException($"Path must be absolute (start with '/'): '{path}'.", nameof(path));
 
-        var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var segments = new List<string>();
+        foreach (var segment in path.Split('/', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (segment == ".") continue;
+            if (segment == "..")
+            {
+                if (segments.Count == 0)
+                    throw new ArgumentException($"Path goes above the root: '{path}'.", nameof(path));
+                segments.RemoveAt(segments.Count - 1);
+                continue;
+            }
+            segments.Add(segment);
+        }
         return "/" + string.Join('/', segments);
     }
 }

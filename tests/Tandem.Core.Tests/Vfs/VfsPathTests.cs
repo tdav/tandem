@@ -9,6 +9,9 @@ public class VfsPathTests
     [InlineData("//a///b", "/a/b")]
     [InlineData("/", "/")]
     [InlineData("///", "/")]
+    [InlineData("/a/./b", "/a/b")]
+    [InlineData("/a/b/../c", "/a/c")]
+    [InlineData("/a/..", "/")]
     public void Normalizes(string input, string expected) => Assert.Equal(expected, VfsPath.Local(input).Path);
 
     [Fact]
@@ -22,6 +25,12 @@ public class VfsPathTests
     [InlineData("")]
     [InlineData("a/b")]
     public void Rejects_non_absolute_paths(string input) =>
+        Assert.Throws<ArgumentException>(() => VfsPath.Local(input));
+
+    [Theory]
+    [InlineData("/..")]
+    [InlineData("/a/../..")]
+    public void Rejects_dot_dot_above_root(string input) =>
         Assert.Throws<ArgumentException>(() => VfsPath.Local(input));
 
     [Fact]
@@ -77,4 +86,8 @@ public class VfsPathTests
         Assert.True(VfsPath.Local("/").IsSameOrDescendantOf(VfsPath.Local("/")));
         Assert.False(VfsPath.Local("/a").IsSameOrDescendantOf(VfsPath.Local("/a/b")));
     }
+
+    [Fact]
+    public void Descendant_check_sees_through_dot_dot_segments() =>
+        Assert.False(VfsPath.Local("/a/b/../c").IsSameOrDescendantOf(VfsPath.Local("/a/b")));
 }
