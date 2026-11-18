@@ -29,4 +29,21 @@ public sealed class ObjCTests
 
         Assert.Equal("/tmp/some dir/файл", ObjC.PathOf(ObjC.FileUrl("/tmp/some dir/файл", isDirectory: false)));
     }
+
+    [Fact]
+    public void Foundation_constants_are_loaded_by_symbol()
+    {
+        using var pool = new ObjC.AutoreleasePool();
+
+        Assert.Equal("NSURLTagNamesKey", ObjC.ToManagedString(ObjC.FoundationConstant("NSURLTagNamesKey")));
+        Assert.Throws<EntryPointNotFoundException>(() => ObjC.FoundationConstant("TandemNoSuchConstant"));
+    }
+
+    [Fact]
+    public void File_system_path_string_keeps_the_path()
+    {
+        using var pool = new ObjC.AutoreleasePool();
+
+        Assert.Equal("/tmp/Отчёт é", ObjC.ToManagedString(ObjC.FileSystemPathString("/tmp/Отчёт é")));
+    }
 }

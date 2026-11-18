@@ -17,15 +17,21 @@ internal static unsafe partial class ObjC
     private const string AppKitPath = "/System/Library/Frameworks/AppKit.framework/AppKit";
 
     private static readonly Lazy<IntPtr> AppKit = new(() => NativeLibrary.Load(AppKitPath));
+    private static readonly IntPtr Foundation;
 
     static ObjC()
     {
         // Foundation's classes (NSString, NSFileManager, …) are registered with the runtime only once it is loaded.
-        NativeLibrary.Load(FoundationPath);
+        Foundation = NativeLibrary.Load(FoundationPath);
     }
 
     /// <summary>Loads AppKit, so that its classes (<c>NSWorkspace</c>, …) are registered with the runtime.</summary>
     public static void LoadAppKit() => _ = AppKit.Value;
+
+    /// <summary>The value of an exported Foundation <c>NSString *</c> constant (such as <c>NSURLTagNamesKey</c>),
+    /// looked up by symbol name; such constants are never released.</summary>
+    /// <exception cref="EntryPointNotFoundException">Foundation exports no such symbol.</exception>
+    public static IntPtr FoundationConstant(string name) => *(IntPtr*)NativeLibrary.GetExport(Foundation, name);
 
     /// <summary>Returns the class named <paramref name="name"/>.</summary>
     /// <exception cref="InvalidOperationException">No such class is loaded.</exception>
@@ -94,6 +100,53 @@ internal static unsafe partial class ObjC
         {
             Marshal.FreeCoTaskMem(utf8);
         }
+    }
+
+    /// <summary>An autoreleased <c>NSString</c> path for <c>NSFileManager</c> methods that take one, made by
+    /// <c>-[NSFileManager stringWithFileSystemRepresentation:length:]</c> so that it names exactly the bytes of
+    /// <paramref name="path"/>.</summary>
+    public static IntPtr FileSystemPathString(string path)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        if (path.Contains('\0')) throw new ArgumentException("The path contains a NUL character.", nameof(path));
+        var utf8 = Marshal.StringToCoTaskMemUTF8(path);
+        try
+        {
+            var manager = Send(Class("NSFileManager"), Selector("defaultManager"));
+            var length = (nuint)System.Text.Encoding.UTF8.GetByteCount(path);
+            return SendBytesLength(manager, Selector("stringWithFileSystemRepresentation:length:"), utf8, length);
+        }
+        finally
+        {
+            Marshal.FreeCoTaskMem(utf8);
+        }
+    }
+
+    /// <summary>The <c>boolValue</c> of an <c>NSNumber</c>; false for nil.</summary>
+    public static bool ToBool(IntPtr nsNumber) => nsNumber != IntPtr.Zero && SendBool(nsNumber, Selector("boolValue")) != 0;
+
+    /// <summary>The <c>description</c> of an object; null for nil.</summary>
+    public static string? DescriptionOf(IntPtr obj) =>
+        obj == IntPtr.Zero ? null : ToManagedString(Send(obj, Selector("description")));
+
+    /// <summary>The value of a resource of a file <c>NSURL</c> (<c>-getResourceValue:forKey:error:</c>); nil when it
+    /// has none.</summary>
+    /// <exception cref="IOException">The value could not be read; the message is the system's description.</exception>
+    public static IntPtr GetResourceValue(IntPtr url, IntPtr key)
+    {
+        IntPtr value = IntPtr.Zero, error = IntPtr.Zero;
+        if (SendGetResource(url, Selector("getResourceValue:forKey:error:"), &value, key, &error) == 0)
+            throw new IOException(ErrorDescription(error));
+        return value;
+    }
+
+    /// <summary>Sets a resource of a file <c>NSURL</c> (<c>-setResourceValue:forKey:error:</c>).</summary>
+    /// <exception cref="IOException">The value could not be written; the message is the system's description.</exception>
+    public static void SetResourceValue(IntPtr url, IntPtr key, IntPtr value)
+    {
+        IntPtr error = IntPtr.Zero;
+        if (SendSetResource(url, Selector("setResourceValue:forKey:error:"), value, key, &error) == 0)
+            throw new IOException(ErrorDescription(error));
     }
 
     /// <summary>The path of a file <c>NSURL</c>, as its file system representation; null for nil.</summary>
@@ -166,6 +219,32 @@ internal static unsafe partial class ObjC
     /// <summary><c>id (id, SEL, const id *, NSUInteger)</c></summary>
     [LibraryImport(LibObjC, EntryPoint = "objc_msgSend")]
     public static partial IntPtr SendObjectsCount(IntPtr receiver, IntPtr selector, IntPtr* objects, nuint count);
+
+    /// <summary><c>BOOL (id, SEL)</c></summary>
+    [LibraryImport(LibObjC, EntryPoint = "objc_msgSend")]
+    public static partial byte SendBool(IntPtr receiver, IntPtr selector);
+
+    /// <summary><c>id (id, SEL, id, NSUInteger)</c></summary>
+    [LibraryImport(LibObjC, EntryPoint = "objc_msgSend")]
+    public static partial IntPtr SendObjectOptions(IntPtr receiver, IntPtr selector, IntPtr arg, nuint options);
+
+    /// <summary><c>id (id, SEL, const char *, NSUInteger)</c></summary>
+    [LibraryImport(LibObjC, EntryPoint = "objc_msgSend")]
+    public static partial IntPtr SendBytesLength(IntPtr receiver, IntPtr selector, IntPtr bytes, nuint length);
+
+    /// <summary><c>id (id, SEL, id, NSError **)</c></summary>
+    [LibraryImport(LibObjC, EntryPoint = "objc_msgSend")]
+    public static partial IntPtr SendError(IntPtr receiver, IntPtr selector, IntPtr arg, IntPtr* outError);
+
+    /// <summary><c>BOOL (id, SEL, id *, id, NSError **)</c> — <c>getResourceValue:forKey:error:</c></summary>
+    [LibraryImport(LibObjC, EntryPoint = "objc_msgSend")]
+    private static partial byte SendGetResource(IntPtr receiver, IntPtr selector, IntPtr* value, IntPtr key,
+        IntPtr* outError);
+
+    /// <summary><c>BOOL (id, SEL, id, id, NSError **)</c> — <c>setResourceValue:forKey:error:</c></summary>
+    [LibraryImport(LibObjC, EntryPoint = "objc_msgSend")]
+    private static partial byte SendSetResource(IntPtr receiver, IntPtr selector, IntPtr value, IntPtr key,
+        IntPtr* outError);
 
     /// <summary><c>BOOL (id, SEL, id, id *, NSError **)</c></summary>
     [LibraryImport(LibObjC, EntryPoint = "objc_msgSend")]
