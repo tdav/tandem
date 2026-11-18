@@ -50,6 +50,7 @@ public sealed class CopyOperation(ProviderRegistry providers, IReadOnlyList<VfsP
         var engine = new CopyEngine(_providers, this, _interaction, _nativeCopy, _options.VerifyContent);
         var destination = await engine.ResolveDestinationDirectoryAsync(_destinationDirectory, ct).ConfigureAwait(false);
         var targets = CopyEngine.ResolveTargets(_sources, destination, _options.NewName);
+        await engine.RejectTargetsOntoThemselvesAsync(targets, ct).ConfigureAwait(false);
 
         SetState(OperationState.Scanning);
         var items = await engine.ScanAsync(targets, ct).ConfigureAwait(false);

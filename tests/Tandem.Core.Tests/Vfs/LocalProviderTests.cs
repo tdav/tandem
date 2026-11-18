@@ -33,6 +33,18 @@ public sealed class LocalProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task IsSameEntry_sees_a_case_variant_path_as_the_same_entry()
+    {
+        Directory.CreateDirectory(_temp.Combine("dir"));
+        File.WriteAllText(_temp.Combine("dir/a.txt"), "a");
+        Assert.SkipUnless(File.Exists(_temp.Combine("DIR/A.TXT")), "The temp volume is case-sensitive.");
+
+        Assert.True(await _fs.IsSameEntryAsync(_temp.Root.Combine("dir").Combine("a.txt"),
+            _temp.Root.Combine("DIR").Combine("A.TXT"), Ct));
+        Assert.True(await _fs.IsSameEntryAsync(_temp.Root.Combine("dir"), _temp.Root.Combine("Dir"), Ct));
+    }
+
+    [Fact]
     public async Task Dotfile_is_hidden()
     {
         File.WriteAllText(_temp.Combine(".secret"), "x");

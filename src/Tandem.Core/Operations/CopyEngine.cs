@@ -73,12 +73,33 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
                     newName ?? source.Name);
             }
 
-            if (destination == source)
-                throw new OperationRejectedException(RejectionReason.SourceEqualsDestination,
-                    $"'{source.Path}' cannot be copied onto itself.", source, destination);
+            if (destination == source) throw OntoItself(source, destination);
             targets.Add((source, destination));
         }
         return targets;
+    }
+
+    /// <summary>The refusal for an item that would land on itself.</summary>
+    public static OperationRejectedException OntoItself(VfsPath source, VfsPath destination) =>
+        new(RejectionReason.SourceEqualsDestination, $"'{source.Path}' cannot be copied or moved onto itself.",
+            source, destination);
+
+    /// <summary>True when <paramref name="a"/> and <paramref name="b"/> both exist and are one file-system object
+    /// (on a case-insensitive volume "/a/x" and "/A/X" can be). Never true across providers.</summary>
+    public Task<bool> IsSameEntryAsync(VfsPath a, VfsPath b, CancellationToken ct) =>
+        string.Equals(a.ProviderId, b.ProviderId, StringComparison.Ordinal)
+            ? providers.For(a).IsSameEntryAsync(a, b, ct)
+            : Task.FromResult(false);
+
+    /// <summary>Refuses targets whose destination already is the source itself under another path (a copy
+    /// there would overwrite or merge the source into itself).</summary>
+    /// <exception cref="OperationRejectedException">A destination is its own source.</exception>
+    public async Task RejectTargetsOntoThemselvesAsync(IReadOnlyList<(VfsPath Source, VfsPath Destination)> targets,
+        CancellationToken ct)
+    {
+        foreach (var (source, destination) in targets)
+            if (await IsSameEntryAsync(source, destination, ct).ConfigureAwait(false))
+                throw OntoItself(source, destination);
     }
 
     /// <summary>The real directory behind <paramref name="destinationDirectory"/>: the path itself, or, when it is a
@@ -166,12 +187,12 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
 
     /// <summary>Copies the plan in order and returns each item's outcome (same order as <paramref name="items"/>).
     /// The items inside a skipped directory are skipped too, without a record of their own.
-    /// <paramref name="itemDone"/>, when given, is awaited after each item with its outcome, before the next item
-    /// starts (a file is then in place under its final name).</summary>
+    /// <paramref name="itemDone"/>, when given, is awaited after each item with its outcome and the path it was
+    /// written to (its final name, after a "rename" answer), before the next item starts.</summary>
     /// <exception cref="OperationCanceledException">The operation was cancelled, by <paramref name="ct"/> or by a
     /// "cancel" answer to a conflict.</exception>
     public async Task<IReadOnlyList<CopyOutcome>> CopyAllAsync(IReadOnlyList<CopyItem> items, CancellationToken ct,
-        Func<CopyItem, CopyOutcome, Task>? itemDone = null)
+        Func<CopyItem, CopyOutcome, VfsPath, Task>? itemDone = null)
     {
         var outcomes = new CopyOutcome[items.Count];
         VfsPath? skippedDirectory = null;
@@ -179,6 +200,7 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
         {
             await operation.WaitWhilePausedAsync(ct).ConfigureAwait(false);
             var item = items[i];
+            var writtenTo = item.Destination;
             if (skippedDirectory is { } skipped && item.Source.Path.IsSameOrDescendantOf(skipped))
             {
                 CountSkipped(item.Source);
@@ -186,18 +208,18 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
             }
             else
             {
-                outcomes[i] = await CopyItemAsync(item, ct).ConfigureAwait(false);
+                (outcomes[i], writtenTo) = await CopyItemAsync(item, ct).ConfigureAwait(false);
                 if (outcomes[i] == CopyOutcome.Skipped && item.Source.Kind == EntryKind.Directory)
                     skippedDirectory = item.Source.Path;
             }
-            if (itemDone is not null) await itemDone(item, outcomes[i]).ConfigureAwait(false);
+            if (itemDone is not null) await itemDone(item, outcomes[i], writtenTo).ConfigureAwait(false);
         }
         return outcomes;
     }
 
     /// <summary>Copies one plan item, asking about a conflict or an error as needed. A directory's own times and
     /// mode are applied later, by <see cref="ApplyDirectoryMetadataAsync"/>, once its contents are written.</summary>
-    private async Task<CopyOutcome> CopyItemAsync(CopyItem item, CancellationToken ct)
+    private async Task<(CopyOutcome, VfsPath)> CopyItemAsync(CopyItem item, CancellationToken ct)
     {
         operation.BeginItem(item.Source.Path.Path);
         var conflictAction = new StrongBox<ConflictAction?>(); // decided once per item, kept across retries
@@ -212,14 +234,14 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
                 if (!await Errors.ShouldRetryAsync(item.Source.Path, e, ct).ConfigureAwait(false))
                 {
                     CountSkipped(item.Source);
-                    return CopyOutcome.Skipped;
+                    return (CopyOutcome.Skipped, item.Destination);
                 }
                 ct.ThrowIfCancellationRequested();
             }
         }
     }
 
-    private async Task<CopyOutcome> CopyItemOnceAsync(CopyItem item, StrongBox<ConflictAction?> conflictAction,
+    private async Task<(CopyOutcome, VfsPath)> CopyItemOnceAsync(CopyItem item, StrongBox<ConflictAction?> conflictAction,
         CancellationToken ct)
     {
         // Only writing (and verifying) a file's content is cancellable, block by block; the short steps around
@@ -230,17 +252,21 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
         var target = providers.For(destination);
 
         if (source.Kind == EntryKind.Symlink && !target.Capabilities.HasFlag(ProviderCapabilities.Symlinks))
-            return Skip(source, SkipReason.SymlinksNotSupported);
+            return (Skip(source, SkipReason.SymlinksNotSupported), destination);
 
         var existing = await target.GetEntryAsync(destination, io).ConfigureAwait(false);
+        // The destination may be the source itself under another path (letter case, a linked folder): it must not
+        // be asked about, set aside, overwritten or merged into.
+        if (existing is not null && await IsSameEntryAsync(source.Path, destination, io).ConfigureAwait(false))
+            throw new VfsAlreadyExistsException($"'{destination.Path}' is '{source.Path.Path}' itself.");
         if (source.Kind == EntryKind.Directory)
         {
             if (existing is null)
             {
                 await target.CreateDirectoryAsync(destination, io).ConfigureAwait(false);
-                return CopyOutcome.DirectoryCreated;
+                return (CopyOutcome.DirectoryCreated, destination);
             }
-            if (existing.Kind == EntryKind.Directory) return CopyOutcome.DirectoryMerged;
+            if (existing.Kind == EntryKind.Directory) return (CopyOutcome.DirectoryMerged, destination);
             throw new VfsAlreadyExistsException($"'{destination.Path}' already exists and is not a directory.");
         }
 
@@ -253,7 +279,7 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
             conflictAction.Value ??= await DecideConflictAsync(source, existing, ct).ConfigureAwait(false);
             var resolution = await ApplyConflictActionAsync(conflictAction.Value.Value, source, existing, destination,
                 target, ct).ConfigureAwait(false);
-            if (resolution.Skip is { } reason) return Skip(source, reason);
+            if (resolution.Skip is { } reason) return (Skip(source, reason), destination);
             (destination, replace) = (resolution.Destination, resolution.Replace);
         }
 
@@ -270,7 +296,7 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
             await CopyFileAsync(source, destination, target, replace, ct).ConfigureAwait(false);
         }
         operation.CompleteFile();
-        return CopyOutcome.Copied;
+        return (CopyOutcome.Copied, destination);
     }
 
     /// <summary>Moves <paramref name="source"/> to <paramref name="destination"/> with a single rename (the two
@@ -313,11 +339,11 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
         var source = await provider.GetEntryAsync(sourcePath, io).ConfigureAwait(false)
                      ?? throw new VfsNotFoundException($"'{sourcePath.Path}' does not exist.");
 
-        // On a case-insensitive volume a rename that changes only letter case finds the source itself under the new
-        // name; the provider's rename tells that apart from a real clash, so there is nothing to ask.
-        var existing = IsCaseOnlyRename(sourcePath, destination)
-            ? null
-            : await provider.GetEntryAsync(destination, io).ConfigureAwait(false);
+        // A destination that is the source itself under another spelling (a rename that changes only letter case on
+        // a case-insensitive volume) is no conflict: the provider's rename changes the name in place.
+        var existing = await provider.GetEntryAsync(destination, io).ConfigureAwait(false);
+        if (existing is not null && await IsSameEntryAsync(sourcePath, destination, io).ConfigureAwait(false))
+            existing = null;
         var replace = false;
         if (existing is not null)
         {
@@ -338,11 +364,6 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
         await MoveIntoPlaceAsync(sourcePath, destination, provider, replace).ConfigureAwait(false);
         return true;
     }
-
-    private static bool IsCaseOnlyRename(VfsPath source, VfsPath destination) =>
-        source.Parent == destination.Parent &&
-        !string.Equals(source.Name, destination.Name, StringComparison.Ordinal) &&
-        string.Equals(source.Name, destination.Name, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>What a conflict answer means for one item: skip it (with the reason), replace the existing
     /// destination, or write under another (free) name.</summary>

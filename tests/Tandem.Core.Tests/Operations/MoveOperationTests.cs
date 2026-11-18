@@ -91,23 +91,6 @@ public sealed class MoveOperationTests
     }
 
     [Fact]
-    public async Task Case_only_rename_works_on_local_disk()
-    {
-        using var temp = new TempDir();
-        File.WriteAllText(temp.Combine("a.txt"), "a");
-        var providers = new ProviderRegistry();
-        providers.Register(new LocalFileSystemProvider(new UnrestrictedAccessBroker()));
-        var op = new MoveOperation(providers, [temp.Root.Combine("a.txt")], temp.Root,
-            new CopyOptions(NewName: "A.txt"), _interaction);
-
-        var result = await op.RunAsync().WaitAsync(Timeout, Ct);
-
-        Assert.Equal(OperationState.Completed, result.State);
-        Assert.Equal(["A.txt"], Directory.GetFileSystemEntries(temp.Path).Select(Path.GetFileName));
-        Assert.Equal("a", File.ReadAllText(temp.Combine("A.txt")));
-    }
-
-    [Fact]
     public async Task Rejects_move_into_itself()
     {
         _mem.AddFile("/src/dir/sub/a.txt", "a");
@@ -268,6 +251,197 @@ public sealed class MoveOperationTests
         Assert.Equal(OperationState.Completed, result.State);
         Assert.Equal("a", _mem.ReadAllText("/real/a.txt"));
         Assert.False(_mem.Exists("/src/a.txt"));
+    }
+
+    // ---- The same object under another spelling (local disk, case-insensitive volume) ----------------
+
+    private static ProviderRegistry LocalProviders()
+    {
+        var providers = new ProviderRegistry();
+        providers.Register(new LocalFileSystemProvider(new UnrestrictedAccessBroker()));
+        return providers;
+    }
+
+    /// <summary>Every entry under <paramref name="temp"/>, relative, with the names' real letter case.</summary>
+    private static IEnumerable<string> Tree(TempDir temp) =>
+        Directory.EnumerateFileSystemEntries(temp.Path, "*", SearchOption.AllDirectories)
+            .Select(p => Path.GetRelativePath(temp.Path, p))
+            .Order(StringComparer.Ordinal);
+
+    private static void SkipIfCaseSensitive(TempDir temp)
+    {
+        File.WriteAllText(temp.Combine("probe"), "");
+        var insensitive = File.Exists(temp.Combine("PROBE"));
+        File.Delete(temp.Combine("probe"));
+        Assert.SkipUnless(insensitive, "The temp volume is case-sensitive.");
+    }
+
+    private async Task<OperationResult> RunMoveOnLocalAsync(TempDir temp, string source, string destination,
+        string? newName = null)
+    {
+        var op = new MoveOperation(LocalProviders(), [VfsPath.Local(temp.Combine(source))],
+            VfsPath.Local(temp.Combine(destination)), new CopyOptions(NewName: newName), _interaction);
+        return await op.RunAsync().WaitAsync(Timeout, Ct);
+    }
+
+    [Fact]
+    public async Task Case_only_rename_of_a_file_on_local_disk()
+    {
+        using var temp = new TempDir();
+        SkipIfCaseSensitive(temp);
+        File.WriteAllText(temp.Combine("a.txt"), "a");
+        _interaction.OnConflict(ConflictAction.Overwrite); // must not be needed
+
+        var result = await RunMoveOnLocalAsync(temp, "a.txt", ".", newName: "A.txt");
+
+        Assert.Equal(OperationState.Completed, result.State);
+        Assert.Empty(result.Skipped);
+        Assert.Empty(_interaction.Conflicts);
+        Assert.Equal(["A.txt"], Tree(temp));
+        Assert.Equal("a", File.ReadAllText(temp.Combine("A.txt")));
+    }
+
+    [Fact]
+    public async Task Case_only_rename_of_a_directory_on_local_disk()
+    {
+        using var temp = new TempDir();
+        SkipIfCaseSensitive(temp);
+        Directory.CreateDirectory(temp.Combine("dir/sub"));
+        File.WriteAllText(temp.Combine("dir/x.txt"), "x");
+        File.WriteAllText(temp.Combine("dir/sub/y.txt"), "y");
+        _interaction.OnConflict(ConflictAction.Overwrite, applyToAll: true); // must not be needed
+
+        var result = await RunMoveOnLocalAsync(temp, "dir", ".", newName: "Dir");
+
+        Assert.Equal(OperationState.Completed, result.State);
+        Assert.Empty(result.Skipped);
+        Assert.Empty(_interaction.Conflicts);
+        Assert.Equal(["Dir", "Dir/sub", "Dir/sub/y.txt", "Dir/x.txt"], Tree(temp));
+        Assert.Equal("x", File.ReadAllText(temp.Combine("Dir/x.txt")));
+        Assert.Equal("y", File.ReadAllText(temp.Combine("Dir/sub/y.txt")));
+    }
+
+    [Fact]
+    public async Task Moving_a_directory_into_a_case_variant_of_its_own_folder_is_rejected()
+    {
+        using var temp = new TempDir();
+        SkipIfCaseSensitive(temp);
+        Directory.CreateDirectory(temp.Combine("a/dir"));
+        File.WriteAllText(temp.Combine("a/dir/x.txt"), "x");
+        _interaction.OnConflict(ConflictAction.Overwrite, applyToAll: true);
+
+        var error = await Assert.ThrowsAsync<OperationRejectedException>(
+            () => RunMoveOnLocalAsync(temp, "a/dir", "A"));
+
+        Assert.Equal(RejectionReason.SourceEqualsDestination, error.Reason);
+        Assert.Empty(_interaction.Conflicts);
+        Assert.Equal(["a", "a/dir", "a/dir/x.txt"], Tree(temp));
+        Assert.Equal("x", File.ReadAllText(temp.Combine("a/dir/x.txt")));
+    }
+
+    [Fact]
+    public async Task Moving_a_file_into_a_case_variant_of_its_own_folder_is_rejected()
+    {
+        using var temp = new TempDir();
+        SkipIfCaseSensitive(temp);
+        Directory.CreateDirectory(temp.Combine("a"));
+        File.WriteAllText(temp.Combine("a/x.txt"), "x");
+        _interaction.OnConflict(ConflictAction.Overwrite, applyToAll: true);
+
+        var error = await Assert.ThrowsAsync<OperationRejectedException>(
+            () => RunMoveOnLocalAsync(temp, "a/x.txt", "A"));
+
+        Assert.Equal(RejectionReason.SourceEqualsDestination, error.Reason);
+        Assert.Empty(_interaction.Conflicts);
+        Assert.Equal(["a", "a/x.txt"], Tree(temp));
+        Assert.Equal("x", File.ReadAllText(temp.Combine("a/x.txt")));
+    }
+
+    // ---- Last lines of defence: a provider that reports two paths as one object ---------------------
+
+    [Fact]
+    public async Task Merge_never_treats_an_entry_as_a_conflict_with_itself()
+    {
+        SeparateVolumes();
+        _mem.AddFile("/src/dir/x.txt", "x");
+        _mem.AddFile("/dst/dir/x.txt", "x");
+        var aliased = new AliasFileSystem(_mem, ("/src/dir/x.txt", "/dst/dir/x.txt"));
+        var providers = new ProviderRegistry();
+        providers.Register(aliased);
+        _interaction.OnConflict(ConflictAction.Overwrite).OnError(ErrorAction.Skip);
+
+        var result = await new MoveOperation(providers, [Mem("/src/dir")], Mem("/dst"), new CopyOptions(),
+            _interaction).RunAsync();
+
+        Assert.Equal(OperationState.Completed, result.State);
+        Assert.Empty(_interaction.Conflicts);
+        Assert.Equal(Mem("/src/dir/x.txt"), Assert.Single(result.Skipped).Path);
+        Assert.Equal(["/src", "/src/dir", "/src/dir/x.txt"], Under("/src"));
+        Assert.Equal(["/dst", "/dst/dir", "/dst/dir/x.txt"], Under("/dst"));
+        AssertNoPartFiles();
+    }
+
+    [Fact]
+    public async Task Source_that_is_its_written_destination_is_never_deleted()
+    {
+        SeparateVolumes();
+        _mem.AddFile("/src/a.txt", "a");
+        _mem.AddDirectory("/dst");
+        var aliased = new AliasFileSystem(_mem, ("/src/a.txt", "/dst/a.txt"));
+        var providers = new ProviderRegistry();
+        providers.Register(aliased);
+        // /dst/a.txt does not exist yet, so the identity only shows once the copy is written.
+        aliased.Active = false;
+        _mem.FailOn((op, p) =>
+        {
+            if (op == "Move" && p.Path == "/dst/a.txt") aliased.Active = true;
+            return false;
+        }, () => new IOException("unused"));
+
+        var result = await new MoveOperation(providers, [Mem("/src/a.txt")], Mem("/dst"), new CopyOptions(),
+            _interaction).RunAsync();
+
+        Assert.Equal(OperationState.Completed, result.State);
+        Assert.Equal(new SkippedItem(Mem("/src/a.txt"), SkipReason.SourceIsDestination), Assert.Single(result.Skipped));
+        Assert.Equal("a", _mem.ReadAllText("/src/a.txt"));
+        Assert.Equal("a", _mem.ReadAllText("/dst/a.txt"));
+    }
+
+    /// <summary>Delegates to an in-memory provider, but reports the given path pairs as one file-system object
+    /// (as a hard link or a case-insensitive name would) while <see cref="Active"/>.</summary>
+    private sealed class AliasFileSystem(InMemoryFileSystem inner, params (string A, string B)[] aliases)
+        : IFileSystemProvider
+    {
+        public volatile bool Active = true;
+
+        public string Id => inner.Id;
+        public ProviderCapabilities Capabilities => inner.Capabilities;
+        public IAsyncEnumerable<FileEntry> EnumerateAsync(VfsPath directory, CancellationToken ct) =>
+            inner.EnumerateAsync(directory, ct);
+        public Task<FileEntry?> GetEntryAsync(VfsPath path, CancellationToken ct) => inner.GetEntryAsync(path, ct);
+        public Task<Stream> OpenReadAsync(VfsPath path, CancellationToken ct) => inner.OpenReadAsync(path, ct);
+        public Task<Stream> OpenWriteAsync(VfsPath path, CancellationToken ct) => inner.OpenWriteAsync(path, ct);
+        public Task CreateDirectoryAsync(VfsPath path, CancellationToken ct) => inner.CreateDirectoryAsync(path, ct);
+        public Task DeleteAsync(VfsPath path, bool recursive, CancellationToken ct) =>
+            inner.DeleteAsync(path, recursive, ct);
+        public Task MoveAsync(VfsPath source, VfsPath destination, CancellationToken ct) =>
+            inner.MoveAsync(source, destination, ct);
+        public Task CreateSymlinkAsync(VfsPath path, string target, CancellationToken ct) =>
+            inner.CreateSymlinkAsync(path, target, ct);
+        public Task SetModifiedAsync(VfsPath path, DateTimeOffset modified, CancellationToken ct) =>
+            inner.SetModifiedAsync(path, modified, ct);
+        public Task SetModeAsync(VfsPath path, UnixFileMode mode, CancellationToken ct) =>
+            inner.SetModeAsync(path, mode, ct);
+        public Task<string> GetVolumeKeyAsync(VfsPath path, CancellationToken ct) => inner.GetVolumeKeyAsync(path, ct);
+        public IDisposable? Watch(VfsPath directory, Action changed) => inner.Watch(directory, changed);
+
+        public async Task<bool> IsSameEntryAsync(VfsPath a, VfsPath b, CancellationToken ct)
+        {
+            if (Active && aliases.Any(p => (p.A == a.Path && p.B == b.Path) || (p.A == b.Path && p.B == a.Path)) &&
+                await inner.GetEntryAsync(a, ct) is not null && await inner.GetEntryAsync(b, ct) is not null)
+                return true;
+            return await inner.IsSameEntryAsync(a, b, ct);
+        }
     }
 
     // ---- Across volumes: copy, confirm, delete ------------------------------------------------------

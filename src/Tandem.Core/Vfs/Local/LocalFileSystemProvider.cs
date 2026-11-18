@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace Tandem.Core.Vfs.Local;
@@ -125,6 +126,15 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker) : IFileSys
         File.SetUnixFileMode(p, mode);
     });
 
+    /// <summary>Compares device and inode numbers (<c>lstat</c>, so a link is itself, not its target); the OS
+    /// resolves the rest of each path, including letter case and linked folders.</summary>
+    public Task<bool> IsSameEntryAsync(VfsPath a, VfsPath b, CancellationToken ct) => RunAsync(a, ct, first =>
+    {
+        var second = ToOsPath(b);
+        using var access = _broker.Access(second);
+        return Identity(first) is { } x && Identity(second) is { } y && x == y;
+    });
+
     /// <summary>The mount point of the longest mounted volume that contains the path (links are not resolved).</summary>
     public Task<string> GetVolumeKeyAsync(VfsPath path, CancellationToken ct) => RunAsync(path, ct, _ =>
         DriveInfo.GetDrives()
@@ -196,6 +206,29 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker) : IFileSys
             throw new VfsNotFoundException($"'{path}' does not exist.", e);
         }
     }
+
+    private const int ENOENT = 2, EACCES = 13, ENOTDIR = 20;
+    private const int StatBufferSize = 256; // struct stat is 144 bytes on macOS
+
+    /// <summary>(device, inode) of the entry itself, or null when it does not exist.</summary>
+    private static (int Device, ulong Inode)? Identity(string path)
+    {
+        if (!OperatingSystem.IsMacOS())
+            throw new PlatformNotSupportedException("Entry identity is implemented for macOS only.");
+        var buffer = new byte[StatBufferSize];
+        if (LStat(path, buffer) != 0)
+        {
+            var errno = Marshal.GetLastPInvokeError();
+            if (errno is ENOENT or ENOTDIR) return null;
+            if (errno == EACCES) throw new VfsAccessDeniedException($"Access to '{path}' is denied.");
+            throw new VfsException($"Cannot read '{path}' (errno {errno}).");
+        }
+        // macOS (64-bit inodes): dev_t st_dev at 0 (int32), ino_t st_ino at 8 (uint64).
+        return (BitConverter.ToInt32(buffer, 0), BitConverter.ToUInt64(buffer, 8));
+    }
+
+    [DllImport("libc", EntryPoint = "lstat", SetLastError = true)]
+    private static extern int LStat([MarshalAs(UnmanagedType.LPUTF8Str)] string path, [Out] byte[] buffer);
 
     /// <summary>True when the entry itself exists (a broken link counts); <see cref="FileSystemInfo.Attributes"/>
     /// is -1 for a missing path.</summary>

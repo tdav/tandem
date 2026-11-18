@@ -524,6 +524,48 @@ public sealed class CopyOperationTests
         }
     }
 
+    [Fact]
+    public async Task Copying_a_file_into_a_case_variant_of_its_own_folder_is_rejected()
+    {
+        using var temp = new TempDir();
+        Directory.CreateDirectory(temp.Combine("a"));
+        File.WriteAllText(temp.Combine("a/x.txt"), "x");
+        Assert.SkipUnless(Directory.Exists(temp.Combine("A")), "The temp volume is case-sensitive.");
+        _interaction.OnConflict(ConflictAction.Overwrite, applyToAll: true);
+        var providers = new ProviderRegistry();
+        providers.Register(new LocalFileSystemProvider(new UnrestrictedAccessBroker()));
+        var op = new CopyOperation(providers, [VfsPath.Local(temp.Combine("a/x.txt"))], VfsPath.Local(temp.Combine("A")),
+            new CopyOptions(), _interaction);
+
+        var error = await Assert.ThrowsAsync<OperationRejectedException>(() => op.RunAsync());
+
+        Assert.Equal(RejectionReason.SourceEqualsDestination, error.Reason);
+        Assert.Empty(_interaction.Conflicts);
+        Assert.Equal(["a", "a/x.txt"], Directory.EnumerateFileSystemEntries(temp.Path, "*", SearchOption.AllDirectories)
+            .Select(p => Path.GetRelativePath(temp.Path, p)).Order(StringComparer.Ordinal));
+        Assert.Equal("x", File.ReadAllText(temp.Combine("a/x.txt")));
+    }
+
+    [Fact]
+    public async Task Copying_a_file_onto_a_case_variant_of_its_own_name_is_rejected()
+    {
+        using var temp = new TempDir();
+        File.WriteAllText(temp.Combine("x.txt"), "x");
+        Assert.SkipUnless(File.Exists(temp.Combine("X.TXT")), "The temp volume is case-sensitive.");
+        _interaction.OnConflict(ConflictAction.Overwrite, applyToAll: true);
+        var providers = new ProviderRegistry();
+        providers.Register(new LocalFileSystemProvider(new UnrestrictedAccessBroker()));
+        var op = new CopyOperation(providers, [temp.Root.Combine("x.txt")], temp.Root, new CopyOptions(NewName: "X.txt"),
+            _interaction);
+
+        var error = await Assert.ThrowsAsync<OperationRejectedException>(() => op.RunAsync());
+
+        Assert.Equal(RejectionReason.SourceEqualsDestination, error.Reason);
+        Assert.Empty(_interaction.Conflicts);
+        Assert.Equal(["x.txt"], Directory.EnumerateFileSystemEntries(temp.Path).Select(Path.GetFileName));
+        Assert.Equal("x", File.ReadAllText(temp.Combine("x.txt")));
+    }
+
     /// <summary>A provider that does not support symlinks (otherwise delegates to an in-memory one).</summary>
     private sealed class NoSymlinkFileSystem(InMemoryFileSystem inner) : IFileSystemProvider
     {
@@ -546,6 +588,7 @@ public sealed class CopyOperationTests
         public Task SetModeAsync(VfsPath path, UnixFileMode mode, CancellationToken ct) =>
             inner.SetModeAsync(path, mode, ct);
         public Task<string> GetVolumeKeyAsync(VfsPath path, CancellationToken ct) => inner.GetVolumeKeyAsync(path, ct);
+        public Task<bool> IsSameEntryAsync(VfsPath a, VfsPath b, CancellationToken ct) => inner.IsSameEntryAsync(a, b, ct);
         public IDisposable? Watch(VfsPath directory, Action changed) => inner.Watch(directory, changed);
     }
 }

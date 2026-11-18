@@ -236,6 +236,50 @@ public abstract class ProviderContractTests
         Assert.Null(await fs.GetEntryAsync(root.Combine("dir"), Ct));
     }
 
+    [Fact]
+    public async Task IsSameEntry_is_true_for_the_same_path()
+    {
+        var (fs, root) = await CreateAsync();
+        await WriteAsync(fs, root.Combine("a.txt"), "a");
+        await fs.CreateDirectoryAsync(root.Combine("dir"), Ct);
+
+        Assert.True(await fs.IsSameEntryAsync(root.Combine("a.txt"), root.Combine("a.txt"), Ct));
+        Assert.True(await fs.IsSameEntryAsync(root.Combine("dir"), root.Combine("dir"), Ct));
+    }
+
+    [Fact]
+    public async Task IsSameEntry_is_false_for_different_entries()
+    {
+        var (fs, root) = await CreateAsync();
+        await WriteAsync(fs, root.Combine("a.txt"), "same");
+        await WriteAsync(fs, root.Combine("b.txt"), "same");
+
+        Assert.False(await fs.IsSameEntryAsync(root.Combine("a.txt"), root.Combine("b.txt"), Ct));
+        Assert.False(await fs.IsSameEntryAsync(root.Combine("a.txt"), root, Ct));
+    }
+
+    [Fact]
+    public async Task IsSameEntry_is_false_when_either_is_missing()
+    {
+        var (fs, root) = await CreateAsync();
+        await WriteAsync(fs, root.Combine("a.txt"), "a");
+
+        Assert.False(await fs.IsSameEntryAsync(root.Combine("a.txt"), root.Combine("missing"), Ct));
+        Assert.False(await fs.IsSameEntryAsync(root.Combine("missing"), root.Combine("a.txt"), Ct));
+        Assert.False(await fs.IsSameEntryAsync(root.Combine("missing"), root.Combine("missing"), Ct));
+    }
+
+    [Fact]
+    public async Task IsSameEntry_does_not_follow_a_link()
+    {
+        var (fs, root) = await CreateAsync();
+        await WriteAsync(fs, root.Combine("a.txt"), "a");
+        await fs.CreateSymlinkAsync(root.Combine("link"), "a.txt", Ct);
+
+        Assert.False(await fs.IsSameEntryAsync(root.Combine("link"), root.Combine("a.txt"), Ct));
+        Assert.True(await fs.IsSameEntryAsync(root.Combine("link"), root.Combine("link"), Ct));
+    }
+
     protected static async Task WriteAsync(IFileSystemProvider fs, VfsPath path, string text)
     {
         await using var stream = await fs.OpenWriteAsync(path, Ct);

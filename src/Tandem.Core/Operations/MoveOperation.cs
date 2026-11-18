@@ -54,8 +54,9 @@ public sealed class MoveOperation(ProviderRegistry providers, IReadOnlyList<VfsP
         var destination = await engine.ResolveDestinationDirectoryAsync(_destinationDirectory, ct).ConfigureAwait(false);
         var targets = CopyEngine.ResolveTargets(_sources, destination, _options.NewName);
 
+        var (renames, copies) = await SplitAsync(engine, targets, destination, ct).ConfigureAwait(false);
+
         SetState(OperationState.Scanning);
-        var (renames, copies) = await SplitAsync(targets, destination, ct).ConfigureAwait(false);
         var items = await engine.ScanAsync(copies, ct, extraFiles: renames.Count).ConfigureAwait(false);
 
         SetState(OperationState.Running);
@@ -63,9 +64,9 @@ public sealed class MoveOperation(ProviderRegistry providers, IReadOnlyList<VfsP
             await engine.RenameAsync(source, target, ct).ConfigureAwait(false);
 
         var directories = new List<CopyItem>(); // created or merged into, in plan order
-        var outcomes = await engine.CopyAllAsync(items, ct, (item, outcome) => outcome switch
+        var outcomes = await engine.CopyAllAsync(items, ct, (item, outcome, writtenTo) => outcome switch
         {
-            CopyOutcome.Copied => DeleteSourceAsync(engine, item.Source.Path, ct),
+            CopyOutcome.Copied => DeleteSourceAsync(engine, item.Source.Path, writtenTo, ct),
             CopyOutcome.DirectoryCreated or CopyOutcome.DirectoryMerged => Remember(directories, item),
             _ => Task.CompletedTask,
         }).ConfigureAwait(false);
@@ -78,18 +79,28 @@ public sealed class MoveOperation(ProviderRegistry providers, IReadOnlyList<VfsP
             await RemoveIfEmptyAsync(engine, directories[i].Source.Path, ct).ConfigureAwait(false);
     }
 
-    /// <summary>Splits the targets into single renames (same volume as the destination) and copies. A directory
-    /// whose destination is an existing directory is copied even on the same volume: merging cannot be one
-    /// rename.</summary>
+    /// <summary>Splits the targets into single renames (same volume as the destination) and copies, before
+    /// anything is touched. A directory whose destination is an existing directory is copied even on the same
+    /// volume: merging cannot be one rename. A destination that already is the source itself (another spelling of
+    /// it on a case-insensitive volume, or a path through a linked folder) is a pure rename when the name changes,
+    /// and is refused when it does not: copying or merging it onto itself would destroy it.</summary>
+    /// <exception cref="OperationRejectedException">An item would be moved onto itself.</exception>
     private async Task<(List<(VfsPath, VfsPath)> Renames, List<(VfsPath, VfsPath)> Copies)> SplitAsync(
-        IReadOnlyList<(VfsPath Source, VfsPath Destination)> targets, VfsPath destinationDirectory, CancellationToken ct)
+        CopyEngine engine, IReadOnlyList<(VfsPath Source, VfsPath Destination)> targets, VfsPath destinationDirectory,
+        CancellationToken ct)
     {
         var destinationVolume = await VolumeOfAsync(destinationDirectory, ct).ConfigureAwait(false);
         var renames = new List<(VfsPath, VfsPath)>();
         var copies = new List<(VfsPath, VfsPath)>();
         foreach (var target in targets)
         {
-            if (await VolumeOfAsync(target.Source, ct).ConfigureAwait(false) != destinationVolume ||
+            if (await engine.IsSameEntryAsync(target.Source, target.Destination, ct).ConfigureAwait(false))
+            {
+                if (string.Equals(target.Source.Name, target.Destination.Name, StringComparison.Ordinal))
+                    throw CopyEngine.OntoItself(target.Source, target.Destination);
+                renames.Add(target);
+            }
+            else if (await VolumeOfAsync(target.Source, ct).ConfigureAwait(false) != destinationVolume ||
                 await IsMergeAsync(target.Source, target.Destination, ct).ConfigureAwait(false))
                 copies.Add(target);
             else
@@ -118,11 +129,19 @@ public sealed class MoveOperation(ProviderRegistry providers, IReadOnlyList<VfsP
 
     /// <summary>Deletes a copied file or link (the link itself) from the source. The copy is in place by now, so
     /// this is not interrupted by a cancel; a failure is asked about, and skipping it leaves the item in both
-    /// places.</summary>
-    private async Task DeleteSourceAsync(CopyEngine engine, VfsPath source, CancellationToken ct) =>
+    /// places. A source that is the very object just written (<paramref name="writtenTo"/>) is never deleted:
+    /// that would delete the only copy.</summary>
+    private async Task DeleteSourceAsync(CopyEngine engine, VfsPath source, VfsPath writtenTo, CancellationToken ct)
+    {
+        if (await engine.IsSameEntryAsync(source, writtenTo, CancellationToken.None).ConfigureAwait(false))
+        {
+            AddSkipped(new SkippedItem(source, SkipReason.SourceIsDestination));
+            return;
+        }
         await engine.Errors.RunAsync(source,
             () => _providers.For(source).DeleteAsync(source, recursive: false, CancellationToken.None), ct)
             .ConfigureAwait(false);
+    }
 
     /// <summary>Removes a source directory whose contents were all moved; one with anything left in it (a skipped
     /// or failed item, or something added meanwhile) stays.</summary>

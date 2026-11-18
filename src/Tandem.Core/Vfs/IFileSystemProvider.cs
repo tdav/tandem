@@ -41,6 +41,11 @@ public interface IFileSystemProvider
 
     Task SetModeAsync(VfsPath path, UnixFileMode mode, CancellationToken ct);
 
+    /// <summary>True when both paths exist and name the same file-system object, e.g. two spellings of one name on a
+    /// case-insensitive volume, or a path through a linked folder. Links themselves are not followed: a link and its
+    /// target are different entries. False when either path is missing.</summary>
+    Task<bool> IsSameEntryAsync(VfsPath a, VfsPath b, CancellationToken ct);
+
     /// <summary>A key that is equal for all paths on the same volume.</summary>
     Task<string> GetVolumeKeyAsync(VfsPath path, CancellationToken ct);
 

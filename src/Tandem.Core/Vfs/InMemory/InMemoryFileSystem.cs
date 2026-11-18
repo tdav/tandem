@@ -275,6 +275,17 @@ public sealed class InMemoryFileSystem : IFileSystemProvider
         lock (_lock) Find(path).Mode = mode;
     });
 
+    /// <summary>The same node: names are case-sensitive and links in the middle of a path are not resolved here, so
+    /// only an equal path is the same entry.</summary>
+    public Task<bool> IsSameEntryAsync(VfsPath a, VfsPath b, CancellationToken ct) => Run(ct, () =>
+    {
+        Check("IsSameEntry", a);
+        Check("IsSameEntry", b);
+        lock (_lock)
+            return _nodes.TryGetValue(a.Path, out var first) && _nodes.TryGetValue(b.Path, out var second) &&
+                   ReferenceEquals(first, second);
+    });
+
     public Task<string> GetVolumeKeyAsync(VfsPath path, CancellationToken ct) => Run(ct, () =>
     {
         Check("GetVolumeKey", path);

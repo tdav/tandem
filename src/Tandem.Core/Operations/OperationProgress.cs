@@ -23,6 +23,10 @@ public enum SkipReason
 
     /// <summary>The item is a symbolic link and the destination cannot hold links.</summary>
     SymlinksNotSupported,
+
+    /// <summary>The destination turned out to be the source itself (the same file-system object under another
+    /// path), so the source was not deleted.</summary>
+    SourceIsDestination,
 }
 
 /// <summary>An item the operation left alone, and why. <paramref name="Detail"/> is the underlying error message,
