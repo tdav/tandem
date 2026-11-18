@@ -16,6 +16,10 @@ public enum RejectionReason
 
     /// <summary><see cref="OperationRejectedException.Name"/> is not a valid file name.</summary>
     InvalidName,
+
+    /// <summary>Moving to the trash was asked for, but there is no trash for <see cref="OperationRejectedException.SourcePath"/>
+    /// (it is not on the local disk, or no trash service is available).</summary>
+    TrashNotSupported,
 }
 
 /// <summary>The operation was refused before it touched anything (e.g. copying a folder into itself).
