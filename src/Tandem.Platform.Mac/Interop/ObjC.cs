@@ -14,12 +14,18 @@ internal static unsafe partial class ObjC
 {
     private const string LibObjC = "/usr/lib/libobjc.A.dylib";
     private const string FoundationPath = "/System/Library/Frameworks/Foundation.framework/Foundation";
+    private const string AppKitPath = "/System/Library/Frameworks/AppKit.framework/AppKit";
+
+    private static readonly Lazy<IntPtr> AppKit = new(() => NativeLibrary.Load(AppKitPath));
 
     static ObjC()
     {
         // Foundation's classes (NSString, NSFileManager, …) are registered with the runtime only once it is loaded.
         NativeLibrary.Load(FoundationPath);
     }
+
+    /// <summary>Loads AppKit, so that its classes (<c>NSWorkspace</c>, …) are registered with the runtime.</summary>
+    public static void LoadAppKit() => _ = AppKit.Value;
 
     /// <summary>Returns the class named <paramref name="name"/>.</summary>
     /// <exception cref="InvalidOperationException">No such class is loaded.</exception>
@@ -93,6 +99,18 @@ internal static unsafe partial class ObjC
     /// <summary>The path of a file <c>NSURL</c>, as its file system representation; null for nil.</summary>
     public static string? PathOf(IntPtr url) =>
         url == IntPtr.Zero ? null : Marshal.PtrToStringUTF8(Send(url, Selector("fileSystemRepresentation")));
+
+    /// <summary>The paths of an <c>NSArray</c> of file <c>NSURL</c>s; empty for nil.</summary>
+    public static List<string> ToPathList(IntPtr nsArray)
+    {
+        var result = new List<string>();
+        if (nsArray == IntPtr.Zero) return result;
+        var count = SendNUInt(nsArray, Selector("count"));
+        var objectAtIndex = Selector("objectAtIndex:");
+        for (nuint i = 0; i < count; i++)
+            if (PathOf(SendIndex(nsArray, objectAtIndex, i)) is { } path) result.Add(path);
+        return result;
+    }
 
     /// <summary>The <c>localizedDescription</c> of an <c>NSError</c>.</summary>
     public static string ErrorDescription(IntPtr nsError) =>
