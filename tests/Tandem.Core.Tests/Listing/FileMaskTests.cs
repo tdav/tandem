@@ -26,6 +26,17 @@ public class FileMaskTests
     public void Mask_edge_cases(string pattern, string name, bool expected) =>
         Assert.Equal(expected, new FileMask(pattern).IsMatch(name));
 
+    [Theory]
+    [InlineData("*.*", "noext", true)]
+    [InlineData("*.*", "a.txt", true)]
+    [InlineData("*.*", ".gitignore", true)]
+    [InlineData("*.txt; *.* ", "noext", true)]
+    [InlineData("a.*", "abc", false)]
+    [InlineData("a.*", "a.txt", true)]
+    [InlineData("*.*x", "noext", false)]
+    public void Star_dot_star_part_matches_every_name(string pattern, string name, bool expected) =>
+        Assert.Equal(expected, new FileMask(pattern).IsMatch(name));
+
     [Fact]
     public void Matches_across_normalization_forms()
     {

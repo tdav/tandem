@@ -3,7 +3,7 @@ namespace Tandem.Core.Listing;
 /// <summary>
 /// A file-name mask such as <c>*.txt;*.md</c>: parts separated by <c>;</c>, each matching the whole name,
 /// with <c>*</c> (any run of characters) and <c>?</c> (exactly one character). Matching ignores case and
-/// Unicode normalization form. An empty mask matches every name.
+/// Unicode normalization form. An empty mask, and the exact part <c>*.*</c>, match every name.
 /// </summary>
 public sealed class FileMask
 {
@@ -14,7 +14,7 @@ public sealed class FileMask
         ArgumentNullException.ThrowIfNull(pattern);
         _parts = pattern
             .Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
-            .Select(EntrySorter.Fold)
+            .Select(part => part == "*.*" ? "*" : EntrySorter.Fold(part)) // "*.*" means "all", dot or not
             .ToArray();
     }
 
