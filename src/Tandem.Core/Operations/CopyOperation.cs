@@ -41,11 +41,12 @@ public sealed class CopyOperation(ProviderRegistry providers, IReadOnlyList<VfsP
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
-        var targets = CopyEngine.ResolveTargets(_sources, _destinationDirectory, _options.NewName);
         var engine = new CopyEngine(_providers, this, _nativeCopy);
+        var destination = await engine.ResolveDestinationDirectoryAsync(_destinationDirectory, ct).ConfigureAwait(false);
+        var targets = CopyEngine.ResolveTargets(_sources, destination, _options.NewName);
 
         SetState(OperationState.Scanning);
-        var items = await engine.ScanAsync(targets, _destinationDirectory, ct).ConfigureAwait(false);
+        var items = await engine.ScanAsync(targets, ct).ConfigureAwait(false);
 
         SetState(OperationState.Running);
         var createdDirectories = new List<CopyItem>();

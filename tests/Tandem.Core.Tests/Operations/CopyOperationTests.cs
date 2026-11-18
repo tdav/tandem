@@ -315,6 +315,58 @@ public sealed class CopyOperationTests
     }
 
     [Fact]
+    public async Task Symlinked_destination_directory_is_accepted()
+    {
+        _mem.AddFile("/src/a.txt", "a");
+        _mem.AddDirectory("/real");
+        await _mem.CreateSymlinkAsync(Mem("/dstlink"), "real", Ct);
+
+        var result = await Copy("/src/a.txt", "/dstlink").RunAsync();
+
+        Assert.Equal(OperationState.Completed, result.State);
+        Assert.Equal("a", _mem.ReadAllText("/real/a.txt"));
+        Assert.Equal(EntryKind.Symlink, (await _mem.GetEntryAsync(Mem("/dstlink"), Ct))!.Kind);
+    }
+
+    [Fact]
+    public async Task Symlink_to_a_file_is_not_a_destination_directory()
+    {
+        _mem.AddFile("/src/a.txt", "a");
+        _mem.AddFile("/other.txt", "o");
+        await _mem.CreateSymlinkAsync(Mem("/filelink"), "other.txt", Ct);
+
+        await Assert.ThrowsAsync<VfsNotFoundException>(() => Copy("/src/a.txt", "/filelink").RunAsync());
+    }
+
+    [Fact]
+    public async Task Rejects_copy_into_itself_through_a_symlinked_destination()
+    {
+        _mem.AddFile("/a/x.txt", "x");
+        _mem.AddDirectory("/a/b");
+        await _mem.CreateSymlinkAsync(Mem("/link"), "/a/b", Ct);
+
+        await Assert.ThrowsAsync<OperationRejectedException>(() => Copy("/a", "/link").RunAsync());
+
+        Assert.DoesNotContain(_mem.AllPaths, p => p.StartsWith("/a/b/", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Copies_into_symlinked_local_directory()
+    {
+        using var temp = new TempDir();
+        _providers.Register(new LocalFileSystemProvider(new UnrestrictedAccessBroker()));
+        File.WriteAllText(temp.Combine("a.txt"), "local");
+        Directory.CreateDirectory(temp.Combine("real"));
+        File.CreateSymbolicLink(temp.Combine("link"), temp.Combine("real"));
+
+        var result = await Copy([VfsPath.Local(temp.Combine("a.txt"))], VfsPath.Local(temp.Combine("link"))).RunAsync();
+
+        Assert.Equal(OperationState.Completed, result.State);
+        Assert.Equal("local", File.ReadAllText(temp.Combine("real/a.txt")));
+        Assert.Equal(["a.txt"], Directory.GetFileSystemEntries(temp.Combine("real")).Select(Path.GetFileName));
+    }
+
+    [Fact]
     public async Task Uses_native_copy_for_local_to_local()
     {
         using var temp = new TempDir();

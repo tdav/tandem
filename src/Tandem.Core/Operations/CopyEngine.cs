@@ -19,6 +19,7 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
 {
     public const string PartSuffix = ".tandem-part";
     private const int BufferSize = 1024 * 1024;
+    private const int MaxLinkHops = 32;
 
     /// <summary>Pairs every source with its destination path, refusing requests that cannot be valid.</summary>
     /// <exception cref="OperationRejectedException">The request is refused.</exception>
@@ -51,16 +52,39 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
         return targets;
     }
 
-    /// <summary>Walks the sources (links are not followed) and reports the totals to the operation.</summary>
-    /// <exception cref="VfsNotFoundException">A source or the destination directory does not exist.</exception>
-    public async Task<IReadOnlyList<CopyItem>> ScanAsync(IReadOnlyList<(VfsPath Source, VfsPath Destination)> targets,
-        VfsPath destinationDirectory, CancellationToken ct)
+    /// <summary>The real directory behind <paramref name="destinationDirectory"/>: the path itself, or, when it is a
+    /// symlink (possibly via further links) to a directory, the directory the link leads to. Copying through the
+    /// resolved path works on providers that do not resolve links in the middle of a path, and lets the "into
+    /// itself" check see where the files really go.</summary>
+    /// <exception cref="VfsNotFoundException">There is no directory there (missing, a file, or a broken link).</exception>
+    public async Task<VfsPath> ResolveDestinationDirectoryAsync(VfsPath destinationDirectory, CancellationToken ct)
     {
-        var destinationEntry = await providers.For(destinationDirectory).GetEntryAsync(destinationDirectory, ct)
-            .ConfigureAwait(false);
-        if (destinationEntry is not { Kind: EntryKind.Directory })
-            throw new VfsNotFoundException($"Destination directory '{destinationDirectory.Path}' does not exist.");
+        var provider = providers.For(destinationDirectory);
+        var path = destinationDirectory;
+        for (var hop = 0; hop < MaxLinkHops; hop++)
+        {
+            var entry = await provider.GetEntryAsync(path, ct).ConfigureAwait(false);
+            if (entry is { Kind: EntryKind.Directory }) return path;
+            if (entry is not { Kind: EntryKind.Symlink, IsDirectoryLike: true, LinkTarget: { } target }) break;
+            try
+            {
+                path = target.StartsWith('/')
+                    ? path with { Path = target }
+                    : path with { Path = path.Parent!.Value.Path + "/" + target };
+            }
+            catch (ArgumentException)
+            {
+                break; // the link climbs above the root
+            }
+        }
+        throw new VfsNotFoundException($"Destination directory '{destinationDirectory.Path}' does not exist.");
+    }
 
+    /// <summary>Walks the sources (links are not followed) and reports the totals to the operation.</summary>
+    /// <exception cref="VfsNotFoundException">A source does not exist.</exception>
+    public async Task<IReadOnlyList<CopyItem>> ScanAsync(IReadOnlyList<(VfsPath Source, VfsPath Destination)> targets,
+        CancellationToken ct)
+    {
         var items = new List<CopyItem>();
         long files = 0, bytes = 0;
         foreach (var (source, destination) in targets)
