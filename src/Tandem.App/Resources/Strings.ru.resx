@@ -64,6 +64,15 @@
   <data name="Panel_Status" xml:space="preserve">
     <value>Выбрано {0} из {1}, {2}</value>
   </data>
+  <data name="Panel_Error_AccessDenied" xml:space="preserve">
+    <value>Нет доступа к папке {0}</value>
+  </data>
+  <data name="Panel_Error_NotFound" xml:space="preserve">
+    <value>Папка {0} не существует</value>
+  </data>
+  <data name="Panel_Error_Other" xml:space="preserve">
+    <value>Не удалось открыть папку {0}</value>
+  </data>
 
   <!-- Common buttons (verbs) -->
   <data name="Button_OK" xml:space="preserve">

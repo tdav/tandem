@@ -66,6 +66,18 @@
     <value>Selected {0} of {1}, {2}</value>
     <comment>{0} selected items, {1} all items, {2} selected size</comment>
   </data>
+  <data name="Panel_Error_AccessDenied" xml:space="preserve">
+    <value>Access to the folder {0} is denied</value>
+    <comment>{0} folder path</comment>
+  </data>
+  <data name="Panel_Error_NotFound" xml:space="preserve">
+    <value>The folder {0} does not exist</value>
+    <comment>{0} folder path</comment>
+  </data>
+  <data name="Panel_Error_Other" xml:space="preserve">
+    <value>Cannot open the folder {0}</value>
+    <comment>{0} folder path</comment>
+  </data>
 
   <!-- Common buttons (verbs) -->
   <data name="Button_OK" xml:space="preserve">

@@ -1,0 +1,516 @@
+using CommunityToolkit.Mvvm.ComponentModel;
+using Tandem.App.Resources;
+using Tandem.Core.Listing;
+using Tandem.Core.Vfs;
+
+namespace Tandem.App.ViewModels;
+
+/// <summary>Why the panel could not show a folder, so the view can offer the fitting action.</summary>
+public enum PanelErrorKind { AccessDenied, NotFound, Other }
+
+/// <summary>
+/// One file panel: the listing of a folder, sorted, with a cursor, moving in and out of folders and refreshing itself
+/// when the folder changes on disk.
+/// </summary>
+/// <remarks>
+/// Created and called on the UI thread; every observable change happens there. Reading, sorting and watching run in
+/// the background. A newer load (navigation, refresh, re-sort) supersedes an unfinished one. While a large folder is
+/// being read, its first <see cref="PreviewCount"/> entries are shown unsorted; <see cref="CurrentPath"/> changes only
+/// when the folder has been read in full.
+/// </remarks>
+public sealed partial class PanelViewModel : ObservableObject, IDisposable
+{
+    /// <summary>How many entries are shown before a large folder has been read in full.</summary>
+    internal const int PreviewCount = 500;
+
+    // Change notifications come in bursts; one refresh covers a burst.
+    private static readonly TimeSpan WatchRefreshDelay = TimeSpan.FromMilliseconds(100);
+
+    private readonly ProviderRegistry _providers;
+    private readonly SynchronizationContext _ui;
+    private readonly RowCollection _rows = new();
+
+    private int _cursorIndex = -1;
+    private SortSpec _sort = new(SortColumn.Name);
+    private bool _showHidden;
+
+    private bool _hasPath;
+    private List<FileEntry> _entries = []; // every entry of CurrentPath, hidden ones included, unsorted
+    private CancellationTokenSource? _loadCts;
+    private int _loadVersion;
+    private LoadKind? _activeLoad;
+    private bool _showingPreview;
+    private IReadOnlyList<EntryRowViewModel> _rowsBeforePreview = [];
+    private int _cursorBeforePreview = -1;
+    private WatchSubscription? _watch;
+    private bool _watchRefreshScheduled;
+    private bool _watchRefreshAfterLoad;
+    private bool _disposed;
+
+    public PanelViewModel(ProviderRegistry providers)
+    {
+        ArgumentNullException.ThrowIfNull(providers);
+        _providers = providers;
+        _ui = SynchronizationContext.Current
+              ?? throw new InvalidOperationException("A panel must be created on the UI thread.");
+    }
+
+    /// <summary>The folder shown; <c>default</c> until the first successful navigation.</summary>
+    [ObservableProperty]
+    public partial VfsPath CurrentPath { get; private set; }
+
+    /// <summary>The rows: ".." first (except at the root), then the entries in <see cref="Sort"/> order. Raises one
+    /// collection Reset per change of the listing.</summary>
+    public IReadOnlyList<EntryRowViewModel> Rows => _rows;
+
+    /// <summary>The row under the cursor; -1 when there are no rows. Values outside the rows are clamped.</summary>
+    public int CursorIndex
+    {
+        get => _cursorIndex;
+        set
+        {
+            var clamped = _rows.Count == 0 ? -1 : Math.Clamp(value, 0, _rows.Count - 1);
+            if (SetProperty(ref _cursorIndex, clamped)) OnPropertyChanged(nameof(CursorRow));
+        }
+    }
+
+    public EntryRowViewModel? CursorRow => _cursorIndex >= 0 && _cursorIndex < _rows.Count ? _rows[_cursorIndex] : null;
+
+    /// <summary>Changing it re-sorts the rows in the background; the cursor stays on the same name.</summary>
+    public SortSpec Sort
+    {
+        get => _sort;
+        set
+        {
+            if (SetProperty(ref _sort, value)) OnViewOptionsChanged();
+        }
+    }
+
+    /// <summary>Whether hidden entries are listed. Changing it rebuilds the rows without reading the folder again.</summary>
+    public bool ShowHidden
+    {
+        get => _showHidden;
+        set
+        {
+            if (SetProperty(ref _showHidden, value)) OnViewOptionsChanged();
+        }
+    }
+
+    [ObservableProperty]
+    public partial bool IsLoading { get; private set; }
+
+    /// <summary>Why the last navigation or refresh failed, for the user; null after a successful one.</summary>
+    [ObservableProperty]
+    public partial string? Error { get; private set; }
+
+    [ObservableProperty]
+    public partial PanelErrorKind? ErrorKind { get; private set; }
+
+    /// <summary>Raised after the panel has moved to a folder.</summary>
+    public event EventHandler<VfsPath>? Navigated;
+
+    /// <summary>Raised when a file (not a folder) is opened with <see cref="ActivateAsync"/>.</summary>
+    public event EventHandler<FileEntry>? FileActivated;
+
+    /// <summary>Shows <paramref name="path"/> with the cursor on <paramref name="focusName"/> (or the first row).
+    /// On failure the previous folder stays and <see cref="Error"/> says why. Never throws for file-system errors.</summary>
+    public async Task NavigateToAsync(VfsPath path, string? focusName = null)
+    {
+        if (await LoadAsync(LoadKind.Navigate, path, focusName)) Navigated?.Invoke(this, path);
+    }
+
+    /// <summary>Enter: opens the folder (or link to a folder) under the cursor, goes up on "..", and raises
+    /// <see cref="FileActivated"/> for a file.</summary>
+    public Task ActivateAsync()
+    {
+        var row = CursorRow;
+        if (row is null) return Task.CompletedTask;
+        if (row.IsParentLink) return GoUpAsync();
+        if (row.Entry!.IsDirectoryLike) return NavigateToAsync(row.Entry.Path);
+        FileActivated?.Invoke(this, row.Entry);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Moves to the parent folder with the cursor on the folder just left. Does nothing at the root.</summary>
+    public Task GoUpAsync() =>
+        _hasPath && CurrentPath.Parent is { } parent ? NavigateToAsync(parent, CurrentPath.Name) : Task.CompletedTask;
+
+    /// <summary>Reads the folder again, keeping the cursor and the selection on the same names. If the folder no
+    /// longer exists, moves to its nearest existing ancestor.</summary>
+    public async Task RefreshAsync()
+    {
+        if (!_hasPath) return;
+        await LoadAsync(LoadKind.Refresh, CurrentPath, null);
+    }
+
+    /// <summary>Stops watching the folder and cancels an unfinished load.</summary>
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _loadCts?.Cancel();
+        var watch = _watch;
+        _watch = null;
+        try
+        {
+            watch?.Handle?.Dispose();
+        }
+        catch (Exception)
+        {
+            // the panel is going away; a failing unsubscribe must not stop that
+        }
+    }
+
+    // ---- Loading -----------------------------------------------------------------------------------------
+
+    private enum LoadKind { Navigate, Refresh, Reorder }
+
+    private readonly record struct ViewOptions(SortSpec Sort, bool ShowHidden);
+
+    private sealed record Listing(List<FileEntry> Entries, List<EntryRowViewModel> Rows, ViewOptions View,
+        WatchSubscription? Watch);
+
+    private ViewOptions CurrentView => new(_sort, _showHidden);
+
+    private void OnViewOptionsChanged()
+    {
+        // A load that reads the folder applies the options it finds when it finishes.
+        if (!_hasPath || _activeLoad is LoadKind.Navigate or LoadKind.Refresh) return;
+        _ = LoadAsync(LoadKind.Reorder, CurrentPath, null);
+    }
+
+    /// <summary>Runs one load to the end; true when it changed the listing. File-system errors end up in
+    /// <see cref="Error"/>, never as exceptions.</summary>
+    private async Task<bool> LoadAsync(LoadKind kind, VfsPath path, string? focusName)
+    {
+        if (_disposed) return false;
+        _loadCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _loadCts = cts;
+        var ct = cts.Token;
+        var version = ++_loadVersion;
+        _activeLoad = kind;
+        IsLoading = true;
+        if (kind != LoadKind.Navigate && _showingPreview) RestoreRowsBeforePreview();
+
+        Listing? listing = null;
+        try
+        {
+            var view = CurrentView;
+            if (kind == LoadKind.Reorder)
+            {
+                var entries = _entries;
+                var rows = await Task.Run(() => BuildRows(entries, path.IsRoot, view, sort: true));
+                listing = new Listing(entries, rows, view, null);
+            }
+            else
+            {
+                var provider = _providers.For(path);
+                var preview = kind == LoadKind.Navigate ? version : (int?)null;
+                listing = await Task.Run(() => ReadAsync(provider, path, kind == LoadKind.Navigate, preview, view, ct));
+            }
+
+            // The options changed while the folder was being read or sorted: sort again before showing it.
+            while (IsCurrent(version) && listing.View != CurrentView)
+            {
+                var newView = CurrentView;
+                var entries = listing.Entries;
+                var rows = await Task.Run(() => BuildRows(entries, path.IsRoot, newView, sort: true));
+                listing = listing with { Rows = rows, View = newView };
+            }
+
+            if (!IsCurrent(version))
+            {
+                DisposeInBackground(listing.Watch);
+                return false;
+            }
+            Commit(kind, path, focusName, listing);
+            return true;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            return false;
+        }
+        catch (Exception e)
+        {
+            if (listing?.Watch != _watch) DisposeInBackground(listing?.Watch);
+            if (!IsCurrent(version)) return false;
+            if (_showingPreview) RestoreRowsBeforePreview();
+            var errorKind = KindOf(e);
+            if (kind == LoadKind.Refresh && errorKind == PanelErrorKind.NotFound)
+                return await FallBackToAncestorAsync(path, version, ct);
+            SetError(errorKind, path);
+            return false;
+        }
+        finally
+        {
+            if (version == _loadVersion) FinishLoading();
+        }
+    }
+
+    private bool IsCurrent(int version) => version == _loadVersion && !_disposed;
+
+    /// <summary>Background: subscribes to changes (before reading, so no change is missed), reads the folder and
+    /// builds the sorted rows. Posts the first entries to the UI as a preview when the folder is large.</summary>
+    private async Task<Listing> ReadAsync(IFileSystemProvider provider, VfsPath path, bool watch, int? previewVersion,
+        ViewOptions view, CancellationToken ct)
+    {
+        var subscription = watch ? Subscribe(provider, path) : null;
+        try
+        {
+            var entries = new List<FileEntry>();
+            await foreach (var entry in provider.EnumerateAsync(path, ct).ConfigureAwait(false))
+            {
+                entries.Add(entry);
+                if (previewVersion is { } version && entries.Count == PreviewCount + 1)
+                    PostPreview(version, BuildRows(entries.GetRange(0, PreviewCount), path.IsRoot, view, sort: false));
+            }
+            ct.ThrowIfCancellationRequested();
+            return new Listing(entries, BuildRows(entries, path.IsRoot, view, sort: true), view, subscription);
+        }
+        catch
+        {
+            DisposeInBackground(subscription);
+            throw;
+        }
+    }
+
+    private static List<EntryRowViewModel> BuildRows(IReadOnlyList<FileEntry> entries, bool isRoot, ViewOptions view,
+        bool sort)
+    {
+        var visible = new List<FileEntry>(entries.Count);
+        foreach (var entry in entries)
+            if (view.ShowHidden || !entry.IsHidden)
+                visible.Add(entry);
+        if (sort) visible.Sort(EntrySorter.Create(view.Sort));
+
+        var rows = new List<EntryRowViewModel>(visible.Count + 1);
+        if (!isRoot) rows.Add(EntryRowViewModel.CreateParentLink());
+        foreach (var entry in visible) rows.Add(new EntryRowViewModel(entry));
+        return rows;
+    }
+
+    private void PostPreview(int version, List<EntryRowViewModel> rows) => _ui.Post(_ =>
+    {
+        if (!IsCurrent(version)) return;
+        if (!_showingPreview)
+        {
+            _rowsBeforePreview = _rows.Items;
+            _cursorBeforePreview = _cursorIndex;
+            _showingPreview = true;
+        }
+        Publish(rows, 0);
+    }, null);
+
+    private void RestoreRowsBeforePreview()
+    {
+        _showingPreview = false;
+        Publish(_rowsBeforePreview, _cursorBeforePreview);
+        _rowsBeforePreview = [];
+    }
+
+    private void Commit(LoadKind kind, VfsPath path, string? focusName, Listing listing)
+    {
+        var rows = listing.Rows;
+        int cursor;
+        if (kind == LoadKind.Navigate)
+        {
+            var oldWatch = _watch;
+            _watch = listing.Watch;
+            _watchRefreshAfterLoad = false;
+            DisposeInBackground(oldWatch);
+            CurrentPath = path;
+            _hasPath = true;
+            cursor = focusName is null ? 0 : Math.Max(IndexOf(rows, focusName), 0);
+        }
+        else
+        {
+            // Keep the cursor and the selection on the same names; a vanished cursor name keeps its position.
+            var cursorName = CursorRow?.Name;
+            var index = cursorName is null ? -1 : IndexOf(rows, cursorName);
+            cursor = index >= 0 ? index : _cursorIndex;
+            RestoreSelection(rows);
+        }
+
+        _entries = listing.Entries;
+        _showingPreview = false;
+        _rowsBeforePreview = [];
+        Publish(rows, cursor);
+        ErrorKind = null;
+        Error = null;
+    }
+
+    private void RestoreSelection(List<EntryRowViewModel> rows)
+    {
+        HashSet<string>? selected = null;
+        foreach (var row in _rows.Items)
+            if (row.IsSelected)
+                (selected ??= new HashSet<string>(StringComparer.Ordinal)).Add(row.Name);
+        if (selected is null) return;
+        foreach (var row in rows)
+            if (!row.IsParentLink && selected.Contains(row.Name))
+                row.IsSelected = true;
+    }
+
+    private static int IndexOf(List<EntryRowViewModel> rows, string name) =>
+        rows.FindIndex(r => string.Equals(r.Name, name, StringComparison.Ordinal));
+
+    private void Publish(IReadOnlyList<EntryRowViewModel> rows, int cursor)
+    {
+        _rows.Replace(rows);
+        _cursorIndex = rows.Count == 0 ? -1 : Math.Clamp(cursor, 0, rows.Count - 1);
+        OnPropertyChanged(nameof(CursorIndex));
+        OnPropertyChanged(nameof(CursorRow));
+    }
+
+    private void FinishLoading()
+    {
+        _activeLoad = null;
+        IsLoading = false;
+        if (_watchRefreshAfterLoad)
+        {
+            _watchRefreshAfterLoad = false;
+            if (_watch is { } watch) _ = OnDirectoryChangedAsync(watch);
+        }
+    }
+
+    /// <summary>The folder shown has disappeared: shows its nearest existing ancestor instead.</summary>
+    private async Task<bool> FallBackToAncestorAsync(VfsPath path, int version, CancellationToken ct)
+    {
+        VfsPath? ancestor = null;
+        try
+        {
+            var provider = _providers.For(path);
+            ancestor = await Task.Run(() => FindNearestExistingAncestorAsync(provider, path, ct));
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            return false;
+        }
+        catch (Exception)
+        {
+            // treated as no ancestor found
+        }
+        if (!IsCurrent(version)) return false;
+        if (ancestor is not { } target)
+        {
+            SetError(PanelErrorKind.NotFound, path);
+            return false;
+        }
+        await NavigateToAsync(target);
+        return false; // the navigation reported its own result
+    }
+
+    private static async Task<VfsPath?> FindNearestExistingAncestorAsync(IFileSystemProvider provider, VfsPath path,
+        CancellationToken ct)
+    {
+        for (var candidate = path.Parent; candidate is { } directory; candidate = directory.Parent)
+        {
+            try
+            {
+                var entry = await provider.GetEntryAsync(directory, ct).ConfigureAwait(false);
+                if (entry?.IsDirectoryLike == true) return directory;
+            }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                // unreadable: look further up
+            }
+        }
+        return null;
+    }
+
+    private static PanelErrorKind KindOf(Exception e) => e switch
+    {
+        VfsAccessDeniedException or UnauthorizedAccessException => PanelErrorKind.AccessDenied,
+        VfsNotFoundException or DirectoryNotFoundException or FileNotFoundException => PanelErrorKind.NotFound,
+        _ => PanelErrorKind.Other,
+    };
+
+    private void SetError(PanelErrorKind kind, VfsPath path)
+    {
+        ErrorKind = kind;
+        Error = Loc.Format($"Panel_Error_{kind}", path.Path);
+    }
+
+    // ---- Watching ----------------------------------------------------------------------------------------
+
+    /// <summary>One subscription to a folder's changes; callbacks name it, so late ones for a folder the panel has
+    /// left are recognised and ignored.</summary>
+    private sealed class WatchSubscription
+    {
+        public IDisposable? Handle;
+    }
+
+    /// <summary>Background. Watching is best effort: a provider that cannot watch, or fails to, gives no refreshes.</summary>
+    private WatchSubscription Subscribe(IFileSystemProvider provider, VfsPath path)
+    {
+        var subscription = new WatchSubscription();
+        try
+        {
+            subscription.Handle = provider.Watch(path, () => OnWatchCallback(subscription));
+        }
+        catch (Exception)
+        {
+            // no watching for this folder
+        }
+        return subscription;
+    }
+
+    /// <summary>Any thread. Must not throw: an exception here would escape into the provider's thread.</summary>
+    private void OnWatchCallback(WatchSubscription subscription)
+    {
+        try
+        {
+            _ui.Post(_ => _ = OnDirectoryChangedAsync(subscription), null);
+        }
+        catch (Exception)
+        {
+            // the UI is shutting down
+        }
+    }
+
+    private async Task OnDirectoryChangedAsync(WatchSubscription subscription)
+    {
+        try
+        {
+            if (_disposed || subscription != _watch || _watchRefreshScheduled) return;
+            _watchRefreshScheduled = true;
+            try
+            {
+                await Task.Delay(WatchRefreshDelay);
+            }
+            finally
+            {
+                _watchRefreshScheduled = false;
+            }
+            if (_disposed || subscription != _watch) return;
+            if (_activeLoad is not null)
+            {
+                // Never cancel what the user started; refresh once it is done (a navigation away clears this).
+                _watchRefreshAfterLoad = true;
+                return;
+            }
+            await RefreshAsync();
+        }
+        catch (Exception)
+        {
+            // a refresh nobody asked for must not crash the app; errors of the folder itself are in Error
+        }
+    }
+
+    private static void DisposeInBackground(WatchSubscription? subscription)
+    {
+        if (subscription?.Handle is not { } handle) return;
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                handle.Dispose();
+            }
+            catch (Exception)
+            {
+                // unsubscribing is best effort; late callbacks are ignored anyway
+            }
+        });
+    }
+}
