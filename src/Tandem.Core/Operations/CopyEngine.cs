@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
+using System.Security.Cryptography;
 using Tandem.Core.Platform;
 using Tandem.Core.Vfs;
 
@@ -23,9 +24,13 @@ internal enum CopyOutcome { Copied, DirectoryCreated, DirectoryMerged, Skipped }
 /// way round, and a source directory that cannot be listed) is put to
 /// <see cref="IOperationInteraction.ResolveErrorAsync"/>. "Apply to all" and "skip all" answers last until the
 /// engine is discarded. Skipping a directory skips everything inside it, recorded as one item.</para>
+/// <para>Cancellation and pausing are checked between items, between scanned entries, and between the blocks of a
+/// file being written or verified; a cancelled or failed file leaves no part file behind. With
+/// <paramref name="verifyContent"/>, each written file and its source are read back and their SHA-256 compared
+/// before the file is moved into place; the verification bytes count in the totals, doubling them.</para>
 /// </summary>
 internal sealed class CopyEngine(ProviderRegistry providers, FileOperation operation,
-    IOperationInteraction interaction, INativeCopy? nativeCopy)
+    IOperationInteraction interaction, INativeCopy? nativeCopy, bool verifyContent)
 {
     public const string PartSuffix = ".tandem-part";
     public const string BackupSuffix = ".tandem-old";
@@ -115,12 +120,12 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
                         ?? throw new VfsNotFoundException($"'{source.Path}' does not exist.");
             await AddAsync(entry, destination).ConfigureAwait(false);
         }
-        operation.SetTotals(files, bytes);
+        operation.SetTotals(files, PlannedBytes(bytes));
         return items;
 
         async Task AddAsync(FileEntry entry, VfsPath destination)
         {
-            ct.ThrowIfCancellationRequested();
+            await operation.WaitWhilePausedAsync(ct).ConfigureAwait(false);
             if (entry.Kind == EntryKind.Directory)
             {
                 var children = await ListChildrenAsync(entry.Path, ct).ConfigureAwait(false);
@@ -165,7 +170,7 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
         VfsPath? skippedDirectory = null;
         for (var i = 0; i < items.Count; i++)
         {
-            ct.ThrowIfCancellationRequested();
+            await operation.WaitWhilePausedAsync(ct).ConfigureAwait(false);
             var item = items[i];
             if (skippedDirectory is { } skipped && item.Source.Path.IsSameOrDescendantOf(skipped))
             {
@@ -207,8 +212,8 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
     private async Task<CopyOutcome> CopyItemOnceAsync(CopyItem item, StrongBox<ConflictAction?> conflictAction,
         CancellationToken ct)
     {
-        // The operation's token only interrupts questions; I/O inside an item is not cancellable yet, so the
-        // operation stops between items.
+        // Only writing (and verifying) a file's content is cancellable, block by block; the short steps around
+        // it are not, so a cancel never interrupts putting a finished file into place.
         var io = CancellationToken.None;
         var source = item.Source;
         var destination = item.Destination;
@@ -264,7 +269,7 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
         }
         else
         {
-            await CopyFileAsync(source, destination, target, replace, io).ConfigureAwait(false);
+            await CopyFileAsync(source, destination, target, replace, ct).ConfigureAwait(false);
         }
         operation.CompleteFile();
         return CopyOutcome.Copied;
@@ -312,9 +317,13 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
     private void CountSkipped(FileEntry source)
     {
         if (source.Kind == EntryKind.Directory) return;
-        if (source.Kind == EntryKind.File) operation.DropBytesFromTotal(source.Size);
+        if (source.Kind == EntryKind.File) operation.DropBytesFromTotal(PlannedBytes(source.Size));
         operation.CompleteFile();
     }
+
+    /// <summary>The bytes a file of <paramref name="size"/> adds to the total: written once, and read back once more
+    /// when verifying.</summary>
+    private long PlannedBytes(long size) => verifyContent ? size * 2 : size;
 
     /// <summary>"name (2).ext", "name (3).ext", ... — the first that does not exist.</summary>
     private static async Task<VfsPath> FirstFreeNameAsync(VfsPath destination, IFileSystemProvider target,
@@ -340,8 +349,10 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
 
     /// <summary>Writes <paramref name="source"/> to <paramref name="destination"/> through a part file. With
     /// <paramref name="replace"/>, the existing destination is replaced only once the part file is complete (see
-    /// <see cref="ReplaceWithPartAsync"/>). On failure the part file is removed and the attempt's bytes are taken
+    /// <see cref="ReplaceWithPartAsync"/>). Writing and verifying stop at the next block when <paramref name="ct"/>
+    /// is cancelled. On failure or cancellation the part file is removed and the attempt's bytes are taken
     /// back.</summary>
+    /// <exception cref="ContentMismatchException">Verification found the copy differs from the source.</exception>
     private async Task CopyFileAsync(FileEntry source, VfsPath destination, IFileSystemProvider target, bool replace,
         CancellationToken ct)
     {
@@ -358,6 +369,8 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
             {
                 if (nativeCopy is not null && IsLocal(source.Path) && IsLocal(destination))
                 {
+                    // The platform copies the whole file in one call: cancellation reaches it through ct, but a
+                    // pause takes effect only once this file is done (at the next checkpoint).
                     var progress = new RunningTotal(Count);
                     await nativeCopy.CopyFileAsync(source.Path.Path, part.Path, progress, ct).ConfigureAwait(false);
                 }
@@ -365,15 +378,62 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
                 {
                     await CopyStreamAsync(source.Path, part, target, Count, ct).ConfigureAwait(false);
                 }
-                if (copied < source.Size) Count(source.Size - copied); // keep BytesDone in step with the scanned total
+                TopUp(source.Size); // keep BytesDone in step with the scanned total
 
-                await ApplyMetadataAsync(source, part, target, ct).ConfigureAwait(false);
+                if (verifyContent)
+                {
+                    await VerifyAsync(source.Path, part, target, Count, ct).ConfigureAwait(false);
+                    TopUp(PlannedBytes(source.Size));
+                }
+
+                await ApplyMetadataAsync(source, part, target, CancellationToken.None).ConfigureAwait(false);
             }).ConfigureAwait(false);
         }
         catch
         {
             operation.AddBytesDone(-copied);
             throw;
+        }
+
+        void TopUp(long expected)
+        {
+            if (copied < expected) Count(expected - copied);
+        }
+    }
+
+    /// <summary>Reads <paramref name="source"/> and <paramref name="part"/> side by side, block by block (pausing
+    /// and cancelling between blocks), counting the source's bytes, and compares their SHA-256.</summary>
+    /// <exception cref="ContentMismatchException">The two differ.</exception>
+    private async Task VerifyAsync(VfsPath source, VfsPath part, IFileSystemProvider target, Action<long> count,
+        CancellationToken ct)
+    {
+        var expectedBuffer = ArrayPool<byte>.Shared.Rent(BufferSize);
+        var actualBuffer = ArrayPool<byte>.Shared.Rent(BufferSize);
+        try
+        {
+            await using var expected = await providers.For(source).OpenReadAsync(source, ct).ConfigureAwait(false);
+            await using var actual = await target.OpenReadAsync(part, ct).ConfigureAwait(false);
+            using var expectedHash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            using var actualHash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            while (true)
+            {
+                await operation.WaitWhilePausedAsync(ct).ConfigureAwait(false);
+                var expectedRead = await expected.ReadAtLeastAsync(expectedBuffer.AsMemory(0, BufferSize), BufferSize,
+                    throwOnEndOfStream: false, ct).ConfigureAwait(false);
+                var actualRead = await actual.ReadAtLeastAsync(actualBuffer.AsMemory(0, BufferSize), BufferSize,
+                    throwOnEndOfStream: false, ct).ConfigureAwait(false);
+                if (expectedRead == 0 && actualRead == 0) break;
+                expectedHash.AppendData(expectedBuffer, 0, expectedRead);
+                actualHash.AppendData(actualBuffer, 0, actualRead);
+                count(expectedRead);
+            }
+            if (!expectedHash.GetHashAndReset().AsSpan().SequenceEqual(actualHash.GetHashAndReset()))
+                throw new ContentMismatchException($"The copy of '{source.Path}' differs from the original.");
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(expectedBuffer);
+            ArrayPool<byte>.Shared.Return(actualBuffer);
         }
     }
 
@@ -462,9 +522,11 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
         {
             await using var input = await providers.For(source).OpenReadAsync(source, ct).ConfigureAwait(false);
             await using var output = await target.OpenWriteAsync(part, ct).ConfigureAwait(false);
-            int read;
-            while ((read = await input.ReadAsync(buffer.AsMemory(0, BufferSize), ct).ConfigureAwait(false)) > 0)
+            while (true)
             {
+                await operation.WaitWhilePausedAsync(ct).ConfigureAwait(false);
+                var read = await input.ReadAsync(buffer.AsMemory(0, BufferSize), ct).ConfigureAwait(false);
+                if (read == 0) break;
                 await output.WriteAsync(buffer.AsMemory(0, read), ct).ConfigureAwait(false);
                 count(read);
             }

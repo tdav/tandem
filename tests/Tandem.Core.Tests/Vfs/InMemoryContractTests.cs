@@ -66,6 +66,28 @@ public class InMemoryContractTests : ProviderContractTests
     }
 
     [Fact]
+    public async Task ChangeContentOnRead_replaces_only_the_given_read()
+    {
+        var fs = new InMemoryFileSystem();
+        fs.AddFile("/f.txt", "original");
+        fs.AddFile("/g.txt", "other");
+        fs.ChangeContentOnRead("/f.txt", 2, "tampered"u8.ToArray());
+
+        Assert.Equal("original", await ReadAsync(fs, "/f.txt"));
+        Assert.Equal("other", await ReadAsync(fs, "/g.txt"));
+        Assert.Equal("tampered", await ReadAsync(fs, "/f.txt"));
+        Assert.Equal("original", await ReadAsync(fs, "/f.txt"));
+        Assert.Equal("original", fs.ReadAllText("/f.txt")); // the stored file is untouched
+    }
+
+    private static async Task<string> ReadAsync(InMemoryFileSystem fs, string path)
+    {
+        await using var stream = await fs.OpenReadAsync(Mem(path), Ct);
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+        return await reader.ReadToEndAsync(Ct);
+    }
+
+    [Fact]
     public async Task FailOn_throws_for_matching_operation()
     {
         var fs = new InMemoryFileSystem();

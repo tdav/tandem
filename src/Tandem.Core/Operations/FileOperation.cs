@@ -29,8 +29,11 @@ public abstract class FileOperation
     // Guarded by _lock.
     private OperationState _state = OperationState.Queued;
     private TimeSpan? _runningSince;
+    private TimeSpan _pausedFor; // completed pauses
+    private TimeSpan? _pausedSince; // the current pause
     private TimeSpan? _lastProgressEvent;
     private string? _currentItem;
+    private TaskCompletionSource? _resume; // set while a pause is requested; completed by Resume
     private long _filesDone, _filesTotal, _bytesDone, _bytesTotal;
 
     public Guid Id { get; } = Guid.NewGuid();
@@ -75,13 +78,34 @@ public abstract class FileOperation
         return _completion.Task;
     }
 
-    /// <summary>Not implemented yet: pausing arrives with block-level control of the copy loop.</summary>
-    public void Pause() { }
+    /// <summary>Asks a started operation to pause. It stops at its next checkpoint (between scanned entries, between
+    /// items, and between the blocks of a file it copies or verifies itself), then reports <see cref="OperationState.Paused"/> until
+    /// <see cref="Resume"/> or <see cref="Cancel"/>. A file handed to the platform's own copy finishes before the
+    /// pause takes effect. Before <see cref="RunAsync"/>, after the end, or while already paused it does nothing.</summary>
+    public void Pause()
+    {
+        lock (_lock)
+        {
+            if (Volatile.Read(ref _started) == 0 || IsFinal(_state) || _resume is not null) return;
+            _resume = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        }
+    }
 
-    /// <summary>Not implemented yet: see <see cref="Pause"/>.</summary>
-    public void Resume() { }
+    /// <summary>Lets a paused operation go on (or withdraws a pause that has not taken effect yet); otherwise it
+    /// does nothing.</summary>
+    public void Resume()
+    {
+        TaskCompletionSource? resume;
+        lock (_lock)
+        {
+            resume = _resume;
+            _resume = null;
+        }
+        resume?.TrySetResult();
+    }
 
-    /// <summary>Asks the operation to stop; it ends as <see cref="OperationState.Cancelled"/>. Calling it before
+    /// <summary>Asks the operation to stop; it ends as <see cref="OperationState.Cancelled"/>, also when paused. A
+    /// file being written is abandoned between blocks and its part file removed. Calling it before
     /// <see cref="RunAsync"/> makes the run end immediately; calling it after the end has no effect.</summary>
     public void Cancel() => _cancel.Cancel();
 
@@ -145,6 +169,36 @@ public abstract class FileOperation
         lock (_lock) _skipped.Add(item);
     }
 
+    /// <summary>A pause checkpoint: when a pause was requested, reports <see cref="OperationState.Paused"/> and
+    /// waits for <see cref="Resume"/>, then returns to the state it paused in.</summary>
+    /// <exception cref="OperationCanceledException"><paramref name="ct"/> is cancelled, before or during the pause.</exception>
+    protected internal async ValueTask WaitWhilePausedAsync(CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        Task resumed;
+        OperationState pausedIn;
+        lock (_lock)
+        {
+            if (_resume is null) return;
+            resumed = _resume.Task;
+            pausedIn = _state;
+            _state = OperationState.Paused;
+            _pausedSince = _clock.Elapsed;
+        }
+        Changed?.Invoke(this, EventArgs.Empty);
+        await resumed.WaitAsync(ct).ConfigureAwait(false);
+        lock (_lock)
+        {
+            // A pause while scanning ends before the speed clock starts, so it is not subtracted from it.
+            if (_runningSince is not null) _pausedFor += _clock.Elapsed - _pausedSince!.Value;
+            _pausedSince = null;
+        }
+        SetState(pausedIn);
+    }
+
+    private static bool IsFinal(OperationState state) =>
+        state is OperationState.Completed or OperationState.Cancelled or OperationState.Failed;
+
     private async Task RunCoreAsync()
     {
         lock (_lock) _clock.Start();
@@ -196,10 +250,12 @@ public abstract class FileOperation
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>Speed is the average since the operation started running. Caller holds _lock.</summary>
+    /// <summary>Speed is the average since the operation started running, not counting time spent paused.
+    /// Caller holds _lock.</summary>
     private OperationProgress SnapshotProgress()
     {
-        var elapsed = _runningSince is { } since ? (_clock.Elapsed - since).TotalSeconds : 0;
+        var now = _pausedSince ?? _clock.Elapsed;
+        var elapsed = _runningSince is { } since ? (now - since - _pausedFor).TotalSeconds : 0;
         var speed = elapsed > 0 ? _bytesDone / elapsed : 0;
         TimeSpan? remaining = speed > 0 ? TimeSpan.FromSeconds(Math.Max(0, _bytesTotal - _bytesDone) / speed) : null;
         return new OperationProgress(_currentItem, _filesDone, _filesTotal, _bytesDone, _bytesTotal, speed, remaining);

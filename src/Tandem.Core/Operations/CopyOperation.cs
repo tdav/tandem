@@ -3,7 +3,9 @@ using Tandem.Core.Vfs;
 
 namespace Tandem.Core.Operations;
 
-/// <param name="VerifyContent">Re-read and compare each copied file (accepted, not acted on yet).</param>
+/// <param name="VerifyContent">Read each copied file and its source back and compare them (SHA-256) before the copy
+/// is put in place; a difference is an item error (<see cref="ContentMismatchException"/>). Doubles the byte
+/// total.</param>
 /// <param name="NewName">The destination name; only with a single source.</param>
 public sealed record CopyOptions(bool VerifyContent = false, string? NewName = null);
 
@@ -45,7 +47,7 @@ public sealed class CopyOperation(ProviderRegistry providers, IReadOnlyList<VfsP
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
-        var engine = new CopyEngine(_providers, this, _interaction, _nativeCopy);
+        var engine = new CopyEngine(_providers, this, _interaction, _nativeCopy, _options.VerifyContent);
         var destination = await engine.ResolveDestinationDirectoryAsync(_destinationDirectory, ct).ConfigureAwait(false);
         var targets = CopyEngine.ResolveTargets(_sources, destination, _options.NewName);
 

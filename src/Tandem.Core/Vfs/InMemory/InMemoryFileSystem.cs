@@ -21,6 +21,7 @@ public sealed class InMemoryFileSystem : IFileSystemProvider
     private readonly List<(VfsPath Prefix, string Key)> _volumes = [];
     private readonly List<(Func<string, VfsPath, bool> When, Func<Exception> Error)> _failures = [];
     private readonly Dictionary<string, (long Bytes, Func<Exception> Error)> _writeFailures = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (int Reads, int NthRead, byte[] Content)> _readChanges = new(StringComparer.Ordinal);
     private readonly List<Watcher> _watchers = [];
 
     public InMemoryFileSystem(string id = "mem")
@@ -120,6 +121,17 @@ public sealed class InMemoryFileSystem : IFileSystemProvider
         lock (_lock) _writeFailures[p.Path] = (bytes, error);
     }
 
+    /// <summary>The <paramref name="nthRead"/>-th <see cref="OpenReadAsync"/> of <paramref name="path"/> from now on
+    /// (counting from 1) returns <paramref name="content"/> instead of the file's bytes; the stored file and every
+    /// other read are unchanged. Simulates a source that changes between reads.</summary>
+    public void ChangeContentOnRead(string path, int nthRead, byte[] content)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(nthRead, 1);
+        ArgumentNullException.ThrowIfNull(content);
+        var p = ToPath(path);
+        lock (_lock) _readChanges[p.Path] = (0, nthRead, content.ToArray());
+    }
+
     /// <summary>Notifies the watchers of <paramref name="directory"/>.</summary>
     public void RaiseChanged(string directory)
     {
@@ -170,6 +182,11 @@ public sealed class InMemoryFileSystem : IFileSystemProvider
         {
             var node = Find(ResolveLinks(path));
             if (node.Kind != EntryKind.File) throw new VfsException($"'{path.Path}' is not a file.");
+            if (_readChanges.TryGetValue(path.Path, out var change))
+            {
+                _readChanges[path.Path] = change with { Reads = change.Reads + 1 };
+                if (change.Reads + 1 == change.NthRead) return new MemoryStream(change.Content.ToArray(), writable: false);
+            }
             return new MemoryStream(node.Data!.ToArray(), writable: false);
         }
     });
