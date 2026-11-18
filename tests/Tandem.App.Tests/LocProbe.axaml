@@ -1,0 +1,6 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="using:Tandem.App.Resources"
+             x:Class="Tandem.App.Tests.LocProbe">
+    <TextBlock x:Name="Text" Text="{loc:Tr Key=Button_Cancel}" />
+</UserControl>

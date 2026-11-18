@@ -1,0 +1,241 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+
+  <!-- Size units (binary) -->
+  <data name="Unit_B" xml:space="preserve">
+    <value>Б</value>
+  </data>
+  <data name="Unit_KB" xml:space="preserve">
+    <value>КБ</value>
+  </data>
+  <data name="Unit_MB" xml:space="preserve">
+    <value>МБ</value>
+  </data>
+  <data name="Unit_GB" xml:space="preserve">
+    <value>ГБ</value>
+  </data>
+  <data name="Unit_TB" xml:space="preserve">
+    <value>ТБ</value>
+  </data>
+
+  <!-- File panel -->
+  <data name="Panel_Folder" xml:space="preserve">
+    <value>Папка</value>
+  </data>
+  <data name="Panel_Status" xml:space="preserve">
+    <value>Выбрано {0} из {1}, {2}</value>
+  </data>
+
+  <!-- Common buttons (verbs) -->
+  <data name="Button_OK" xml:space="preserve">
+    <value>ОК</value>
+  </data>
+  <data name="Button_Cancel" xml:space="preserve">
+    <value>Отмена</value>
+  </data>
+  <data name="Button_Copy" xml:space="preserve">
+    <value>Копировать</value>
+  </data>
+  <data name="Button_Move" xml:space="preserve">
+    <value>Переместить</value>
+  </data>
+  <data name="Button_Delete" xml:space="preserve">
+    <value>Удалить</value>
+  </data>
+  <data name="Button_Skip" xml:space="preserve">
+    <value>Пропустить</value>
+  </data>
+  <data name="Button_Retry" xml:space="preserve">
+    <value>Повторить</value>
+  </data>
+  <data name="Button_Overwrite" xml:space="preserve">
+    <value>Заменить</value>
+  </data>
+  <data name="Button_Rename" xml:space="preserve">
+    <value>Переименовать</value>
+  </data>
+  <data name="Button_Pause" xml:space="preserve">
+    <value>Приостановить</value>
+  </data>
+  <data name="Button_Resume" xml:space="preserve">
+    <value>Продолжить</value>
+  </data>
+  <data name="Button_Background" xml:space="preserve">
+    <value>Свернуть в фон</value>
+  </data>
+
+  <!-- Column headers -->
+  <data name="Column_Name" xml:space="preserve">
+    <value>Имя</value>
+  </data>
+  <data name="Column_Ext" xml:space="preserve">
+    <value>Расш.</value>
+  </data>
+  <data name="Column_Size" xml:space="preserve">
+    <value>Размер</value>
+  </data>
+  <data name="Column_Date" xml:space="preserve">
+    <value>Дата</value>
+  </data>
+  <data name="Column_Mode" xml:space="preserve">
+    <value>Права</value>
+  </data>
+
+  <!-- Function-key bar -->
+  <data name="FKey_View" xml:space="preserve">
+    <value>Просмотр</value>
+  </data>
+  <data name="FKey_Edit" xml:space="preserve">
+    <value>Правка</value>
+  </data>
+  <data name="FKey_Copy" xml:space="preserve">
+    <value>Копировать</value>
+  </data>
+  <data name="FKey_Move" xml:space="preserve">
+    <value>Переместить</value>
+  </data>
+  <data name="FKey_NewFolder" xml:space="preserve">
+    <value>Новая папка</value>
+  </data>
+  <data name="FKey_Delete" xml:space="preserve">
+    <value>Удалить</value>
+  </data>
+
+  <!-- Tandem.Core.Operations.RejectionReason -->
+  <data name="RejectionReason_NewNameWithMultipleSources" xml:space="preserve">
+    <value>Новое имя можно задать только одному объекту</value>
+  </data>
+  <data name="RejectionReason_DestinationInsideSource" xml:space="preserve">
+    <value>Папка назначения находится внутри исходной папки</value>
+  </data>
+  <data name="RejectionReason_SourceEqualsDestination" xml:space="preserve">
+    <value>Источник и назначение совпадают</value>
+  </data>
+  <data name="RejectionReason_InvalidName" xml:space="preserve">
+    <value>Недопустимое имя</value>
+  </data>
+  <data name="RejectionReason_TrashNotSupported" xml:space="preserve">
+    <value>Эти объекты нельзя переместить в Корзину</value>
+  </data>
+
+  <!-- Tandem.Core.Operations.SkipReason -->
+  <data name="SkipReason_ConflictSkipped" xml:space="preserve">
+    <value>Пропущено: объект уже есть в папке назначения</value>
+  </data>
+  <data name="SkipReason_OlderThanDestination" xml:space="preserve">
+    <value>Пропущено: объект в папке назначения не старше</value>
+  </data>
+  <data name="SkipReason_Error" xml:space="preserve">
+    <value>Пропущено после ошибки</value>
+  </data>
+  <data name="SkipReason_SymlinksNotSupported" xml:space="preserve">
+    <value>Пропущено: назначение не поддерживает символические ссылки</value>
+  </data>
+  <data name="SkipReason_SourceIsDestination" xml:space="preserve">
+    <value>Не удалено: назначение совпадает с источником</value>
+  </data>
+
+  <!-- Tandem.Core.Operations.OperationKind (names of operations, not buttons) -->
+  <data name="OperationKind_Copy" xml:space="preserve">
+    <value>Копирование</value>
+  </data>
+  <data name="OperationKind_Move" xml:space="preserve">
+    <value>Перемещение</value>
+  </data>
+  <data name="OperationKind_Delete" xml:space="preserve">
+    <value>Удаление</value>
+  </data>
+
+  <!-- Tandem.Core.Operations.OperationState -->
+  <data name="OperationState_Queued" xml:space="preserve">
+    <value>В очереди</value>
+  </data>
+  <data name="OperationState_Scanning" xml:space="preserve">
+    <value>Подсчёт объектов</value>
+  </data>
+  <data name="OperationState_Running" xml:space="preserve">
+    <value>Выполняется</value>
+  </data>
+  <data name="OperationState_Paused" xml:space="preserve">
+    <value>Приостановлено</value>
+  </data>
+  <data name="OperationState_Completed" xml:space="preserve">
+    <value>Завершено</value>
+  </data>
+  <data name="OperationState_Cancelled" xml:space="preserve">
+    <value>Отменено</value>
+  </data>
+  <data name="OperationState_Failed" xml:space="preserve">
+    <value>Завершено с ошибкой</value>
+  </data>
+
+  <!-- Tandem.Core.Operations.ConflictAction (buttons) -->
+  <data name="ConflictAction_Overwrite" xml:space="preserve">
+    <value>Заменить</value>
+  </data>
+  <data name="ConflictAction_OverwriteOlder" xml:space="preserve">
+    <value>Заменить более старые</value>
+  </data>
+  <data name="ConflictAction_Skip" xml:space="preserve">
+    <value>Пропустить</value>
+  </data>
+  <data name="ConflictAction_Rename" xml:space="preserve">
+    <value>Переименовать</value>
+  </data>
+  <data name="ConflictAction_Cancel" xml:space="preserve">
+    <value>Отмена</value>
+  </data>
+
+  <!-- Tandem.Core.Operations.ErrorAction (buttons) -->
+  <data name="ErrorAction_Retry" xml:space="preserve">
+    <value>Повторить</value>
+  </data>
+  <data name="ErrorAction_Skip" xml:space="preserve">
+    <value>Пропустить</value>
+  </data>
+  <data name="ErrorAction_SkipAll" xml:space="preserve">
+    <value>Пропустить все</value>
+  </data>
+  <data name="ErrorAction_Abort" xml:space="preserve">
+    <value>Прервать</value>
+  </data>
+</root>

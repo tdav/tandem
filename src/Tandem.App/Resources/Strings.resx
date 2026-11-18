@@ -1,0 +1,246 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+
+  <!-- Size units (binary) -->
+  <data name="Unit_B" xml:space="preserve">
+    <value>B</value>
+  </data>
+  <data name="Unit_KB" xml:space="preserve">
+    <value>KB</value>
+  </data>
+  <data name="Unit_MB" xml:space="preserve">
+    <value>MB</value>
+  </data>
+  <data name="Unit_GB" xml:space="preserve">
+    <value>GB</value>
+  </data>
+  <data name="Unit_TB" xml:space="preserve">
+    <value>TB</value>
+  </data>
+
+  <!-- File panel -->
+  <data name="Panel_Folder" xml:space="preserve">
+    <value>Folder</value>
+    <comment>Shown in the size column for a folder</comment>
+  </data>
+  <data name="Panel_Status" xml:space="preserve">
+    <value>Selected {0} of {1}, {2}</value>
+    <comment>{0} selected items, {1} all items, {2} selected size</comment>
+  </data>
+
+  <!-- Common buttons (verbs) -->
+  <data name="Button_OK" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="Button_Cancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="Button_Copy" xml:space="preserve">
+    <value>Copy</value>
+  </data>
+  <data name="Button_Move" xml:space="preserve">
+    <value>Move</value>
+  </data>
+  <data name="Button_Delete" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="Button_Skip" xml:space="preserve">
+    <value>Skip</value>
+  </data>
+  <data name="Button_Retry" xml:space="preserve">
+    <value>Retry</value>
+  </data>
+  <data name="Button_Overwrite" xml:space="preserve">
+    <value>Overwrite</value>
+  </data>
+  <data name="Button_Rename" xml:space="preserve">
+    <value>Rename</value>
+  </data>
+  <data name="Button_Pause" xml:space="preserve">
+    <value>Pause</value>
+  </data>
+  <data name="Button_Resume" xml:space="preserve">
+    <value>Resume</value>
+  </data>
+  <data name="Button_Background" xml:space="preserve">
+    <value>Run in background</value>
+    <comment>Sends a running operation to the background</comment>
+  </data>
+
+  <!-- Column headers -->
+  <data name="Column_Name" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="Column_Ext" xml:space="preserve">
+    <value>Ext</value>
+    <comment>File extension</comment>
+  </data>
+  <data name="Column_Size" xml:space="preserve">
+    <value>Size</value>
+  </data>
+  <data name="Column_Date" xml:space="preserve">
+    <value>Date</value>
+  </data>
+  <data name="Column_Mode" xml:space="preserve">
+    <value>Permissions</value>
+    <comment>Unix permissions</comment>
+  </data>
+
+  <!-- Function-key bar -->
+  <data name="FKey_View" xml:space="preserve">
+    <value>View</value>
+  </data>
+  <data name="FKey_Edit" xml:space="preserve">
+    <value>Edit</value>
+  </data>
+  <data name="FKey_Copy" xml:space="preserve">
+    <value>Copy</value>
+  </data>
+  <data name="FKey_Move" xml:space="preserve">
+    <value>Move</value>
+  </data>
+  <data name="FKey_NewFolder" xml:space="preserve">
+    <value>New folder</value>
+  </data>
+  <data name="FKey_Delete" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+
+  <!-- Tandem.Core.Operations.RejectionReason -->
+  <data name="RejectionReason_NewNameWithMultipleSources" xml:space="preserve">
+    <value>A new name can be given to a single item only</value>
+  </data>
+  <data name="RejectionReason_DestinationInsideSource" xml:space="preserve">
+    <value>The destination folder is inside the source folder</value>
+  </data>
+  <data name="RejectionReason_SourceEqualsDestination" xml:space="preserve">
+    <value>The source and the destination are the same</value>
+  </data>
+  <data name="RejectionReason_InvalidName" xml:space="preserve">
+    <value>The name is not valid</value>
+  </data>
+  <data name="RejectionReason_TrashNotSupported" xml:space="preserve">
+    <value>These items cannot be moved to the Trash</value>
+  </data>
+
+  <!-- Tandem.Core.Operations.SkipReason -->
+  <data name="SkipReason_ConflictSkipped" xml:space="preserve">
+    <value>Skipped: the destination already exists</value>
+  </data>
+  <data name="SkipReason_OlderThanDestination" xml:space="preserve">
+    <value>Skipped: the destination is not older</value>
+  </data>
+  <data name="SkipReason_Error" xml:space="preserve">
+    <value>Skipped after an error</value>
+  </data>
+  <data name="SkipReason_SymlinksNotSupported" xml:space="preserve">
+    <value>Skipped: the destination does not support symbolic links</value>
+  </data>
+  <data name="SkipReason_SourceIsDestination" xml:space="preserve">
+    <value>Not deleted: the destination is the source itself</value>
+  </data>
+
+  <!-- Tandem.Core.Operations.OperationKind (names of operations, not buttons) -->
+  <data name="OperationKind_Copy" xml:space="preserve">
+    <value>Copying</value>
+  </data>
+  <data name="OperationKind_Move" xml:space="preserve">
+    <value>Moving</value>
+  </data>
+  <data name="OperationKind_Delete" xml:space="preserve">
+    <value>Deleting</value>
+  </data>
+
+  <!-- Tandem.Core.Operations.OperationState -->
+  <data name="OperationState_Queued" xml:space="preserve">
+    <value>Queued</value>
+  </data>
+  <data name="OperationState_Scanning" xml:space="preserve">
+    <value>Counting items</value>
+  </data>
+  <data name="OperationState_Running" xml:space="preserve">
+    <value>Running</value>
+  </data>
+  <data name="OperationState_Paused" xml:space="preserve">
+    <value>Paused</value>
+  </data>
+  <data name="OperationState_Completed" xml:space="preserve">
+    <value>Completed</value>
+  </data>
+  <data name="OperationState_Cancelled" xml:space="preserve">
+    <value>Cancelled</value>
+  </data>
+  <data name="OperationState_Failed" xml:space="preserve">
+    <value>Failed</value>
+  </data>
+
+  <!-- Tandem.Core.Operations.ConflictAction (buttons) -->
+  <data name="ConflictAction_Overwrite" xml:space="preserve">
+    <value>Overwrite</value>
+  </data>
+  <data name="ConflictAction_OverwriteOlder" xml:space="preserve">
+    <value>Overwrite older</value>
+  </data>
+  <data name="ConflictAction_Skip" xml:space="preserve">
+    <value>Skip</value>
+  </data>
+  <data name="ConflictAction_Rename" xml:space="preserve">
+    <value>Rename</value>
+  </data>
+  <data name="ConflictAction_Cancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+
+  <!-- Tandem.Core.Operations.ErrorAction (buttons) -->
+  <data name="ErrorAction_Retry" xml:space="preserve">
+    <value>Retry</value>
+  </data>
+  <data name="ErrorAction_Skip" xml:space="preserve">
+    <value>Skip</value>
+  </data>
+  <data name="ErrorAction_SkipAll" xml:space="preserve">
+    <value>Skip all</value>
+  </data>
+  <data name="ErrorAction_Abort" xml:space="preserve">
+    <value>Abort</value>
+  </data>
+</root>
