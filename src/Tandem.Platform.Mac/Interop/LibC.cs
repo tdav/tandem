@@ -28,6 +28,7 @@ internal static unsafe partial class LibC
 
     // copyfile.h: callback "what", stage and return values
     public const int COPYFILE_COPY_DATA = 4;
+    public const int COPYFILE_ERR = 3;
     public const int COPYFILE_PROGRESS = 4;
     public const int COPYFILE_CONTINUE = 0;
     public const int COPYFILE_QUIT = 2;
@@ -49,13 +50,21 @@ internal static unsafe partial class LibC
     public static partial int copyfile_state_get(IntPtr state, uint flag, void* dst);
 
     /// <summary><c>int copyfile_state_set(copyfile_state_t s, uint32_t flag, const void *src)</c></summary>
-    [LibraryImport(LibSystem)]
+    [LibraryImport(LibSystem, SetLastError = true)]
     public static partial int copyfile_state_set(IntPtr state, uint flag, void* src);
 
-    /// <summary><c>char *strerror(int errnum)</c></summary>
-    [LibraryImport(LibSystem, EntryPoint = "strerror")]
-    private static partial IntPtr strerror_native(int errnum);
+    /// <summary><c>int strerror_r(int errnum, char *strerrbuf, size_t buflen)</c> (string.h)</summary>
+    [LibraryImport(LibSystem)]
+    private static partial int strerror_r(int errnum, byte* buffer, nuint length);
 
-    /// <summary>The system's message for <paramref name="errno"/>.</summary>
-    public static string StrError(int errno) => Marshal.PtrToStringUTF8(strerror_native(errno)) ?? $"errno {errno}";
+    /// <summary>The system's message for <paramref name="errno"/>, from the thread-safe <c>strerror_r</c>.</summary>
+    public static string StrError(int errno)
+    {
+        const int Length = 256;
+        var buffer = stackalloc byte[Length];
+        // A non-zero result (EINVAL for an unknown errno, ERANGE when truncated) still leaves a terminated message.
+        strerror_r(errno, buffer, Length);
+        var message = Marshal.PtrToStringUTF8((IntPtr)buffer);
+        return string.IsNullOrEmpty(message) ? $"errno {errno}" : message;
+    }
 }
