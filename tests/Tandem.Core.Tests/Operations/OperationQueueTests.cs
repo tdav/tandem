@@ -247,6 +247,74 @@ public sealed class OperationQueueTests
         await done.WaitAsync(Timeout, Ct);
     }
 
+    [Fact]
+    public async Task Throwing_queue_Changed_handler_does_not_disturb_the_queue()
+    {
+        _queue.Changed += (_, _) => throw new InvalidOperationException("handler");
+        var first = new GatedOperation("mem:a");
+        var failing = new GatedOperation("mem:a")
+        {
+            RunError = new OperationRejectedException(RejectionReason.DestinationInsideSource, "rejected"),
+        };
+        var last = new GatedOperation("mem:a");
+
+        var firstDone = _queue.Enqueue(first);
+        var failingDone = _queue.Enqueue(failing);
+        var lastDone = _queue.Enqueue(last);
+
+        await first.Started.WaitAsync(Timeout, Ct);
+        first.Finish();
+        Assert.Equal(OperationState.Completed, (await firstDone.WaitAsync(Timeout, Ct)).State);
+        await failing.Started.WaitAsync(Timeout, Ct);
+        failing.Finish();
+        await Assert.ThrowsAsync<OperationRejectedException>(() => failingDone.WaitAsync(Timeout, Ct));
+        await last.Started.WaitAsync(Timeout, Ct);
+        last.Finish();
+        Assert.Equal(OperationState.Completed, (await lastDone.WaitAsync(Timeout, Ct)).State);
+        Assert.Empty(_queue.Operations);
+    }
+
+    [Fact]
+    public async Task Throwing_operation_Changed_handler_on_failure_without_running_does_not_block_others()
+    {
+        var broken = new GatedOperation { DeferKeys = true };
+        broken.Changed += (_, _) => throw new InvalidOperationException("handler");
+        var next = new GatedOperation("mem:a");
+
+        var brokenDone = _queue.Enqueue(broken);
+        var nextDone = _queue.Enqueue(next); // waits behind broken, whose volumes are unknown
+        Assert.False(next.HasRun);
+
+        broken.FailKeys(new FileNotFoundException("missing source"));
+        await Assert.ThrowsAsync<FileNotFoundException>(() => brokenDone.WaitAsync(Timeout, Ct));
+        Assert.False(broken.HasRun);
+
+        await next.Started.WaitAsync(Timeout, Ct);
+        next.Finish();
+        await nextDone.WaitAsync(Timeout, Ct);
+    }
+
+    [Fact]
+    public async Task RunImmediately_operation_with_failing_volume_lookup_holds_all_volumes()
+    {
+        var urgent = new GatedOperation { KeysError = new FileNotFoundException("missing source") };
+        var later = new GatedOperation("mem:a");
+
+        var urgentDone = _queue.Enqueue(urgent, runImmediately: true);
+        await urgent.Started.WaitAsync(Timeout, Ct);
+        var laterDone = _queue.Enqueue(later);
+
+        // A negative check needs a bounded wait: "later" must not start while "urgent" runs.
+        var startedEarly = await Task.WhenAny(later.Started, Task.Delay(200, Ct)) == later.Started;
+        Assert.False(startedEarly);
+
+        urgent.Finish();
+        await urgentDone.WaitAsync(Timeout, Ct);
+        await later.Started.WaitAsync(Timeout, Ct);
+        later.Finish();
+        await laterDone.WaitAsync(Timeout, Ct);
+    }
+
     /// <summary>An operation on the given volumes that runs until <see cref="Finish"/>.</summary>
     private sealed class GatedOperation(params string[] volumes) : FileOperation
     {
@@ -254,7 +322,15 @@ public sealed class OperationQueueTests
         private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly TaskCompletionSource _paused = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+        private readonly TaskCompletionSource<IReadOnlyCollection<string>> _keys =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         public Exception? KeysError { get; init; }
+
+        /// <summary>The volume lookup stays pending until <see cref="FailKeys"/>.</summary>
+        public bool DeferKeys { get; init; }
+
+        public void FailKeys(Exception error) => _keys.TrySetException(error);
         public Exception? RunError { get; init; }
 
         /// <summary>After <see cref="Finish"/>, passes a pause checkpoint before ending.</summary>
@@ -272,7 +348,8 @@ public sealed class OperationQueueTests
         public override VfsPath? Destination => null;
 
         public override Task<IReadOnlyCollection<string>> GetVolumeKeysAsync(CancellationToken ct) =>
-            KeysError is { } error
+            DeferKeys ? _keys.Task
+            : KeysError is { } error
                 ? Task.FromException<IReadOnlyCollection<string>>(error)
                 : Task.FromResult<IReadOnlyCollection<string>>(volumes);
 

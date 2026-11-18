@@ -23,7 +23,8 @@ public sealed class OperationQueue
     }
 
     /// <summary>Raised, on any thread, when an operation is added to <see cref="Operations"/> or removed from it.
-    /// Changes of an operation's own state and progress are reported by <see cref="FileOperation.Changed"/>.</summary>
+    /// Changes of an operation's own state and progress are reported by <see cref="FileOperation.Changed"/>.
+    /// Exceptions thrown by handlers are ignored.</summary>
     public event EventHandler? Changed;
 
     /// <summary>Adds <paramref name="operation"/> and starts it when its volumes are free, or at once when
@@ -48,10 +49,10 @@ public sealed class OperationQueue
 
         // Already cancelled, the callback runs here and ends the operation at once.
         entry.CancelRegistration = operation.CancellationRequested.Register(() => OnCancelled(entry));
-        if (runImmediately) operation.RunAsync();
+        if (runImmediately) StartOne(entry);
         var finished = TrackAsync(entry);
-        Changed?.Invoke(this, EventArgs.Empty);
         _ = ResolveVolumesAsync(entry);
+        RaiseChanged();
         return finished;
     }
 
@@ -71,13 +72,13 @@ public sealed class OperationQueue
             }
             entry.CancelRegistration.Dispose();
             Start(toStart);
-            Changed?.Invoke(this, EventArgs.Empty);
+            RaiseChanged();
         }
     }
 
     private async Task ResolveVolumesAsync(Entry entry)
     {
-        IReadOnlyCollection<string> keys;
+        IReadOnlyCollection<string>? keys = null;
         Exception? error = null;
         try
         {
@@ -86,7 +87,6 @@ public sealed class OperationQueue
         }
         catch (Exception e)
         {
-            keys = [];
             error = e;
         }
 
@@ -94,15 +94,27 @@ public sealed class OperationQueue
         List<Entry> toStart;
         lock (_lock)
         {
-            // On an error: cancelled while waiting, OnCancelled has already ended it; already running, it meets
-            // the same problem itself. Either way it holds no volumes.
+            // On an error the volumes stay unknown. Waiting: it ends here without running. Cancelled while
+            // waiting: OnCancelled has already ended it. Already running: it keeps holding every volume until it
+            // ends, as it may touch any of them.
             fail = error is not null && entry.Phase == Phase.Waiting;
             if (fail) entry.Phase = Phase.Ending;
             entry.Volumes = keys;
             toStart = TakeStartable();
         }
-        if (fail) entry.Operation.FailWithoutRunning(error!);
+        // Start the others first: failing raises the operation's Changed, whose handlers may throw.
         Start(toStart);
+        if (fail)
+        {
+            try
+            {
+                entry.Operation.FailWithoutRunning(error!);
+            }
+            catch (Exception)
+            {
+                // A throwing Changed handler of the operation; its outcome is delivered all the same.
+            }
+        }
     }
 
     private void OnCancelled(Entry entry)
@@ -113,7 +125,7 @@ public sealed class OperationQueue
             entry.Phase = Phase.Ending;
         }
         // Being cancelled, the run ends at once as Cancelled without doing anything.
-        entry.Operation.RunAsync();
+        StartOne(entry);
     }
 
     /// <summary>Marks the waiting operations that may start now as running and returns them. Caller holds _lock.</summary>
@@ -144,7 +156,37 @@ public sealed class OperationQueue
 
     private static void Start(List<Entry> entries)
     {
-        foreach (var entry in entries) entry.Operation.RunAsync();
+        foreach (var entry in entries) StartOne(entry);
+    }
+
+    private static void StartOne(Entry entry)
+    {
+        try
+        {
+            entry.Operation.RunAsync();
+        }
+        catch (InvalidOperationException)
+        {
+            // Started by someone else behind the queue's back; it ends on its own, and TrackAsync sees that.
+        }
+    }
+
+    /// <summary>Raises <see cref="Changed"/> to every handler; a throwing handler is ignored, so it cannot stop
+    /// the others or disturb scheduling and the outcomes <see cref="Enqueue"/> returns.</summary>
+    private void RaiseChanged()
+    {
+        if (Changed is not { } changed) return;
+        foreach (var handler in changed.GetInvocationList().Cast<EventHandler>())
+        {
+            try
+            {
+                handler(this, EventArgs.Empty);
+            }
+            catch (Exception)
+            {
+                // Ignored, see above.
+            }
+        }
     }
 
     private enum Phase
