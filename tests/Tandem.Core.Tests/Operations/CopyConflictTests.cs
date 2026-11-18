@@ -59,7 +59,38 @@ public sealed class CopyConflictTests
         Assert.Empty(result.Skipped);
         Assert.Equal("new content", _mem.ReadAllText("/dst/a.txt"));
         Assert.Equal(Older, (await _mem.GetEntryAsync(Mem("/dst/a.txt"), Ct))!.Modified);
-        AssertNoPartFiles();
+        Assert.Equal(["/dst", "/dst/a.txt"], _mem.AllPaths.Where(p => p.StartsWith("/dst", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public async Task Overwrite_is_not_blocked_by_a_leftover_backup()
+    {
+        _mem.AddFile("/src/a.txt", "new content");
+        _mem.AddFile("/dst/a.txt", "old");
+        _mem.AddFile("/dst/.a.txt.tandem-old", "left by an earlier crash");
+        _interaction.OnConflict(ConflictAction.Overwrite);
+
+        var result = await Copy("/src/a.txt").RunAsync();
+
+        Assert.Equal(OperationState.Completed, result.State);
+        Assert.Empty(result.Skipped);
+        Assert.Equal("new content", _mem.ReadAllText("/dst/a.txt"));
+        Assert.Equal(["/dst", "/dst/a.txt"], _mem.AllPaths.Where(p => p.StartsWith("/dst", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public async Task Overwriting_a_link_leaves_no_backup()
+    {
+        _mem.AddFile("/target.txt", "t");
+        _mem.AddDirectory("/src");
+        await _mem.CreateSymlinkAsync(Mem("/src/link"), "/target.txt", Ct);
+        _mem.AddFile("/dst/link", "a plain file");
+        _interaction.OnConflict(ConflictAction.Overwrite);
+
+        await Copy("/src/link").RunAsync();
+
+        Assert.Equal("/target.txt", (await _mem.GetEntryAsync(Mem("/dst/link"), Ct))!.LinkTarget);
+        Assert.Equal(["/dst", "/dst/link"], _mem.AllPaths.Where(p => p.StartsWith("/dst", StringComparison.Ordinal)));
     }
 
     [Fact]

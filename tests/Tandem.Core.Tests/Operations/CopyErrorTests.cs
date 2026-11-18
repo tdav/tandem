@@ -45,6 +45,25 @@ public sealed class CopyErrorTests
     }
 
     [Fact]
+    public async Task Failed_move_into_place_restores_the_old_file()
+    {
+        _mem.AddFile("/src/a.txt", "the new content");
+        _mem.AddFile("/dst/a.txt", "old");
+        // The old file is set aside first; moving the finished part into place then fails.
+        Fail("Move", "/dst/.a.txt.tandem-part", () => new IOException("rename failed"));
+        _interaction.OnConflict(ConflictAction.Overwrite).OnError(ErrorAction.Skip);
+
+        var result = await Copy("/src/a.txt").RunAsync();
+
+        Assert.Equal(OperationState.Completed, result.State);
+        Assert.Equal("old", _mem.ReadAllText("/dst/a.txt"));
+        Assert.Equal(["/dst", "/dst/a.txt"], _mem.AllPaths.Where(p => p.StartsWith("/dst", StringComparison.Ordinal)));
+        Assert.Equal("rename failed", Assert.Single(_interaction.Errors).Error.Message);
+        Assert.Equal(new SkippedItem(Mem("/src/a.txt"), SkipReason.Error, "rename failed"),
+            Assert.Single(result.Skipped));
+    }
+
+    [Fact]
     public async Task Error_retry_then_succeeds()
     {
         _mem.AddFile("/src/a.txt", "content");

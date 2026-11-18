@@ -16,7 +16,8 @@ internal enum CopyOutcome { Copied, DirectoryCreated, DirectoryMerged, Skipped }
 /// (directories before their contents), and copying one plan item at a time. Progress goes to the owning
 /// <see cref="FileOperation"/>. A file is written under <c>.{name}.tandem-part</c> next to its destination,
 /// given the source's modification time (and mode, when both sides support modes), then renamed into place;
-/// when it replaces an existing file, the old file is deleted only after the part file is complete.
+/// when it replaces an existing file, the old file is set aside as <c>.{name}.tandem-old</c> only after the part
+/// file is complete, and deleted once the new file is in place (or put back if that fails).
 /// <para>An existing destination file is a conflict, put to <see cref="IOperationInteraction.ResolveConflictAsync"/>;
 /// an existing directory is merged into. An I/O error on an item (including a file meeting a directory or the other
 /// way round, and a source directory that cannot be listed) is put to
@@ -27,6 +28,7 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
     IOperationInteraction interaction, INativeCopy? nativeCopy)
 {
     public const string PartSuffix = ".tandem-part";
+    public const string BackupSuffix = ".tandem-old";
     private const int BufferSize = 1024 * 1024;
     private const int MaxLinkHops = 32;
 
@@ -337,8 +339,9 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
     }
 
     /// <summary>Writes <paramref name="source"/> to <paramref name="destination"/> through a part file. With
-    /// <paramref name="replace"/>, the existing destination is deleted only once the part file is complete. On
-    /// failure the part file is removed and the attempt's bytes are taken back.</summary>
+    /// <paramref name="replace"/>, the existing destination is replaced only once the part file is complete (see
+    /// <see cref="ReplaceWithPartAsync"/>). On failure the part file is removed and the attempt's bytes are taken
+    /// back.</summary>
     private async Task CopyFileAsync(FileEntry source, VfsPath destination, IFileSystemProvider target, bool replace,
         CancellationToken ct)
     {
@@ -375,18 +378,39 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
     }
 
     /// <summary>Has <paramref name="write"/> produce the item under its part name next to
-    /// <paramref name="destination"/>, then (deleting the old destination first when <paramref name="replace"/>)
-    /// renames it into place. If anything fails, the part file is removed and the original error propagates.</summary>
+    /// <paramref name="destination"/>, then renames it into place. With <paramref name="replace"/>, the existing
+    /// destination is first set aside as <c>.{name}.tandem-old</c> and deleted only once the new item is in place;
+    /// if moving the part into place fails, the backup is put back, so the destination is never left empty.
+    /// If anything fails, the part file is removed and the original error propagates.</summary>
     private static async Task ReplaceWithPartAsync(VfsPath destination, IFileSystemProvider target, bool replace,
         Func<VfsPath, Task> write)
     {
         var ct = CancellationToken.None;
-        var part = destination.Parent!.Value.Combine("." + destination.Name + PartSuffix);
+        var part = SiblingPath(destination, PartSuffix);
         try
         {
             await write(part).ConfigureAwait(false);
-            if (replace) await target.DeleteAsync(destination, recursive: false, ct).ConfigureAwait(false);
-            await target.MoveAsync(part, destination, ct).ConfigureAwait(false);
+            if (!replace)
+            {
+                await target.MoveAsync(part, destination, ct).ConfigureAwait(false);
+                return;
+            }
+
+            var backup = SiblingPath(destination, BackupSuffix);
+            // A backup left by an earlier crash is stale: the destination it backed up is still in place.
+            await DeleteQuietlyAsync(backup, target).ConfigureAwait(false);
+            await target.MoveAsync(destination, backup, ct).ConfigureAwait(false);
+            try
+            {
+                await target.MoveAsync(part, destination, ct).ConfigureAwait(false);
+            }
+            catch
+            {
+                await RestoreQuietlyAsync(backup, destination, target).ConfigureAwait(false);
+                throw;
+            }
+            // The new item is in place; a backup that cannot be removed is harmless and cleared by the next overwrite.
+            await DeleteQuietlyAsync(backup, target).ConfigureAwait(false);
         }
         catch
         {
@@ -395,7 +419,26 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
         }
     }
 
-    /// <summary>Best-effort removal of a part file; a failure here must not hide the error being handled.</summary>
+    /// <summary><c>.{name}{suffix}</c> next to <paramref name="destination"/>.</summary>
+    private static VfsPath SiblingPath(VfsPath destination, string suffix) =>
+        destination.Parent!.Value.Combine("." + destination.Name + suffix);
+
+    /// <summary>Best-effort return of the set-aside original; a failure here must not hide the error being handled
+    /// (the original then survives under its backup name).</summary>
+    private static async Task RestoreQuietlyAsync(VfsPath backup, VfsPath destination, IFileSystemProvider target)
+    {
+        try
+        {
+            await target.MoveAsync(backup, destination, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // Nothing better to do: the user is asked about the original error.
+        }
+    }
+
+    /// <summary>Best-effort removal of a part or backup file; a failure here must not hide the error being
+    /// handled.</summary>
     private static async Task DeleteQuietlyAsync(VfsPath part, IFileSystemProvider target)
     {
         try

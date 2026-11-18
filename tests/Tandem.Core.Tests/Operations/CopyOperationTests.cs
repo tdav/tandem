@@ -480,6 +480,18 @@ public sealed class CopyOperationTests
     }
 
     [Fact]
+    public void Sources_are_the_selected_items_and_do_not_follow_the_callers_list()
+    {
+        var list = new List<VfsPath> { Mem("/src/a.txt"), Mem("/src/c") };
+        var op = Copy(list, Mem("/dst"));
+
+        list.Add(Mem("/src/later.txt"));
+
+        Assert.Equal([Mem("/src/a.txt"), Mem("/src/c")], op.Sources);
+        Assert.False(op.Sources is ICollection<VfsPath> { IsReadOnly: false });
+    }
+
+    [Fact]
     public async Task Volume_keys_cover_sources_and_destination()
     {
         _mem.AddFile("/src/a.txt", "a");

@@ -3,6 +3,8 @@ using Tandem.Core.Vfs;
 
 namespace Tandem.Core.Operations;
 
+public enum OperationKind { Copy, Move, Delete }
+
 /// <summary>
 /// A long-running file operation (copy, move, delete). It runs once, on the thread pool; state and progress may
 /// be read from any thread, and <see cref="Changed"/> is raised on the operation's background thread — on every
@@ -11,8 +13,6 @@ namespace Tandem.Core.Operations;
 /// <see cref="Completion"/> with a result; <see cref="OperationState.Failed"/> faults it with the error
 /// (an <see cref="OperationRejectedException"/> when the operation was refused before it started).
 /// </summary>
-public enum OperationKind { Copy, Move, Delete }
-
 public abstract class FileOperation
 {
     public const int MaxProgressEventsPerSecond = 10;
@@ -41,6 +41,10 @@ public abstract class FileOperation
 
     /// <summary>How many items the user selected (top-level sources, not everything inside them).</summary>
     public abstract int ItemCount { get; }
+
+    /// <summary>The items the user selected (top-level sources), in the given order; lets the interface name a
+    /// single item in the title.</summary>
+    public abstract IReadOnlyList<VfsPath> Sources { get; }
 
     /// <summary>The directory the items go to; null for operations without one (delete).</summary>
     public abstract VfsPath? Destination { get; }

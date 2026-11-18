@@ -18,7 +18,8 @@ public sealed class CopyOperation(ProviderRegistry providers, IReadOnlyList<VfsP
     INativeCopy? nativeCopy = null) : FileOperation
 {
     private readonly ProviderRegistry _providers = providers ?? throw new ArgumentNullException(nameof(providers));
-    private readonly IReadOnlyList<VfsPath> _sources = sources?.ToArray() ?? throw new ArgumentNullException(nameof(sources));
+    private readonly IReadOnlyList<VfsPath> _sources =
+        Array.AsReadOnly(sources?.ToArray() ?? throw new ArgumentNullException(nameof(sources)));
     private readonly CopyOptions _options = options ?? throw new ArgumentNullException(nameof(options));
     private readonly VfsPath _destinationDirectory = destinationDirectory;
     private readonly INativeCopy? _nativeCopy = nativeCopy;
@@ -28,6 +29,8 @@ public sealed class CopyOperation(ProviderRegistry providers, IReadOnlyList<VfsP
     public override OperationKind Kind => OperationKind.Copy;
 
     public override int ItemCount => _sources.Count;
+
+    public override IReadOnlyList<VfsPath> Sources => _sources;
 
     public override VfsPath? Destination => _destinationDirectory;
 
