@@ -290,37 +290,6 @@ public sealed class CopyOperationTests
     }
 
     [Fact]
-    public async Task Existing_destination_file_fails_without_asking_and_keeps_it()
-    {
-        _mem.AddFile("/src/a.txt", "new");
-        _mem.AddFile("/dst/a.txt", "old");
-        var op = Copy("/src/a.txt", "/dst");
-
-        await Assert.ThrowsAsync<VfsAlreadyExistsException>(() => op.RunAsync());
-
-        Assert.Equal(OperationState.Failed, op.State);
-        Assert.Equal("old", _mem.ReadAllText("/dst/a.txt"));
-        Assert.Empty(_interaction.Conflicts);
-    }
-
-    [Fact]
-    public async Task Item_error_fails_the_operation()
-    {
-        _mem.AddFile("/src/a.txt", "a");
-        _mem.AddDirectory("/dst");
-        _mem.FailOn((operation, path) => operation == "OpenRead", () => new VfsAccessDeniedException("denied"));
-        var op = Copy("/src/a.txt", "/dst");
-
-        var error = await Assert.ThrowsAsync<VfsAccessDeniedException>(() => op.RunAsync());
-
-        Assert.Equal("denied", error.Message);
-        Assert.Equal(OperationState.Failed, op.State);
-        Assert.Same(op.Completion, op.Completion);
-        Assert.True(op.Completion.IsFaulted);
-        Assert.Empty(_interaction.Errors);
-    }
-
-    [Fact]
     public async Task Missing_destination_directory_fails()
     {
         _mem.AddFile("/src/a.txt", "a");

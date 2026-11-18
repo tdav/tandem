@@ -10,7 +10,8 @@ public sealed record CopyOptions(bool VerifyContent = false, string? NewName = n
 /// <summary>
 /// Copies files, links and directory trees into <paramref name="destinationDirectory"/>, possibly across providers.
 /// Scans first (<see cref="OperationState.Scanning"/>) to know the totals, then copies item by item.
-/// For now an existing destination file or any I/O error fails the whole operation.
+/// An existing destination file and per-item I/O errors are put to <paramref name="interaction"/>; an existing
+/// destination directory is merged into without asking.
 /// </summary>
 public sealed class CopyOperation(ProviderRegistry providers, IReadOnlyList<VfsPath> sources,
     VfsPath destinationDirectory, CopyOptions options, IOperationInteraction interaction,
@@ -21,8 +22,6 @@ public sealed class CopyOperation(ProviderRegistry providers, IReadOnlyList<VfsP
     private readonly CopyOptions _options = options ?? throw new ArgumentNullException(nameof(options));
     private readonly VfsPath _destinationDirectory = destinationDirectory;
     private readonly INativeCopy? _nativeCopy = nativeCopy;
-
-    // Not consulted yet: conflicts and item errors currently fail the operation.
     private readonly IOperationInteraction _interaction =
         interaction ?? throw new ArgumentNullException(nameof(interaction));
 
@@ -43,7 +42,7 @@ public sealed class CopyOperation(ProviderRegistry providers, IReadOnlyList<VfsP
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
-        var engine = new CopyEngine(_providers, this, _nativeCopy);
+        var engine = new CopyEngine(_providers, this, _interaction, _nativeCopy);
         var destination = await engine.ResolveDestinationDirectoryAsync(_destinationDirectory, ct).ConfigureAwait(false);
         var targets = CopyEngine.ResolveTargets(_sources, destination, _options.NewName);
 
@@ -51,16 +50,11 @@ public sealed class CopyOperation(ProviderRegistry providers, IReadOnlyList<VfsP
         var items = await engine.ScanAsync(targets, ct).ConfigureAwait(false);
 
         SetState(OperationState.Running);
-        var createdDirectories = new List<CopyItem>();
-        foreach (var item in items)
-        {
-            ct.ThrowIfCancellationRequested();
-            if (await engine.CopyItemAsync(item).ConfigureAwait(false) == CopyOutcome.DirectoryCreated)
-                createdDirectories.Add(item);
-        }
+        var outcomes = await engine.CopyAllAsync(items, ct).ConfigureAwait(false);
 
         // Children before parents, so writing a child does not bump its parent's time again.
-        for (var i = createdDirectories.Count - 1; i >= 0; i--)
-            await engine.ApplyDirectoryMetadataAsync(createdDirectories[i]).ConfigureAwait(false);
+        for (var i = items.Count - 1; i >= 0; i--)
+            if (outcomes[i] == CopyOutcome.DirectoryCreated)
+                await engine.ApplyDirectoryMetadataAsync(items[i]).ConfigureAwait(false);
     }
 }

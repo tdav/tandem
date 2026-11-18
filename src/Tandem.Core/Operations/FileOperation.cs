@@ -115,9 +115,18 @@ public abstract class FileOperation
         OnProgress();
     }
 
+    /// <summary>Counts copied bytes; a negative value takes back the bytes of an attempt that failed.</summary>
     protected internal void AddBytesDone(long bytes)
     {
         lock (_lock) _bytesDone += bytes;
+        OnProgress();
+    }
+
+    /// <summary>Takes a skipped file's bytes out of the total, so speed and remaining time reflect only what is
+    /// really copied.</summary>
+    protected internal void DropBytesFromTotal(long bytes)
+    {
+        lock (_lock) _bytesTotal -= bytes;
         OnProgress();
     }
 

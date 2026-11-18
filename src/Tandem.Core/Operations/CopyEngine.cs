@@ -1,4 +1,6 @@
 using System.Buffers;
+using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
 using Tandem.Core.Platform;
 using Tandem.Core.Vfs;
 
@@ -13,13 +15,24 @@ internal enum CopyOutcome { Copied, DirectoryCreated, DirectoryMerged, Skipped }
 /// The copy logic shared by copy and move: validating the request, scanning the sources into a flat plan
 /// (directories before their contents), and copying one plan item at a time. Progress goes to the owning
 /// <see cref="FileOperation"/>. A file is written under <c>.{name}.tandem-part</c> next to its destination,
-/// given the source's modification time (and mode, when both sides support modes), then renamed into place.
+/// given the source's modification time (and mode, when both sides support modes), then renamed into place;
+/// when it replaces an existing file, the old file is deleted only after the part file is complete.
+/// <para>An existing destination file is a conflict, put to <see cref="IOperationInteraction.ResolveConflictAsync"/>;
+/// an existing directory is merged into. An I/O error on an item (including a file meeting a directory or the other
+/// way round, and a source directory that cannot be listed) is put to
+/// <see cref="IOperationInteraction.ResolveErrorAsync"/>. "Apply to all" and "skip all" answers last until the
+/// engine is discarded. Skipping a directory skips everything inside it, recorded as one item.</para>
 /// </summary>
-internal sealed class CopyEngine(ProviderRegistry providers, FileOperation operation, INativeCopy? nativeCopy)
+internal sealed class CopyEngine(ProviderRegistry providers, FileOperation operation,
+    IOperationInteraction interaction, INativeCopy? nativeCopy)
 {
     public const string PartSuffix = ".tandem-part";
     private const int BufferSize = 1024 * 1024;
     private const int MaxLinkHops = 32;
+
+    // The engine runs one item at a time on the operation's thread; these are not shared.
+    private ConflictAction? _conflictActionForAll;
+    private bool _skipAllErrors;
 
     /// <summary>Pairs every source with its destination path, refusing requests that cannot be valid.</summary>
     /// <exception cref="OperationRejectedException">The request is refused.</exception>
@@ -86,7 +99,8 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
         throw new VfsNotFoundException($"Destination directory '{destinationDirectory.Path}' does not exist.");
     }
 
-    /// <summary>Walks the sources (links are not followed) and reports the totals to the operation.</summary>
+    /// <summary>Walks the sources (links are not followed) and reports the totals to the operation. A directory
+    /// that cannot be listed goes to the error question; skipping it leaves its whole subtree out of the plan.</summary>
     /// <exception cref="VfsNotFoundException">A source does not exist.</exception>
     public async Task<IReadOnlyList<CopyItem>> ScanAsync(IReadOnlyList<(VfsPath Source, VfsPath Destination)> targets,
         CancellationToken ct)
@@ -105,65 +119,214 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
         async Task AddAsync(FileEntry entry, VfsPath destination)
         {
             ct.ThrowIfCancellationRequested();
-            items.Add(new CopyItem(entry, destination));
-            switch (entry.Kind)
+            if (entry.Kind == EntryKind.Directory)
             {
-                case EntryKind.Directory:
-                    await foreach (var child in providers.For(entry.Path).EnumerateAsync(entry.Path, ct)
-                                       .ConfigureAwait(false))
-                        await AddAsync(child, destination.Combine(child.Name)).ConfigureAwait(false);
-                    break;
-                case EntryKind.File:
-                    files++;
-                    bytes += entry.Size;
-                    break;
-                case EntryKind.Symlink:
-                    files++;
-                    break;
+                var children = await ListChildrenAsync(entry.Path, ct).ConfigureAwait(false);
+                if (children is null) return; // skipped, with everything inside it
+                items.Add(new CopyItem(entry, destination));
+                foreach (var child in children)
+                    await AddAsync(child, destination.Combine(child.Name)).ConfigureAwait(false);
+                return;
+            }
+            items.Add(new CopyItem(entry, destination));
+            files++;
+            if (entry.Kind == EntryKind.File) bytes += entry.Size;
+        }
+    }
+
+    /// <summary>The directory's entries, or null when listing failed and the user skipped it.</summary>
+    private async Task<List<FileEntry>?> ListChildrenAsync(VfsPath directory, CancellationToken ct)
+    {
+        while (true)
+        {
+            try
+            {
+                var children = new List<FileEntry>();
+                await foreach (var child in providers.For(directory).EnumerateAsync(directory, ct).ConfigureAwait(false))
+                    children.Add(child);
+                return children;
+            }
+            catch (Exception e) when (IsItemError(e))
+            {
+                if (!await ShouldRetryAsync(directory, e, ct).ConfigureAwait(false)) return null;
             }
         }
     }
 
-    /// <summary>Copies one plan item. A directory's own times and mode are applied later, by
-    /// <see cref="ApplyDirectoryMetadataAsync"/>, once its contents are written.</summary>
-    /// <exception cref="VfsAlreadyExistsException">The destination exists (and is not a directory to merge into).</exception>
-    public async Task<CopyOutcome> CopyItemAsync(CopyItem item)
+    /// <summary>Copies the plan in order and returns each item's outcome (same order as <paramref name="items"/>).
+    /// The items inside a skipped directory are skipped too, without a record of their own.</summary>
+    /// <exception cref="OperationCanceledException">The operation was cancelled, by <paramref name="ct"/> or by a
+    /// "cancel" answer to a conflict.</exception>
+    public async Task<IReadOnlyList<CopyOutcome>> CopyAllAsync(IReadOnlyList<CopyItem> items, CancellationToken ct)
     {
-        // Cancellation inside an item is not supported yet: the operation stops between items.
-        var ct = CancellationToken.None;
-        var source = item.Source;
-        var target = providers.For(item.Destination);
-        operation.BeginItem(source.Path.Path);
+        var outcomes = new CopyOutcome[items.Count];
+        VfsPath? skippedDirectory = null;
+        for (var i = 0; i < items.Count; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+            var item = items[i];
+            if (skippedDirectory is { } skipped && item.Source.Path.IsSameOrDescendantOf(skipped))
+            {
+                CountSkipped(item.Source);
+                outcomes[i] = CopyOutcome.Skipped;
+                continue;
+            }
+            outcomes[i] = await CopyItemAsync(item, ct).ConfigureAwait(false);
+            if (outcomes[i] == CopyOutcome.Skipped && item.Source.Kind == EntryKind.Directory)
+                skippedDirectory = item.Source.Path;
+        }
+        return outcomes;
+    }
 
-        var existing = await target.GetEntryAsync(item.Destination, ct).ConfigureAwait(false);
+    /// <summary>Copies one plan item, asking about a conflict or an error as needed. A directory's own times and
+    /// mode are applied later, by <see cref="ApplyDirectoryMetadataAsync"/>, once its contents are written.</summary>
+    private async Task<CopyOutcome> CopyItemAsync(CopyItem item, CancellationToken ct)
+    {
+        operation.BeginItem(item.Source.Path.Path);
+        var conflictAction = new StrongBox<ConflictAction?>(); // decided once per item, kept across retries
+        while (true)
+        {
+            try
+            {
+                return await CopyItemOnceAsync(item, conflictAction, ct).ConfigureAwait(false);
+            }
+            catch (Exception e) when (IsItemError(e))
+            {
+                if (!await ShouldRetryAsync(item.Source.Path, e, ct).ConfigureAwait(false))
+                {
+                    CountSkipped(item.Source);
+                    return CopyOutcome.Skipped;
+                }
+                ct.ThrowIfCancellationRequested();
+            }
+        }
+    }
+
+    private async Task<CopyOutcome> CopyItemOnceAsync(CopyItem item, StrongBox<ConflictAction?> conflictAction,
+        CancellationToken ct)
+    {
+        // The operation's token only interrupts questions; I/O inside an item is not cancellable yet, so the
+        // operation stops between items.
+        var io = CancellationToken.None;
+        var source = item.Source;
+        var destination = item.Destination;
+        var target = providers.For(destination);
+
+        if (source.Kind == EntryKind.Symlink && !target.Capabilities.HasFlag(ProviderCapabilities.Symlinks))
+            return Skip(source, SkipReason.SymlinksNotSupported);
+
+        var existing = await target.GetEntryAsync(destination, io).ConfigureAwait(false);
         if (source.Kind == EntryKind.Directory)
         {
             if (existing is null)
             {
-                await target.CreateDirectoryAsync(item.Destination, ct).ConfigureAwait(false);
+                await target.CreateDirectoryAsync(destination, io).ConfigureAwait(false);
                 return CopyOutcome.DirectoryCreated;
             }
             if (existing.Kind == EntryKind.Directory) return CopyOutcome.DirectoryMerged;
+            throw new VfsAlreadyExistsException($"'{destination.Path}' already exists and is not a directory.");
         }
+
+        var replace = false;
         if (existing is not null)
-            throw new VfsAlreadyExistsException($"'{item.Destination.Path}' already exists.");
+        {
+            if (existing.Kind == EntryKind.Directory)
+                throw new VfsAlreadyExistsException($"'{destination.Path}' already exists and is a directory.");
+
+            conflictAction.Value ??= await DecideConflictAsync(source, existing, ct).ConfigureAwait(false);
+            switch (conflictAction.Value)
+            {
+                case ConflictAction.Skip:
+                    return Skip(source, SkipReason.ConflictSkipped);
+                case ConflictAction.OverwriteOlder when source.Modified <= existing.Modified:
+                    return Skip(source, SkipReason.OlderThanDestination);
+                case ConflictAction.Overwrite or ConflictAction.OverwriteOlder:
+                    replace = true;
+                    break;
+                case ConflictAction.Rename:
+                    destination = await FirstFreeNameAsync(destination, target, io).ConfigureAwait(false);
+                    break;
+                case ConflictAction.Cancel:
+                    operation.Cancel();
+                    throw new OperationCanceledException(ct);
+            }
+        }
 
         if (source.Kind == EntryKind.Symlink)
         {
-            if (!target.Capabilities.HasFlag(ProviderCapabilities.Symlinks))
-            {
-                operation.AddSkipped(new SkippedItem(source.Path, SkipReason.SymlinksNotSupported));
-                operation.CompleteFile();
-                return CopyOutcome.Skipped;
-            }
-            await target.CreateSymlinkAsync(item.Destination, source.LinkTarget!, ct).ConfigureAwait(false);
-            operation.CompleteFile();
-            return CopyOutcome.Copied;
+            if (replace)
+                await ReplaceWithPartAsync(destination, target, replace: true,
+                    part => target.CreateSymlinkAsync(part, source.LinkTarget!, io)).ConfigureAwait(false);
+            else
+                await target.CreateSymlinkAsync(destination, source.LinkTarget!, io).ConfigureAwait(false);
         }
-
-        await CopyFileAsync(source, item.Destination, target, ct).ConfigureAwait(false);
+        else
+        {
+            await CopyFileAsync(source, destination, target, replace, io).ConfigureAwait(false);
+        }
         operation.CompleteFile();
         return CopyOutcome.Copied;
+    }
+
+    private async Task<ConflictAction> DecideConflictAsync(FileEntry source, FileEntry existing, CancellationToken ct)
+    {
+        if (_conflictActionForAll is { } forAll) return forAll;
+        var decision = await interaction.ResolveConflictAsync(source, existing, ct).ConfigureAwait(false);
+        if (decision.ApplyToAll) _conflictActionForAll = decision.Action;
+        return decision.Action;
+    }
+
+    /// <summary>Puts <paramref name="error"/> on <paramref name="item"/> to the user (unless "skip all" was
+    /// chosen). Returns true to retry; false when the item is skipped, which is recorded.</summary>
+    /// <exception cref="Exception"><paramref name="error"/> itself, rethrown, when the user aborts.</exception>
+    private async Task<bool> ShouldRetryAsync(VfsPath item, Exception error, CancellationToken ct)
+    {
+        var action = _skipAllErrors
+            ? ErrorAction.Skip
+            : await interaction.ResolveErrorAsync(item, error, ct).ConfigureAwait(false);
+        switch (action)
+        {
+            case ErrorAction.Retry:
+                return true;
+            case ErrorAction.Abort:
+                ExceptionDispatchInfo.Throw(error);
+                return false; // not reached
+            case ErrorAction.SkipAll:
+                _skipAllErrors = true;
+                break;
+        }
+        operation.AddSkipped(new SkippedItem(item, SkipReason.Error, error.Message));
+        return false;
+    }
+
+    private CopyOutcome Skip(FileEntry source, SkipReason reason)
+    {
+        operation.AddSkipped(new SkippedItem(source.Path, reason));
+        CountSkipped(source);
+        return CopyOutcome.Skipped;
+    }
+
+    /// <summary>A skipped file or link counts as done; a skipped file's bytes leave the total.</summary>
+    private void CountSkipped(FileEntry source)
+    {
+        if (source.Kind == EntryKind.Directory) return;
+        if (source.Kind == EntryKind.File) operation.DropBytesFromTotal(source.Size);
+        operation.CompleteFile();
+    }
+
+    /// <summary>"name (2).ext", "name (3).ext", ... — the first that does not exist.</summary>
+    private static async Task<VfsPath> FirstFreeNameAsync(VfsPath destination, IFileSystemProvider target,
+        CancellationToken ct)
+    {
+        var directory = destination.Parent!.Value;
+        var name = destination.Name;
+        var dot = name.LastIndexOf('.');
+        var (stem, extension) = dot > 0 ? (name[..dot], name[dot..]) : (name, "");
+        for (var n = 2; ; n++)
+        {
+            var candidate = directory.Combine($"{stem} ({n}){extension}");
+            if (await target.GetEntryAsync(candidate, ct).ConfigureAwait(false) is null) return candidate;
+        }
     }
 
     /// <summary>Gives a directory created by <see cref="CopyItemAsync"/> the source's time and mode.</summary>
@@ -173,10 +336,12 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
         await ApplyMetadataAsync(item.Source, item.Destination, target, CancellationToken.None).ConfigureAwait(false);
     }
 
-    private async Task CopyFileAsync(FileEntry source, VfsPath destination, IFileSystemProvider target,
+    /// <summary>Writes <paramref name="source"/> to <paramref name="destination"/> through a part file. With
+    /// <paramref name="replace"/>, the existing destination is deleted only once the part file is complete. On
+    /// failure the part file is removed and the attempt's bytes are taken back.</summary>
+    private async Task CopyFileAsync(FileEntry source, VfsPath destination, IFileSystemProvider target, bool replace,
         CancellationToken ct)
     {
-        var part = destination.Parent!.Value.Combine("." + destination.Name + PartSuffix);
         var copied = 0L;
         void Count(long bytes)
         {
@@ -184,20 +349,67 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
             operation.AddBytesDone(bytes);
         }
 
-        if (nativeCopy is not null && IsLocal(source.Path) && IsLocal(destination))
+        try
         {
-            var progress = new RunningTotal(Count);
-            await nativeCopy.CopyFileAsync(source.Path.Path, part.Path, progress, ct).ConfigureAwait(false);
-        }
-        else
-        {
-            await CopyStreamAsync(source.Path, part, target, Count, ct).ConfigureAwait(false);
-        }
-        if (copied < source.Size) Count(source.Size - copied); // keep BytesDone in step with the scanned total
+            await ReplaceWithPartAsync(destination, target, replace, async part =>
+            {
+                if (nativeCopy is not null && IsLocal(source.Path) && IsLocal(destination))
+                {
+                    var progress = new RunningTotal(Count);
+                    await nativeCopy.CopyFileAsync(source.Path.Path, part.Path, progress, ct).ConfigureAwait(false);
+                }
+                else
+                {
+                    await CopyStreamAsync(source.Path, part, target, Count, ct).ConfigureAwait(false);
+                }
+                if (copied < source.Size) Count(source.Size - copied); // keep BytesDone in step with the scanned total
 
-        await ApplyMetadataAsync(source, part, target, ct).ConfigureAwait(false);
-        await target.MoveAsync(part, destination, ct).ConfigureAwait(false);
+                await ApplyMetadataAsync(source, part, target, ct).ConfigureAwait(false);
+            }).ConfigureAwait(false);
+        }
+        catch
+        {
+            operation.AddBytesDone(-copied);
+            throw;
+        }
     }
+
+    /// <summary>Has <paramref name="write"/> produce the item under its part name next to
+    /// <paramref name="destination"/>, then (deleting the old destination first when <paramref name="replace"/>)
+    /// renames it into place. If anything fails, the part file is removed and the original error propagates.</summary>
+    private static async Task ReplaceWithPartAsync(VfsPath destination, IFileSystemProvider target, bool replace,
+        Func<VfsPath, Task> write)
+    {
+        var ct = CancellationToken.None;
+        var part = destination.Parent!.Value.Combine("." + destination.Name + PartSuffix);
+        try
+        {
+            await write(part).ConfigureAwait(false);
+            if (replace) await target.DeleteAsync(destination, recursive: false, ct).ConfigureAwait(false);
+            await target.MoveAsync(part, destination, ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            await DeleteQuietlyAsync(part, target).ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    /// <summary>Best-effort removal of a part file; a failure here must not hide the error being handled.</summary>
+    private static async Task DeleteQuietlyAsync(VfsPath part, IFileSystemProvider target)
+    {
+        try
+        {
+            if (await target.GetEntryAsync(part, CancellationToken.None).ConfigureAwait(false) is not null)
+                await target.DeleteAsync(part, recursive: false, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // The original error is what the user is asked about; the stray part file has a recognisable name.
+        }
+    }
+
+    private static bool IsItemError(Exception e) => e is IOException or UnauthorizedAccessException;
 
     private async Task CopyStreamAsync(VfsPath source, VfsPath part, IFileSystemProvider target, Action<long> count,
         CancellationToken ct)

@@ -12,6 +12,12 @@ public sealed record OperationProgress(string? CurrentItem, long FilesDone, long
 /// <summary>Why an item was left alone.</summary>
 public enum SkipReason
 {
+    /// <summary>The destination existed and the user chose to keep it.</summary>
+    ConflictSkipped,
+
+    /// <summary>The destination existed, the user chose "overwrite older", and the source is not newer.</summary>
+    OlderThanDestination,
+
     /// <summary>The item failed and the user chose to skip it (<see cref="SkippedItem.Detail"/> has the error).</summary>
     Error,
 
