@@ -146,7 +146,8 @@ public sealed class CopyOperationTests
         Assert.Equal(OperationState.Completed, result.State);
         var skipped = Assert.Single(result.Skipped);
         Assert.Equal(Mem("/link"), skipped.Path);
-        Assert.False(string.IsNullOrWhiteSpace(skipped.Reason));
+        Assert.Equal(SkipReason.SymlinksNotSupported, skipped.Reason);
+        Assert.Null(skipped.Detail);
         Assert.Null(await plain.GetEntryAsync(new VfsPath("plain", "/dst/link"), Ct));
         Assert.NotNull(await plain.GetEntryAsync(new VfsPath("plain", "/dst/file.txt"), Ct));
     }
@@ -228,7 +229,11 @@ public sealed class CopyOperationTests
         _mem.AddDirectory("/a/b");
         var op = Copy("/a", "/a/b");
 
-        await Assert.ThrowsAsync<OperationRejectedException>(() => op.RunAsync());
+        var error = await Assert.ThrowsAsync<OperationRejectedException>(() => op.RunAsync());
+
+        Assert.Equal(RejectionReason.DestinationInsideSource, error.Reason);
+        Assert.Equal(Mem("/a"), error.SourcePath);
+        Assert.Equal(Mem("/a/b"), error.DestinationPath);
 
         Assert.Equal(OperationState.Failed, op.State);
         Assert.DoesNotContain(_mem.AllPaths, p => p.StartsWith("/a/b/", StringComparison.Ordinal));
@@ -239,7 +244,11 @@ public sealed class CopyOperationTests
     {
         _mem.AddFile("/a/x.txt", "x");
 
-        await Assert.ThrowsAsync<OperationRejectedException>(() => Copy("/a/x.txt", "/a").RunAsync());
+        var error = await Assert.ThrowsAsync<OperationRejectedException>(() => Copy("/a/x.txt", "/a").RunAsync());
+
+        Assert.Equal(RejectionReason.SourceEqualsDestination, error.Reason);
+        Assert.Equal(Mem("/a/x.txt"), error.SourcePath);
+        Assert.Equal(Mem("/a/x.txt"), error.DestinationPath);
 
         Assert.Equal("x", _mem.ReadAllText("/a/x.txt"));
         Assert.Equal(["/a", "/a/x.txt"], _mem.AllPaths);
@@ -254,7 +263,10 @@ public sealed class CopyOperationTests
 
         var op = Copy([Mem("/src/a.txt"), Mem("/src/b.txt")], Mem("/dst"), new CopyOptions(NewName: "c.txt"));
 
-        await Assert.ThrowsAsync<OperationRejectedException>(() => op.RunAsync());
+        var error = await Assert.ThrowsAsync<OperationRejectedException>(() => op.RunAsync());
+
+        Assert.Equal(RejectionReason.NewNameWithMultipleSources, error.Reason);
+        Assert.Equal("c.txt", error.Name);
         Assert.DoesNotContain(_mem.AllPaths, p => p.StartsWith("/dst/", StringComparison.Ordinal));
     }
 
@@ -269,7 +281,11 @@ public sealed class CopyOperationTests
 
         var op = Copy("/src/a.txt", "/dst", new CopyOptions(NewName: name));
 
-        await Assert.ThrowsAsync<OperationRejectedException>(() => op.RunAsync());
+        var error = await Assert.ThrowsAsync<OperationRejectedException>(() => op.RunAsync());
+
+        Assert.Equal(RejectionReason.InvalidName, error.Reason);
+        Assert.Equal(Mem("/src/a.txt"), error.SourcePath);
+        Assert.Equal(name, error.Name);
         Assert.DoesNotContain(_mem.AllPaths, p => p.StartsWith("/dst/", StringComparison.Ordinal));
     }
 
@@ -345,7 +361,9 @@ public sealed class CopyOperationTests
         _mem.AddDirectory("/a/b");
         await _mem.CreateSymlinkAsync(Mem("/link"), "/a/b", Ct);
 
-        await Assert.ThrowsAsync<OperationRejectedException>(() => Copy("/a", "/link").RunAsync());
+        var error = await Assert.ThrowsAsync<OperationRejectedException>(() => Copy("/a", "/link").RunAsync());
+
+        Assert.Equal(RejectionReason.DestinationInsideSource, error.Reason);
 
         Assert.DoesNotContain(_mem.AllPaths, p => p.StartsWith("/a/b/", StringComparison.Ordinal));
     }
@@ -476,6 +494,20 @@ public sealed class CopyOperationTests
         Assert.False(run.IsCompleted);
         release.Set();
         Assert.Equal(OperationState.Completed, (await run).State);
+    }
+
+    [Fact]
+    public void Describes_itself_for_the_title()
+    {
+        var single = Copy("/src/a.txt", "/dst");
+        var several = Copy([Mem("/src/a.txt"), Mem("/src/b.txt"), Mem("/src/c")], Mem("/dst"));
+
+        Assert.Equal(OperationKind.Copy, single.Kind);
+        Assert.Equal(1, single.ItemCount);
+        Assert.Equal(Mem("/dst"), single.Destination);
+        Assert.Equal(OperationKind.Copy, several.Kind);
+        Assert.Equal(3, several.ItemCount);
+        Assert.Equal(Mem("/dst"), several.Destination);
     }
 
     [Fact]

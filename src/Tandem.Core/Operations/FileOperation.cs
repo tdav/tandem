@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Tandem.Core.Vfs;
 
 namespace Tandem.Core.Operations;
 
@@ -10,6 +11,8 @@ namespace Tandem.Core.Operations;
 /// <see cref="Completion"/> with a result; <see cref="OperationState.Failed"/> faults it with the error
 /// (an <see cref="OperationRejectedException"/> when the operation was refused before it started).
 /// </summary>
+public enum OperationKind { Copy, Move, Delete }
+
 public abstract class FileOperation
 {
     public const int MaxProgressEventsPerSecond = 10;
@@ -32,7 +35,15 @@ public abstract class FileOperation
 
     public Guid Id { get; } = Guid.NewGuid();
 
-    public abstract string Title { get; }
+    /// <summary>What the operation does; with <see cref="ItemCount"/> and <see cref="Destination"/> the
+    /// interface builds a title.</summary>
+    public abstract OperationKind Kind { get; }
+
+    /// <summary>How many items the user selected (top-level sources, not everything inside them).</summary>
+    public abstract int ItemCount { get; }
+
+    /// <summary>The directory the items go to; null for operations without one (delete).</summary>
+    public abstract VfsPath? Destination { get; }
 
     public OperationState State
     {

@@ -26,9 +26,11 @@ public sealed class CopyOperation(ProviderRegistry providers, IReadOnlyList<VfsP
     private readonly IOperationInteraction _interaction =
         interaction ?? throw new ArgumentNullException(nameof(interaction));
 
-    public override string Title => _sources.Count == 1
-        ? $"Copy {_options.NewName ?? _sources[0].Name} to {_destinationDirectory.Path}"
-        : $"Copy {_sources.Count} items to {_destinationDirectory.Path}";
+    public override OperationKind Kind => OperationKind.Copy;
+
+    public override int ItemCount => _sources.Count;
+
+    public override VfsPath? Destination => _destinationDirectory;
 
     /// <summary>"{provider id}:{volume key}" for every source and the destination directory, without duplicates.</summary>
     public override async Task<IReadOnlyCollection<string>> GetVolumeKeysAsync(CancellationToken ct)

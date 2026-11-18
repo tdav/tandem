@@ -27,13 +27,16 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
         IReadOnlyList<VfsPath> sources, VfsPath destinationDirectory, string? newName)
     {
         if (newName is not null && sources.Count != 1)
-            throw new OperationRejectedException("A new name can be given only when there is a single source.");
+            throw new OperationRejectedException(RejectionReason.NewNameWithMultipleSources,
+                "A new name can be given only when there is a single source.",
+                destination: destinationDirectory, name: newName);
 
         var targets = new List<(VfsPath, VfsPath)>(sources.Count);
         foreach (var source in sources)
         {
             if (destinationDirectory.IsSameOrDescendantOf(source))
-                throw new OperationRejectedException($"'{source.Path}' cannot be copied into itself.");
+                throw new OperationRejectedException(RejectionReason.DestinationInsideSource,
+                    $"'{source.Path}' cannot be copied into itself.", source, destinationDirectory);
 
             VfsPath destination;
             try
@@ -42,11 +45,14 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
             }
             catch (ArgumentException)
             {
-                throw new OperationRejectedException($"'{newName ?? source.Name}' is not a valid name.");
+                throw new OperationRejectedException(RejectionReason.InvalidName,
+                    $"'{newName ?? source.Name}' is not a valid name.", source, destinationDirectory,
+                    newName ?? source.Name);
             }
 
             if (destination == source)
-                throw new OperationRejectedException($"'{source.Path}' cannot be copied onto itself.");
+                throw new OperationRejectedException(RejectionReason.SourceEqualsDestination,
+                    $"'{source.Path}' cannot be copied onto itself.", source, destination);
             targets.Add((source, destination));
         }
         return targets;
@@ -146,7 +152,7 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
         {
             if (!target.Capabilities.HasFlag(ProviderCapabilities.Symlinks))
             {
-                operation.AddSkipped(new SkippedItem(source.Path, "The destination does not support symbolic links."));
+                operation.AddSkipped(new SkippedItem(source.Path, SkipReason.SymlinksNotSupported));
                 operation.CompleteFile();
                 return CopyOutcome.Skipped;
             }
