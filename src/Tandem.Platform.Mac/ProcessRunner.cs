@@ -30,10 +30,9 @@ public sealed class ProcessRunner : IProcessRunner
         });
         private readonly TaskCompletionSource<int> _exit = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly TaskCompletionSource _streamsDrained = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private readonly Lock _lock = new();
         private readonly Task _completion;
         private int _openStreams = 2;
-        private bool _disposed;
+        private int _disposed;
 
         private RunningProcess(Process process)
         {
@@ -82,23 +81,22 @@ public sealed class ProcessRunner : IProcessRunner
             return running;
         }
 
+        /// <remarks>Never called into <see cref="Process"/> under a lock of ours: <see cref="Process"/> raises
+        /// <c>Exited</c> while holding its own monitor, and <c>Dispose</c> and others take that monitor too.</remarks>
         public void Kill()
         {
-            lock (_lock)
+            if (Volatile.Read(ref _disposed) != 0 || _exit.Task.IsCompleted) return;
+            try
             {
-                if (_disposed || _exit.Task.IsCompleted) return;
-                try
-                {
-                    _process.Kill(entireProcessTree: true);
-                }
-                catch (InvalidOperationException)
-                {
-                    // It exited in the meantime.
-                }
-                catch (Win32Exception)
-                {
-                    // It, or one of its descendants, is already gone.
-                }
+                _process.Kill(entireProcessTree: true);
+            }
+            catch (InvalidOperationException)
+            {
+                // It exited in the meantime, or was disposed concurrently (ObjectDisposedException is one too).
+            }
+            catch (Win32Exception)
+            {
+                // It, or one of its descendants, is already gone.
             }
         }
 
@@ -114,13 +112,9 @@ public sealed class ProcessRunner : IProcessRunner
                 // An escaped descendant still holds the output open; stop waiting for it.
             }
 
-            lock (_lock)
-            {
-                if (_disposed) return;
-                _disposed = true;
-                _process.Exited -= OnExited;
-                _process.Dispose();
-            }
+            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+            _process.Exited -= OnExited;
+            _process.Dispose();
 
             _exit.TrySetResult(-1);
             _lines.Writer.TryComplete();
@@ -134,24 +128,20 @@ public sealed class ProcessRunner : IProcessRunner
                 _streamsDrained.TrySetResult();
         }
 
-        /// <remarks>Runs on a thread-pool thread, where an exception would end the process; so a <see cref="Process"/>
-        /// already disposed (after a kill whose output did not drain in time) reports -1 instead of throwing.</remarks>
+        /// <remarks>Runs on a thread-pool thread (under the <see cref="Process"/>'s own monitor), where an exception
+        /// would end the process; so a <see cref="Process"/> already disposed (after a kill whose output did not drain
+        /// in time) reports -1 instead of throwing. It takes no lock.</remarks>
         private void OnExited(object? sender, EventArgs e)
         {
-            var code = -1;
-            lock (_lock)
+            int code;
+            try
             {
-                if (!_disposed)
-                {
-                    try
-                    {
-                        code = _process.ExitCode;
-                    }
-                    catch (InvalidOperationException)
-                    {
-                        // No exit code is available.
-                    }
-                }
+                code = _process.ExitCode;
+            }
+            catch (InvalidOperationException)
+            {
+                // Disposed, or no exit code available (ObjectDisposedException is an InvalidOperationException too).
+                code = -1;
             }
 
             _exit.TrySetResult(code);

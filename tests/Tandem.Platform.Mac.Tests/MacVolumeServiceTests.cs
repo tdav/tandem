@@ -104,4 +104,45 @@ public sealed class MacVolumeServiceTests : IDisposable
         Assert.Equal(0, Volatile.Read(ref count));
         service.Dispose();
     }
+
+    [Fact]
+    public async Task Dispose_waits_for_a_Changed_being_raised()
+    {
+        var service = new MacVolumeService(_temp.Path, Debounce);
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var finished = false;
+        service.Changed += (_, _) =>
+        {
+            entered.Set();
+            release.Wait(Timeout);
+            Volatile.Write(ref finished, true);
+        };
+
+        Directory.CreateDirectory(_temp.Combine("busy"));
+        Assert.True(entered.Wait(Timeout, TestContext.Current.CancellationToken));
+        var dispose = Task.Run(service.Dispose, TestContext.Current.CancellationToken);
+        await Task.Delay(Debounce, TestContext.Current.CancellationToken);
+        Assert.False(dispose.IsCompleted);
+
+        release.Set();
+        await dispose.WaitAsync(Timeout, TestContext.Current.CancellationToken);
+        Assert.True(Volatile.Read(ref finished));
+    }
+
+    [Fact]
+    public void Dispose_from_a_Changed_handler_does_not_hang()
+    {
+        var service = new MacVolumeService(_temp.Path, Debounce);
+        using var disposed = new ManualResetEventSlim();
+        service.Changed += (_, _) =>
+        {
+            service.Dispose();
+            disposed.Set();
+        };
+
+        Directory.CreateDirectory(_temp.Combine("self"));
+
+        Assert.True(disposed.Wait(Timeout, TestContext.Current.CancellationToken));
+    }
 }

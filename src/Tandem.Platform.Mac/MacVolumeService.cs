@@ -17,11 +17,18 @@ public sealed class MacVolumeService : IVolumeService, IDisposable
 
     private const string Root = "/";
 
+    private static readonly Lazy<IntPtr> NameKey = new(() => ObjC.FoundationConstant("NSURLVolumeLocalizedNameKey"));
+    private static readonly Lazy<IntPtr> RemovableKey = new(() => ObjC.FoundationConstant("NSURLVolumeIsRemovableKey"));
+    private static readonly Lazy<IntPtr> EjectableKey = new(() => ObjC.FoundationConstant("NSURLVolumeIsEjectableKey"));
+
     private readonly FileSystemWatcher _watcher;
     private readonly Timer _debounceTimer;
     private readonly TimeSpan _debounce;
     private readonly Lock _lock = new();
     private bool _disposed;
+
+    /// <summary>The managed id of the thread raising <see cref="Changed"/>, or 0.</summary>
+    private int _raisingThread;
 
     public MacVolumeService() : this("/Volumes", TimeSpan.FromMilliseconds(500))
     {
@@ -54,9 +61,7 @@ public sealed class MacVolumeService : IVolumeService, IDisposable
         var volumes = new List<(string Name, string MountPoint, bool IsRemovable)>();
         using (new ObjC.AutoreleasePool())
         {
-            var nameKey = ObjC.FoundationConstant("NSURLVolumeLocalizedNameKey");
-            var removableKey = ObjC.FoundationConstant("NSURLVolumeIsRemovableKey");
-            var ejectableKey = ObjC.FoundationConstant("NSURLVolumeIsEjectableKey");
+            var (nameKey, removableKey, ejectableKey) = (NameKey.Value, RemovableKey.Value, EjectableKey.Value);
             var manager = ObjC.Send(ObjC.Class("NSFileManager"), ObjC.Selector("defaultManager"));
             var urls = ObjC.SendObjectOptions(manager,
                 ObjC.Selector("mountedVolumeURLsIncludingResourceValuesForKeys:options:"),
@@ -97,6 +102,8 @@ public sealed class MacVolumeService : IVolumeService, IDisposable
         ];
     }
 
+    /// <summary>Stops watching. Once it returns, <see cref="Changed"/> is not raised any more: it waits for a
+    /// <see cref="Changed"/> already being raised, unless called from one of its handlers.</summary>
     public void Dispose()
     {
         lock (_lock)
@@ -106,7 +113,15 @@ public sealed class MacVolumeService : IVolumeService, IDisposable
         }
 
         _watcher.Dispose();
-        _debounceTimer.Dispose();
+        if (Volatile.Read(ref _raisingThread) == Environment.CurrentManagedThreadId)
+        {
+            // Called from a Changed handler: waiting for that callback to finish would wait for ourselves.
+            _debounceTimer.Dispose();
+            return;
+        }
+
+        using var callbacksDone = new ManualResetEvent(false);
+        if (_debounceTimer.Dispose(callbacksDone)) callbacksDone.WaitOne();
     }
 
     private static unsafe IntPtr KeyArray(params ReadOnlySpan<IntPtr> keys)
@@ -150,16 +165,25 @@ public sealed class MacVolumeService : IVolumeService, IDisposable
         }
 
         if (Changed is not { } changed) return;
-        foreach (var handler in changed.GetInvocationList().Cast<EventHandler>())
+        Volatile.Write(ref _raisingThread, Environment.CurrentManagedThreadId);
+        try
         {
-            try
+            foreach (var handler in changed.GetInvocationList().Cast<EventHandler>())
             {
-                handler(this, EventArgs.Empty);
+                if (Volatile.Read(ref _disposed)) return;
+                try
+                {
+                    handler(this, EventArgs.Empty);
+                }
+                catch (Exception)
+                {
+                    // A throwing handler must not stop the others, the watch, or the process (this is a timer thread).
+                }
             }
-            catch (Exception)
-            {
-                // A throwing handler must not stop the others, the watch, or the process (this is a timer thread).
-            }
+        }
+        finally
+        {
+            Volatile.Write(ref _raisingThread, 0);
         }
     }
 }

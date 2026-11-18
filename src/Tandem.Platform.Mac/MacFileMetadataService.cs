@@ -10,6 +10,12 @@ namespace Tandem.Platform.Mac;
 [SupportedOSPlatform("macos")]
 public sealed class MacFileMetadataService(IFileAccessBroker broker) : IFileMetadataService
 {
+    private static readonly Lazy<IntPtr> TagNamesKey = new(() => ObjC.FoundationConstant("NSURLTagNamesKey"));
+    private static readonly Lazy<IntPtr> OwnerNameKey = new(() => ObjC.FoundationConstant("NSFileOwnerAccountName"));
+    private static readonly Lazy<IntPtr> OwnerIdKey = new(() => ObjC.FoundationConstant("NSFileOwnerAccountID"));
+    private static readonly Lazy<IntPtr> GroupNameKey = new(() => ObjC.FoundationConstant("NSFileGroupOwnerAccountName"));
+    private static readonly Lazy<IntPtr> GroupIdKey = new(() => ObjC.FoundationConstant("NSFileGroupOwnerAccountID"));
+
     private readonly IFileAccessBroker _broker = broker ?? throw new ArgumentNullException(nameof(broker));
 
     public IReadOnlyList<string> GetTags(string path)
@@ -18,7 +24,7 @@ public sealed class MacFileMetadataService(IFileAccessBroker broker) : IFileMeta
         using var access = _broker.Access(path);
         using var pool = new ObjC.AutoreleasePool();
 
-        var tags = ObjC.GetResourceValue(ItemUrl(path), ObjC.FoundationConstant("NSURLTagNamesKey"));
+        var tags = ObjC.GetResourceValue(ItemUrl(path), TagNamesKey.Value);
         return ObjC.ToStringList(tags);
     }
 
@@ -32,7 +38,7 @@ public sealed class MacFileMetadataService(IFileAccessBroker broker) : IFileMeta
         using var access = _broker.Access(path);
         using var pool = new ObjC.AutoreleasePool();
 
-        ObjC.SetResourceValue(ItemUrl(path), ObjC.FoundationConstant("NSURLTagNamesKey"), ObjC.ToNSArray(tags));
+        ObjC.SetResourceValue(ItemUrl(path), TagNamesKey.Value, ObjC.ToNSArray(tags));
     }
 
     public unsafe OwnerInfo GetOwner(string path)
@@ -48,8 +54,8 @@ public sealed class MacFileMetadataService(IFileAccessBroker broker) : IFileMeta
         if (attributes == IntPtr.Zero) throw new IOException(ObjC.ErrorDescription(error));
 
         return new OwnerInfo(
-            Attribute(attributes, "NSFileOwnerAccountName", "NSFileOwnerAccountID"),
-            Attribute(attributes, "NSFileGroupOwnerAccountName", "NSFileGroupOwnerAccountID"));
+            Attribute(attributes, OwnerNameKey.Value, OwnerIdKey.Value),
+            Attribute(attributes, GroupNameKey.Value, GroupIdKey.Value));
     }
 
     /// <summary>The URL of the item itself: a symbolic link is not followed.</summary>
@@ -57,11 +63,11 @@ public sealed class MacFileMetadataService(IFileAccessBroker broker) : IFileMeta
         ObjC.FileUrl(path, new FileInfo(path).LinkTarget is null && Directory.Exists(path));
 
     /// <summary>The account name, or the numeric id when the id has no name on this system.</summary>
-    private static string Attribute(IntPtr attributes, string nameKey, string idKey)
+    private static string Attribute(IntPtr attributes, IntPtr nameKey, IntPtr idKey)
     {
         var objectForKey = ObjC.Selector("objectForKey:");
-        return ObjC.ToManagedString(ObjC.Send(attributes, objectForKey, ObjC.FoundationConstant(nameKey)))
-               ?? ObjC.DescriptionOf(ObjC.Send(attributes, objectForKey, ObjC.FoundationConstant(idKey)))
+        return ObjC.ToManagedString(ObjC.Send(attributes, objectForKey, nameKey))
+               ?? ObjC.DescriptionOf(ObjC.Send(attributes, objectForKey, idKey))
                ?? throw new IOException("The system did not report the item's owner.");
     }
 }
