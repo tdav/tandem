@@ -109,6 +109,27 @@ public abstract class FileOperation
     /// <see cref="RunAsync"/> makes the run end immediately; calling it after the end has no effect.</summary>
     public void Cancel() => _cancel.Cancel();
 
+    /// <summary>Signalled by <see cref="Cancel"/>; lets the queue notice a cancelled operation that is still
+    /// waiting.</summary>
+    internal CancellationToken CancellationRequested => _cancel.Token;
+
+    /// <summary>Ends an operation that was never started as <see cref="OperationState.Failed"/> with
+    /// <paramref name="error"/>, without running it (the queue could not schedule it).</summary>
+    /// <exception cref="InvalidOperationException">The operation was already started.</exception>
+    internal void FailWithoutRunning(Exception error)
+    {
+        if (Interlocked.Exchange(ref _started, 1) == 1)
+            throw new InvalidOperationException("The operation has already been started.");
+        try
+        {
+            SetState(OperationState.Failed);
+        }
+        finally
+        {
+            _completion.TrySetException(error);
+        }
+    }
+
     /// <summary>Volume keys of every volume the operation touches, for scheduling.</summary>
     public abstract Task<IReadOnlyCollection<string>> GetVolumeKeysAsync(CancellationToken ct);
 
