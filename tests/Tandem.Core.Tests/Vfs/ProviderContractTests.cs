@@ -175,6 +175,67 @@ public abstract class ProviderContractTests
         Assert.Equal(stamp, (await fs.GetEntryAsync(path, Ct))!.Modified);
     }
 
+    [Fact]
+    public async Task SetMode_is_visible_in_GetEntry()
+    {
+        var (fs, root) = await CreateAsync();
+        var path = root.Combine("f.txt");
+        await WriteAsync(fs, path, "x");
+        const UnixFileMode ownerReadWrite = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+
+        await fs.SetModeAsync(path, ownerReadWrite, Ct);
+
+        Assert.Equal(ownerReadWrite, (await fs.GetEntryAsync(path, Ct))!.Mode);
+    }
+
+    [Fact]
+    public async Task Paths_under_same_root_share_volume_key()
+    {
+        var (fs, root) = await CreateAsync();
+        await fs.CreateDirectoryAsync(root.Combine("sub"), Ct);
+
+        var rootKey = await fs.GetVolumeKeyAsync(root, Ct);
+        var nestedKey = await fs.GetVolumeKeyAsync(root.Combine("sub").Combine("missing.txt"), Ct);
+
+        Assert.False(string.IsNullOrEmpty(rootKey));
+        Assert.Equal(rootKey, nestedKey);
+    }
+
+    [Fact]
+    public async Task CreateDirectory_on_existing_file_throws()
+    {
+        var (fs, root) = await CreateAsync();
+        var path = root.Combine("f.txt");
+        await WriteAsync(fs, path, "x");
+
+        await Assert.ThrowsAnyAsync<IOException>(() => fs.CreateDirectoryAsync(path, Ct));
+
+        Assert.Equal(EntryKind.File, (await fs.GetEntryAsync(path, Ct))!.Kind);
+    }
+
+    [Fact]
+    public async Task OpenWrite_with_missing_parent_throws_NotFound()
+    {
+        var (fs, root) = await CreateAsync();
+
+        await Assert.ThrowsAsync<VfsNotFoundException>(
+            () => fs.OpenWriteAsync(root.Combine("missing").Combine("f.txt"), Ct));
+    }
+
+    [Fact]
+    public async Task Cancelled_token_produces_canceled_task()
+    {
+        var (fs, root) = await CreateAsync();
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        var task = fs.CreateDirectoryAsync(root.Combine("dir"), cts.Token);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => task);
+        Assert.True(task.IsCanceled);
+        Assert.Null(await fs.GetEntryAsync(root.Combine("dir"), Ct));
+    }
+
     protected static async Task WriteAsync(IFileSystemProvider fs, VfsPath path, string text)
     {
         await using var stream = await fs.OpenWriteAsync(path, Ct);

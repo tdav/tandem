@@ -298,9 +298,9 @@ public sealed class InMemoryFileSystem : IFileSystemProvider
 
     private static Task<T> Run<T>(CancellationToken ct, Func<T> body)
     {
+        if (ct.IsCancellationRequested) return Task.FromCanceled<T>(ct);
         try
         {
-            ct.ThrowIfCancellationRequested();
             return Task.FromResult(body());
         }
         catch (Exception e)
