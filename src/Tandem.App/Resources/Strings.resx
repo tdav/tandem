@@ -164,7 +164,7 @@
 
   <!-- Tandem.Core.Operations.SkipReason -->
   <data name="SkipReason_ConflictSkipped" xml:space="preserve">
-    <value>Skipped: the destination already exists</value>
+    <value>Skipped: the item already exists in the destination folder</value>
   </data>
   <data name="SkipReason_OlderThanDestination" xml:space="preserve">
     <value>Skipped: the destination file is not older than the source</value>
@@ -176,7 +176,7 @@
     <value>Skipped: the destination folder does not support symbolic links</value>
   </data>
   <data name="SkipReason_SourceIsDestination" xml:space="preserve">
-    <value>Not deleted: the destination folder is the source itself</value>
+    <value>Not deleted: the item in the destination folder is the source itself</value>
   </data>
 
   <!-- Tandem.Core.Operations.OperationKind (names of operations, not buttons) -->
