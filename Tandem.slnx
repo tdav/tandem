@@ -1,0 +1,16 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Packages.props" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Tandem.App/Tandem.App.csproj" />
+    <Project Path="src/Tandem.Core/Tandem.Core.csproj" />
+    <Project Path="src/Tandem.Platform.Mac/Tandem.Platform.Mac.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Tandem.App.Tests/Tandem.App.Tests.csproj" />
+    <Project Path="tests/Tandem.Core.Tests/Tandem.Core.Tests.csproj" />
+    <Project Path="tests/Tandem.Platform.Mac.Tests/Tandem.Platform.Mac.Tests.csproj" />
+  </Folder>
+</Solution>
