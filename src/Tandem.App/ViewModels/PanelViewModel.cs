@@ -40,6 +40,7 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
     private int _loadVersion;
     private LoadKind? _activeLoad;
     private bool _showingPreview;
+    private int _previewVersion; // the load whose preview may still be shown; 0 once it has committed or failed
     private IReadOnlyList<EntryRowViewModel> _rowsBeforePreview = [];
     private int _cursorBeforePreview = -1;
     private WatchSubscription? _watch;
@@ -151,14 +152,7 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
         _loadCts?.Cancel();
         var watch = _watch;
         _watch = null;
-        try
-        {
-            watch?.Handle?.Dispose();
-        }
-        catch (Exception)
-        {
-            // the panel is going away; a failing unsubscribe must not stop that
-        }
+        DisposeInBackground(watch);
     }
 
     // ---- Loading -----------------------------------------------------------------------------------------
@@ -191,6 +185,7 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
         var version = ++_loadVersion;
         _activeLoad = kind;
         IsLoading = true;
+        _previewVersion = kind == LoadKind.Navigate ? version : 0;
         if (kind != LoadKind.Navigate && _showingPreview) RestoreRowsBeforePreview();
 
         Listing? listing = null;
@@ -224,6 +219,7 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
                 DisposeInBackground(listing.Watch);
                 return false;
             }
+            _previewVersion = 0; // a preview posted earlier but delivered late must not replace the sorted rows
             Commit(kind, path, focusName, listing);
             return true;
         }
@@ -233,6 +229,7 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
         }
         catch (Exception e)
         {
+            if (_previewVersion == version) _previewVersion = 0;
             if (listing?.Watch != _watch) DisposeInBackground(listing?.Watch);
             if (!IsCurrent(version)) return false;
             if (_showingPreview) RestoreRowsBeforePreview();
@@ -292,7 +289,7 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
 
     private void PostPreview(int version, List<EntryRowViewModel> rows) => _ui.Post(_ =>
     {
-        if (!IsCurrent(version)) return;
+        if (!IsCurrent(version) || version != _previewVersion) return;
         if (!_showingPreview)
         {
             _rowsBeforePreview = _rows.Items;
@@ -317,7 +314,8 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
         {
             var oldWatch = _watch;
             _watch = listing.Watch;
-            _watchRefreshAfterLoad = false;
+            // A change reported while the folder was being read may be missing from this listing.
+            _watchRefreshAfterLoad = _watch?.ChangedBeforeCommit == true;
             DisposeInBackground(oldWatch);
             CurrentPath = path;
             _hasPath = true;
@@ -439,6 +437,9 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
     private sealed class WatchSubscription
     {
         public IDisposable? Handle;
+
+        /// <summary>UI thread: a change arrived before the navigation that made this subscription had committed.</summary>
+        public bool ChangedBeforeCommit;
     }
 
     /// <summary>Background. Watching is best effort: a provider that cannot watch, or fails to, gives no refreshes.</summary>
@@ -473,7 +474,15 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
     {
         try
         {
-            if (_disposed || subscription != _watch || _watchRefreshScheduled) return;
+            if (_disposed) return;
+            if (subscription != _watch)
+            {
+                // Either a navigation still reading this folder (its commit then refreshes once) or a folder the
+                // panel has left (the subscription is never installed, so the mark is harmless).
+                subscription.ChangedBeforeCommit = true;
+                return;
+            }
+            if (_watchRefreshScheduled) return;
             _watchRefreshScheduled = true;
             try
             {

@@ -14,10 +14,15 @@ namespace Tandem.App.Tests.ViewModels;
 public class PanelListingTests : IDisposable
 {
     private readonly InMemoryFileSystem _fs = new();
+    private readonly ObservedProvider _observed;
     private readonly ProviderRegistry _providers = new();
     private PanelViewModel? _panel;
 
-    public PanelListingTests() => _providers.Register(_fs);
+    public PanelListingTests()
+    {
+        _observed = new ObservedProvider(_fs);
+        _providers.Register(_observed);
+    }
 
     public void Dispose()
     {
@@ -259,13 +264,78 @@ public class PanelListingTests : IDisposable
         await WaitUntil(() => panel.Rows.Any(r => r.Name == "new.txt"));
         Assert.Equal(Mem("/d"), panel.CurrentPath);
 
-        // after leaving the folder, its changes no longer reach the panel
+        // after leaving the folder, a late callback of its (already disposed) subscription is ignored:
+        // it must not refresh the folder shown now
         await panel.NavigateToAsync(Mem("/other"));
-        _fs.AddFile("/d/later.txt");
-        await Task.Run(() => _fs.RaiseChanged("/d"));
+        var oldCallback = _observed.WatchCallbacks.First(w => w.Directory == Mem("/d")).Changed;
+        var readsOfOther = _observed.ReadsOf("/other");
+        var readsOfD = _observed.ReadsOf("/d");
+        await Task.Run(oldCallback);
         await Task.Delay(300);
         Assert.Equal(Mem("/other"), panel.CurrentPath);
-        Assert.Equal([".."], Names(panel));
+        Assert.Equal(readsOfOther, _observed.ReadsOf("/other"));
+        Assert.Equal(readsOfD, _observed.ReadsOf("/d"));
+    }
+
+    [AvaloniaFact]
+    public async Task Change_during_read_is_not_lost()
+    {
+        _fs.AddFile("/slow/s.txt");
+        var readDone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _observed.AfterRead = dir =>
+        {
+            if (dir.Path != "/slow" || readDone.Task.IsCompleted) return Task.CompletedTask;
+            readDone.SetResult();
+            return release.Task;
+        };
+        var panel = CreatePanel();
+
+        var navigation = panel.NavigateToAsync(Mem("/slow"));
+        await readDone.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        // the entries are already read; the folder changes before the navigation has finished
+        _fs.AddFile("/slow/new.txt");
+        await Task.Run(() => _fs.RaiseChanged("/slow"));
+        await Task.Delay(50); // the posted callback reaches the panel while the read is still held
+        release.SetResult();
+        await navigation;
+
+        await WaitUntil(() => panel.Rows.Any(r => r.Name == "new.txt"));
+        Assert.Equal(Mem("/slow"), panel.CurrentPath);
+    }
+
+    [AvaloniaFact]
+    public async Task Dispose_during_load_publishes_nothing_and_releases_watch()
+    {
+        _fs.AddFile("/d/a.txt");
+        _fs.AddFile("/slow/s.txt");
+        var readDone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _observed.AfterRead = dir =>
+        {
+            if (dir.Path != "/slow") return Task.CompletedTask;
+            readDone.TrySetResult();
+            return release.Task;
+        };
+        var panel = CreatePanel();
+        await panel.NavigateToAsync(Mem("/d"));
+        var navigated = 0;
+        panel.Navigated += (_, _) => navigated++;
+        var resets = 0;
+        ((INotifyCollectionChanged)panel.Rows).CollectionChanged += (_, _) => resets++;
+
+        var navigation = panel.NavigateToAsync(Mem("/slow"));
+        await readDone.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(2, _observed.ActiveWatches); // /d and the in-flight /slow
+        panel.Dispose();
+        release.SetResult();
+        await navigation;
+
+        Assert.Equal(0, resets);
+        Assert.Equal(0, navigated);
+        Assert.Equal(Mem("/d"), panel.CurrentPath);
+        Assert.Equal(["..", "a.txt"], Names(panel));
+        await WaitUntil(() => _observed.ActiveWatches == 0);
     }
 
     [AvaloniaFact]
