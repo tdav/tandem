@@ -118,6 +118,7 @@ public sealed class ProcessRunner : IProcessRunner
             {
                 if (_disposed) return;
                 _disposed = true;
+                _process.Exited -= OnExited;
                 _process.Dispose();
             }
 
@@ -133,6 +134,27 @@ public sealed class ProcessRunner : IProcessRunner
                 _streamsDrained.TrySetResult();
         }
 
-        private void OnExited(object? sender, EventArgs e) => _exit.TrySetResult(_process.ExitCode);
+        /// <remarks>Runs on a thread-pool thread, where an exception would end the process; so a <see cref="Process"/>
+        /// already disposed (after a kill whose output did not drain in time) reports -1 instead of throwing.</remarks>
+        private void OnExited(object? sender, EventArgs e)
+        {
+            var code = -1;
+            lock (_lock)
+            {
+                if (!_disposed)
+                {
+                    try
+                    {
+                        code = _process.ExitCode;
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        // No exit code is available.
+                    }
+                }
+            }
+
+            _exit.TrySetResult(code);
+        }
     }
 }

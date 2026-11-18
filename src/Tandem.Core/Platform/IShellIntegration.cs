@@ -6,6 +6,8 @@ public sealed record AppInfo(string Name, string BundlePath);
 /// <summary>
 /// Hands items to the rest of the system: the default application, a chosen one, the file browser, the terminal.
 /// Methods that launch something return once it is launched and never wait for the launched program.
+/// <para>Every path (items, directories, application bundles) must be absolute; implementations throw
+/// <see cref="ArgumentException"/> for a relative path.</para>
 /// </summary>
 public interface IShellIntegration
 {

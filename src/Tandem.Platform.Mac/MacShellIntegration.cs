@@ -52,7 +52,7 @@ public sealed class MacShellIntegration(IProcessRunner runner) : IShellIntegrati
 
     public IReadOnlyList<AppInfo> GetAppsFor(string path)
     {
-        ArgumentException.ThrowIfNullOrEmpty(path);
+        ProcessLaunch.RequireAbsolute(path, nameof(path));
         if (!Path.Exists(path)) return [];
 
         List<string> bundles;

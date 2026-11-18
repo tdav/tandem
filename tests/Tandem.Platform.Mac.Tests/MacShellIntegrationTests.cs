@@ -137,4 +137,10 @@ public sealed class MacShellIntegrationTests : IDisposable
     {
         Assert.Empty(_shell.GetAppsFor(_temp.Combine("missing.txt")));
     }
+
+    [Fact]
+    public void GetAppsFor_relative_path_throws()
+    {
+        Assert.Throws<ArgumentException>(() => _shell.GetAppsFor("note.txt"));
+    }
 }
