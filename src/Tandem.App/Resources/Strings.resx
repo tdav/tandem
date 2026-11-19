@@ -255,4 +255,206 @@
   <data name="ErrorAction_Abort" xml:space="preserve">
     <value>Abort</value>
   </data>
+
+  <!-- Main menu: menus -->
+  <data name="Menu_File" xml:space="preserve">
+    <value>File</value>
+  </data>
+  <data name="Menu_Selection" xml:space="preserve">
+    <value>Selection</value>
+  </data>
+  <data name="Menu_Go" xml:space="preserve">
+    <value>Go</value>
+  </data>
+  <data name="Menu_View" xml:space="preserve">
+    <value>View</value>
+  </data>
+  <data name="Menu_Window" xml:space="preserve">
+    <value>Window</value>
+  </data>
+
+  <!-- Main menu: commands, keyed Menu_ + command id with '.' as '_' -->
+  <data name="Menu_file_view" xml:space="preserve">
+    <value>View</value>
+  </data>
+  <data name="Menu_file_edit" xml:space="preserve">
+    <value>Edit</value>
+  </data>
+  <data name="Menu_file_copy" xml:space="preserve">
+    <value>Copy…</value>
+  </data>
+  <data name="Menu_file_move" xml:space="preserve">
+    <value>Move…</value>
+  </data>
+  <data name="Menu_file_mkdir" xml:space="preserve">
+    <value>New Folder…</value>
+  </data>
+  <data name="Menu_file_delete" xml:space="preserve">
+    <value>Move to Trash</value>
+  </data>
+  <data name="Menu_file_deletePermanent" xml:space="preserve">
+    <value>Delete Permanently</value>
+  </data>
+  <data name="Menu_file_rename" xml:space="preserve">
+    <value>Rename</value>
+  </data>
+  <data name="Menu_file_quickLook" xml:space="preserve">
+    <value>Quick Look</value>
+  </data>
+  <data name="Menu_file_properties" xml:space="preserve">
+    <value>Properties</value>
+  </data>
+  <data name="Menu_panel_switch" xml:space="preserve">
+    <value>Switch Panel</value>
+  </data>
+  <data name="Menu_panel_refresh" xml:space="preserve">
+    <value>Refresh</value>
+  </data>
+  <data name="Menu_panel_swap" xml:space="preserve">
+    <value>Swap Panels</value>
+  </data>
+  <data name="Menu_panel_mirror" xml:space="preserve">
+    <value>Same Folder in Other Panel</value>
+  </data>
+  <data name="Menu_nav_up" xml:space="preserve">
+    <value>Enclosing Folder</value>
+  </data>
+  <data name="Menu_nav_back" xml:space="preserve">
+    <value>Back</value>
+  </data>
+  <data name="Menu_nav_forward" xml:space="preserve">
+    <value>Forward</value>
+  </data>
+  <data name="Menu_path_edit" xml:space="preserve">
+    <value>Go to Folder…</value>
+  </data>
+  <data name="Menu_cmdline_focus" xml:space="preserve">
+    <value>Command Line</value>
+  </data>
+  <data name="Menu_select_toggleDown" xml:space="preserve">
+    <value>Select and Move Down</value>
+  </data>
+  <data name="Menu_select_all" xml:space="preserve">
+    <value>Select All</value>
+  </data>
+  <data name="Menu_select_byMask" xml:space="preserve">
+    <value>Select by Mask…</value>
+  </data>
+  <data name="Menu_unselect_byMask" xml:space="preserve">
+    <value>Deselect by Mask…</value>
+  </data>
+  <data name="Menu_select_invert" xml:space="preserve">
+    <value>Invert Selection</value>
+  </data>
+  <data name="Menu_tab_new" xml:space="preserve">
+    <value>New Tab</value>
+  </data>
+  <data name="Menu_tab_close" xml:space="preserve">
+    <value>Close Tab</value>
+  </data>
+  <data name="Menu_tab_next" xml:space="preserve">
+    <value>Next Tab</value>
+  </data>
+  <data name="Menu_tab_prev" xml:space="preserve">
+    <value>Previous Tab</value>
+  </data>
+  <data name="Menu_favorites_show" xml:space="preserve">
+    <value>Favorites…</value>
+  </data>
+  <data name="Menu_view_toggleHidden" xml:space="preserve">
+    <value>Hidden Files</value>
+  </data>
+  <data name="Menu_shell_reveal" xml:space="preserve">
+    <value>Show in Finder</value>
+  </data>
+  <data name="Menu_shell_openTerminal" xml:space="preserve">
+    <value>Open in Terminal</value>
+  </data>
+  <data name="Menu_shell_openWith" xml:space="preserve">
+    <value>Open With…</value>
+  </data>
+
+  <!-- Main menu: View menu and favourites/history menus -->
+  <data name="Menu_Sidebar" xml:space="preserve">
+    <value>Sidebar</value>
+  </data>
+  <data name="Menu_VolumeBars" xml:space="preserve">
+    <value>Volume Bars</value>
+  </data>
+  <data name="Menu_CommandLine" xml:space="preserve">
+    <value>Command Line</value>
+  </data>
+  <data name="Menu_FKeyBar" xml:space="preserve">
+    <value>Function Key Bar</value>
+  </data>
+  <data name="Menu_Language" xml:space="preserve">
+    <value>Language</value>
+  </data>
+  <data name="Menu_LanguageSystem" xml:space="preserve">
+    <value>As in System</value>
+  </data>
+  <data name="Menu_LanguageRussian" xml:space="preserve">
+    <value>Русский</value>
+  </data>
+  <data name="Menu_LanguageEnglish" xml:space="preserve">
+    <value>English</value>
+  </data>
+  <data name="Menu_LanguageRestartNotice" xml:space="preserve">
+    <value>The new language is used after Tandem is restarted.</value>
+  </data>
+  <data name="Menu_FavoritesAdd" xml:space="preserve">
+    <value>Add Current Folder</value>
+  </data>
+  <data name="Menu_FavoritesRemove" xml:space="preserve">
+    <value>Remove Current Folder</value>
+  </data>
+  <data name="Menu_FavoritesEmpty" xml:space="preserve">
+    <value>No favorites yet</value>
+  </data>
+  <data name="Menu_HistoryEmpty" xml:space="preserve">
+    <value>No history yet</value>
+  </data>
+
+  <!-- Sidebar -->
+  <data name="Sidebar_Favorites" xml:space="preserve">
+    <value>Favorites</value>
+  </data>
+  <data name="Sidebar_Volumes" xml:space="preserve">
+    <value>Volumes</value>
+  </data>
+
+  <!-- Main window parts; View_VolumeFree: {0} = free space, {1} = total size -->
+  <data name="View_VolumeFree" xml:space="preserve">
+    <value>{0} free of {1}</value>
+  </data>
+  <data name="View_Back" xml:space="preserve">
+    <value>Back (right-click for history)</value>
+  </data>
+  <data name="View_Forward" xml:space="preserve">
+    <value>Forward (right-click for history)</value>
+  </data>
+  <data name="View_Favorites" xml:space="preserve">
+    <value>Favorites</value>
+  </data>
+
+  <!-- Path editor; {0} = the text typed -->
+  <data name="Path_Invalid" xml:space="preserve">
+    <value>“{0}” is not a folder path</value>
+  </data>
+
+  <!-- Errors; {0} = the error message, {1} = the log file -->
+  <data name="Error_GrantAccess" xml:space="preserve">
+    <value>Grant Access…</value>
+  </data>
+  <data name="Error_Title" xml:space="preserve">
+    <value>Unexpected Error</value>
+  </data>
+  <data name="Error_Unexpected" xml:space="preserve">
+    <value>Something went wrong: {0}
+Details were written to {1}. Tandem keeps running.</value>
+  </data>
+  <data name="Error_StartFailed" xml:space="preserve">
+    <value>Tandem could not start: {0}
+Details were written to {1}.</value>
+  </data>
 </root>

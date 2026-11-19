@@ -247,4 +247,206 @@
   <data name="ErrorAction_Abort" xml:space="preserve">
     <value>Прервать</value>
   </data>
+
+  <!-- Main menu: menus -->
+  <data name="Menu_File" xml:space="preserve">
+    <value>Файл</value>
+  </data>
+  <data name="Menu_Selection" xml:space="preserve">
+    <value>Выделение</value>
+  </data>
+  <data name="Menu_Go" xml:space="preserve">
+    <value>Переход</value>
+  </data>
+  <data name="Menu_View" xml:space="preserve">
+    <value>Вид</value>
+  </data>
+  <data name="Menu_Window" xml:space="preserve">
+    <value>Окно</value>
+  </data>
+
+  <!-- Main menu: commands, keyed Menu_ + command id with '.' as '_' -->
+  <data name="Menu_file_view" xml:space="preserve">
+    <value>Просмотр</value>
+  </data>
+  <data name="Menu_file_edit" xml:space="preserve">
+    <value>Правка</value>
+  </data>
+  <data name="Menu_file_copy" xml:space="preserve">
+    <value>Копировать…</value>
+  </data>
+  <data name="Menu_file_move" xml:space="preserve">
+    <value>Перенести…</value>
+  </data>
+  <data name="Menu_file_mkdir" xml:space="preserve">
+    <value>Новая папка…</value>
+  </data>
+  <data name="Menu_file_delete" xml:space="preserve">
+    <value>В корзину</value>
+  </data>
+  <data name="Menu_file_deletePermanent" xml:space="preserve">
+    <value>Удалить безвозвратно</value>
+  </data>
+  <data name="Menu_file_rename" xml:space="preserve">
+    <value>Переименовать</value>
+  </data>
+  <data name="Menu_file_quickLook" xml:space="preserve">
+    <value>Быстрый просмотр</value>
+  </data>
+  <data name="Menu_file_properties" xml:space="preserve">
+    <value>Свойства</value>
+  </data>
+  <data name="Menu_panel_switch" xml:space="preserve">
+    <value>Сменить панель</value>
+  </data>
+  <data name="Menu_panel_refresh" xml:space="preserve">
+    <value>Обновить</value>
+  </data>
+  <data name="Menu_panel_swap" xml:space="preserve">
+    <value>Поменять панели местами</value>
+  </data>
+  <data name="Menu_panel_mirror" xml:space="preserve">
+    <value>Та же папка в другой панели</value>
+  </data>
+  <data name="Menu_nav_up" xml:space="preserve">
+    <value>Наверх</value>
+  </data>
+  <data name="Menu_nav_back" xml:space="preserve">
+    <value>Назад</value>
+  </data>
+  <data name="Menu_nav_forward" xml:space="preserve">
+    <value>Вперёд</value>
+  </data>
+  <data name="Menu_path_edit" xml:space="preserve">
+    <value>Перейти к папке…</value>
+  </data>
+  <data name="Menu_cmdline_focus" xml:space="preserve">
+    <value>Командная строка</value>
+  </data>
+  <data name="Menu_select_toggleDown" xml:space="preserve">
+    <value>Выделить и вниз</value>
+  </data>
+  <data name="Menu_select_all" xml:space="preserve">
+    <value>Выделить всё</value>
+  </data>
+  <data name="Menu_select_byMask" xml:space="preserve">
+    <value>Выделить по маске…</value>
+  </data>
+  <data name="Menu_unselect_byMask" xml:space="preserve">
+    <value>Снять выделение по маске…</value>
+  </data>
+  <data name="Menu_select_invert" xml:space="preserve">
+    <value>Обратить выделение</value>
+  </data>
+  <data name="Menu_tab_new" xml:space="preserve">
+    <value>Новая вкладка</value>
+  </data>
+  <data name="Menu_tab_close" xml:space="preserve">
+    <value>Закрыть вкладку</value>
+  </data>
+  <data name="Menu_tab_next" xml:space="preserve">
+    <value>Следующая вкладка</value>
+  </data>
+  <data name="Menu_tab_prev" xml:space="preserve">
+    <value>Предыдущая вкладка</value>
+  </data>
+  <data name="Menu_favorites_show" xml:space="preserve">
+    <value>Избранное…</value>
+  </data>
+  <data name="Menu_view_toggleHidden" xml:space="preserve">
+    <value>Скрытые файлы</value>
+  </data>
+  <data name="Menu_shell_reveal" xml:space="preserve">
+    <value>Показать в Finder</value>
+  </data>
+  <data name="Menu_shell_openTerminal" xml:space="preserve">
+    <value>Открыть в Терминале</value>
+  </data>
+  <data name="Menu_shell_openWith" xml:space="preserve">
+    <value>Открыть в программе…</value>
+  </data>
+
+  <!-- Main menu: View menu and favourites/history menus -->
+  <data name="Menu_Sidebar" xml:space="preserve">
+    <value>Боковая панель</value>
+  </data>
+  <data name="Menu_VolumeBars" xml:space="preserve">
+    <value>Строки томов</value>
+  </data>
+  <data name="Menu_CommandLine" xml:space="preserve">
+    <value>Командная строка</value>
+  </data>
+  <data name="Menu_FKeyBar" xml:space="preserve">
+    <value>Панель F-клавиш</value>
+  </data>
+  <data name="Menu_Language" xml:space="preserve">
+    <value>Язык</value>
+  </data>
+  <data name="Menu_LanguageSystem" xml:space="preserve">
+    <value>Как в системе</value>
+  </data>
+  <data name="Menu_LanguageRussian" xml:space="preserve">
+    <value>Русский</value>
+  </data>
+  <data name="Menu_LanguageEnglish" xml:space="preserve">
+    <value>English</value>
+  </data>
+  <data name="Menu_LanguageRestartNotice" xml:space="preserve">
+    <value>Новый язык будет применён после перезапуска Tandem.</value>
+  </data>
+  <data name="Menu_FavoritesAdd" xml:space="preserve">
+    <value>Добавить текущую папку</value>
+  </data>
+  <data name="Menu_FavoritesRemove" xml:space="preserve">
+    <value>Убрать текущую папку</value>
+  </data>
+  <data name="Menu_FavoritesEmpty" xml:space="preserve">
+    <value>Избранного пока нет</value>
+  </data>
+  <data name="Menu_HistoryEmpty" xml:space="preserve">
+    <value>История пуста</value>
+  </data>
+
+  <!-- Sidebar -->
+  <data name="Sidebar_Favorites" xml:space="preserve">
+    <value>Избранное</value>
+  </data>
+  <data name="Sidebar_Volumes" xml:space="preserve">
+    <value>Тома</value>
+  </data>
+
+  <!-- Main window parts; View_VolumeFree: {0} = free space, {1} = total size -->
+  <data name="View_VolumeFree" xml:space="preserve">
+    <value>свободно {0} из {1}</value>
+  </data>
+  <data name="View_Back" xml:space="preserve">
+    <value>Назад (правый щелчок — история)</value>
+  </data>
+  <data name="View_Forward" xml:space="preserve">
+    <value>Вперёд (правый щелчок — история)</value>
+  </data>
+  <data name="View_Favorites" xml:space="preserve">
+    <value>Избранное</value>
+  </data>
+
+  <!-- Path editor; {0} = the text typed -->
+  <data name="Path_Invalid" xml:space="preserve">
+    <value>«{0}» — не путь к папке</value>
+  </data>
+
+  <!-- Errors; {0} = the error message, {1} = the log file -->
+  <data name="Error_GrantAccess" xml:space="preserve">
+    <value>Разрешить доступ…</value>
+  </data>
+  <data name="Error_Title" xml:space="preserve">
+    <value>Непредвиденная ошибка</value>
+  </data>
+  <data name="Error_Unexpected" xml:space="preserve">
+    <value>Что-то пошло не так: {0}
+Подробности записаны в {1}. Tandem продолжает работу.</value>
+  </data>
+  <data name="Error_StartFailed" xml:space="preserve">
+    <value>Tandem не удалось запустить: {0}
+Подробности записаны в {1}.</value>
+  </data>
 </root>

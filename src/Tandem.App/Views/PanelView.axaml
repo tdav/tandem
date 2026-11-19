@@ -1,0 +1,158 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Tandem.App.ViewModels"
+             xmlns:v="using:Tandem.App.Views"
+             xmlns:loc="using:Tandem.App.Resources"
+             xmlns:platform="using:Tandem.Core.Platform"
+             xmlns:listing="using:Tandem.Core.Listing"
+             x:Class="Tandem.App.Views.PanelView"
+             x:DataType="vm:SideViewModel">
+    <UserControl.Styles>
+        <Style Selector="Border#PathRow">
+            <Setter Property="Background" Value="{DynamicResource Tandem.PathBackground}" />
+        </Style>
+        <Style Selector="Border#PathRow TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Tandem.PathForeground}" />
+        </Style>
+        <Style Selector="Border#PathRow.active">
+            <Setter Property="Background" Value="{DynamicResource Tandem.ActivePathBackground}" />
+        </Style>
+        <Style Selector="Border#PathRow.active TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Tandem.ActivePathForeground}" />
+        </Style>
+        <Style Selector="Grid#Headers Button">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="TextBlock#Status.error">
+            <Setter Property="Foreground" Value="{DynamicResource Tandem.ErrorForeground}" />
+        </Style>
+        <Style Selector="ListBox#TabStrip ListBoxItem">
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Padding" Value="10,3" />
+            <Setter Property="MinHeight" Value="0" />
+        </Style>
+        <Style Selector="ListBox#TabStrip ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource Tandem.TabActiveBackground}" />
+        </Style>
+    </UserControl.Styles>
+
+    <DockPanel>
+        <!-- Volumes, with the free space of the one holding this folder. -->
+        <Border x:Name="VolumeBar" DockPanel.Dock="Top" IsVisible="{Binding ShowVolumeBar}"
+                Background="{DynamicResource Tandem.BarBackground}">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Right" Classes="secondary" Text="{Binding VolumeText}"
+                           VerticalAlignment="Center" Margin="6,0" />
+                <ItemsControl x:Name="VolumeButtons" ItemsSource="{Binding Volumes}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="platform:VolumeInfo">
+                            <Button Classes="flat" Content="{Binding Name}" ToolTip.Tip="{Binding MountPoint}"
+                                    Command="{Binding $parent[v:PanelView].((vm:SideViewModel)DataContext).OpenVolumeCommand}"
+                                    CommandParameter="{Binding}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </DockPanel>
+        </Border>
+
+        <!-- Tabs. -->
+        <ListBox x:Name="TabStrip" DockPanel.Dock="Top" Focusable="False"
+                 ItemsSource="{Binding Tabs.Tabs}" SelectedItem="{Binding SelectedTab}"
+                 Background="{DynamicResource Tandem.BarBackground}">
+            <ListBox.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
+            <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:TabViewModel">
+                    <TextBlock Text="{Binding Title}" MaxWidth="180" TextTrimming="CharacterEllipsis" />
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <!-- Path row: back and forward (right click or long press: history), the path or its editor. -->
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,Auto,*">
+            <Button x:Name="BackButton" Classes="flat" Content="‹" InputElement.IsHoldWithMouseEnabled="True"
+                    ToolTip.Tip="{loc:Tr Key=View_Back}" Command="{Binding GoBackCommand}">
+                <Button.ContextFlyout>
+                    <MenuFlyout />
+                </Button.ContextFlyout>
+            </Button>
+            <Button x:Name="ForwardButton" Grid.Column="1" Classes="flat" Content="›" InputElement.IsHoldWithMouseEnabled="True"
+                    ToolTip.Tip="{loc:Tr Key=View_Forward}" Command="{Binding GoForwardCommand}">
+                <Button.ContextFlyout>
+                    <MenuFlyout />
+                </Button.ContextFlyout>
+            </Button>
+            <Border x:Name="PathRow" Grid.Column="2" Classes.active="{Binding IsActive}" Padding="6,2">
+                <Panel>
+                    <TextBlock x:Name="PathLabel" Text="{Binding Panel.CurrentPath.Path}" VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis" IsVisible="{Binding !IsEditingPath}" />
+                    <TextBox x:Name="PathEditor" Text="{Binding PathText}" IsVisible="{Binding IsEditingPath}"
+                             MinHeight="0" Padding="4,1" />
+                </Panel>
+            </Border>
+        </Grid>
+
+        <!-- Status row: selection, or why the folder cannot be shown. -->
+        <Border DockPanel.Dock="Bottom" Background="{DynamicResource Tandem.BarBackground}" Padding="6,2">
+            <DockPanel>
+                <!-- Placeholder: Task 22 connects it to the access request. -->
+                <Button x:Name="GrantAccess" DockPanel.Dock="Right" Classes="flat" IsEnabled="False"
+                        Content="{loc:Tr Key=Error_GrantAccess}" IsVisible="{Binding IsAccessDenied}" />
+                <TextBlock x:Name="Status" Text="{Binding StatusLine}" Classes.error="{Binding HasError}"
+                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+            </DockPanel>
+        </Border>
+
+        <!-- Column headers: a click sorts by the column, a second click reverses the order. -->
+        <Grid x:Name="Headers" DockPanel.Dock="Top" Background="{DynamicResource Tandem.HeaderBackground}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="{x:Static v:FileListColumns.Name}" />
+                <ColumnDefinition Width="{x:Static v:FileListColumns.Extension}" />
+                <ColumnDefinition Width="{x:Static v:FileListColumns.Size}" />
+                <ColumnDefinition Width="{x:Static v:FileListColumns.Date}" />
+                <ColumnDefinition Width="{x:Static v:FileListColumns.Mode}" />
+                <ColumnDefinition Width="14" />
+            </Grid.ColumnDefinitions>
+            <Button x:Name="SortByName" Classes="flat" Command="{Binding SortByCommand}"
+                    CommandParameter="{x:Static listing:SortColumn.Name}">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                    <TextBlock Text="{loc:Tr Key=Column_Name}" />
+                    <TextBlock Text="{Binding NameSortMark}" />
+                </StackPanel>
+            </Button>
+            <Button x:Name="SortByExtension" Grid.Column="1" Classes="flat" Command="{Binding SortByCommand}"
+                    CommandParameter="{x:Static listing:SortColumn.Extension}">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                    <TextBlock Text="{loc:Tr Key=Column_Ext}" />
+                    <TextBlock Text="{Binding ExtensionSortMark}" />
+                </StackPanel>
+            </Button>
+            <Button x:Name="SortBySize" Grid.Column="2" Classes="flat" Command="{Binding SortByCommand}"
+                    CommandParameter="{x:Static listing:SortColumn.Size}" HorizontalContentAlignment="Right">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                    <TextBlock Text="{loc:Tr Key=Column_Size}" />
+                    <TextBlock Text="{Binding SizeSortMark}" />
+                </StackPanel>
+            </Button>
+            <Button x:Name="SortByDate" Grid.Column="3" Classes="flat" Command="{Binding SortByCommand}"
+                    CommandParameter="{x:Static listing:SortColumn.Modified}">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                    <TextBlock Text="{loc:Tr Key=Column_Date}" />
+                    <TextBlock Text="{Binding DateSortMark}" />
+                </StackPanel>
+            </Button>
+            <TextBlock Grid.Column="4" Classes="secondary" Text="{loc:Tr Key=Column_Mode}"
+                       VerticalAlignment="Center" Margin="6,0,0,0" />
+        </Grid>
+
+        <v:FileListView x:Name="FileList" />
+    </DockPanel>
+</UserControl>

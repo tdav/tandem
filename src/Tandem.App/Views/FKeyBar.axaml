@@ -1,0 +1,31 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Tandem.App.ViewModels"
+             xmlns:v="using:Tandem.App.Views"
+             x:Class="Tandem.App.Views.FKeyBar"
+             x:DataType="vm:MainViewModel">
+    <!-- F3–F8: a click runs the key's command; a command not available yet shows disabled. -->
+    <Border Background="{DynamicResource Tandem.BarBackground}" BorderBrush="{DynamicResource Tandem.DividerBrush}"
+            BorderThickness="0,1,0,0">
+        <ItemsControl ItemsSource="{Binding FKeys}">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <UniformGrid Rows="1" />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:FKeyItem">
+                    <Button Classes="flat" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Tag="{Binding CommandId}"
+                            Command="{Binding $parent[v:FKeyBar].((vm:MainViewModel)DataContext).RunCommand}"
+                            CommandParameter="{Binding CommandId}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="{Binding Key}" FontWeight="Bold" />
+                            <TextBlock Text="{Binding Label}" />
+                        </StackPanel>
+                    </Button>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </Border>
+</UserControl>

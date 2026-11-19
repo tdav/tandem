@@ -12,10 +12,10 @@ public enum PanelSide { Left, Right }
 /// across restarts through a <see cref="JsonStateStore"/>.
 /// </summary>
 /// <remarks>
-/// Created and called on the UI thread. <see cref="LoadAsync"/> must complete before the sides or panels are used.
-/// After a change to the tabs, folders, sorting, favourites, view options or the active side, the state is saved
-/// <see cref="AutosaveDelay"/> later; changes in between are saved together, so saves happen at most once per
-/// delay. <see cref="Dispose"/> drops a pending save: the owner calls <see cref="Save"/> when the window closes.
+/// Created and called on the UI thread. <see cref="LoadAsync()"/> must complete before the sides or panels are used.
+/// After a change to the tabs, folders, sorting, favourites, view options, the language or the active side, the
+/// state is saved <see cref="AutosaveDelay"/> later; changes in between are saved together, so saves happen at most
+/// once per delay. <see cref="Dispose"/> drops a pending save: the owner calls <see cref="Save"/> when the window closes.
 /// </remarks>
 public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
 {
@@ -54,6 +54,9 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         Right.PropertyChanged += OnSidePropertyChanged;
         Favorites.Changed += (_, _) => ScheduleSave();
     }
+
+    /// <summary>The user's home folder, where tabs fall back to and where "~" points.</summary>
+    public string HomeDirectory => _homeDirectory;
 
     public PanelTabsViewModel Left { get; }
 
@@ -104,6 +107,17 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     /// <summary>The window placement to save: the loaded one until the window sets its own.</summary>
     public WindowState? Window { get; set; }
 
+    /// <summary>The interface language to use from the next start: "en", "ru", or null for the system language.
+    /// Changing it does not change the running app's language.</summary>
+    public string? Language
+    {
+        get => _language;
+        set
+        {
+            if (SetProperty(ref _language, value)) ScheduleSave();
+        }
+    }
+
     /// <summary>Why the last save failed; null after a successful one.</summary>
     [ObservableProperty]
     public partial IOException? LastSaveError { get; private set; }
@@ -136,6 +150,14 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         var store = _store;
         var home = _homeDirectory;
         var state = await Task.Run(() => store.Load(home));
+        await LoadAsync(state);
+    }
+
+    /// <summary>Opens <paramref name="state"/>, already read from the store (at start-up it is read once, to choose
+    /// the language before anything else); otherwise as <see cref="LoadAsync()"/>.</summary>
+    public async Task LoadAsync(AppState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
         if (_disposed) return;
 
         _restoring = true;
@@ -147,7 +169,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
             ShowHidden = state.ShowHidden;
             ActiveSide = state.LeftIsActive ? PanelSide.Left : PanelSide.Right;
             Window ??= state.Window; // the window may already have set a newer one
-            _language = state.Language;
+            Language = state.Language;
 
             var fallback = VfsPath.Local(_homeDirectory);
             await Task.WhenAll(Left.RestoreAsync(state.Left, fallback), Right.RestoreAsync(state.Right, fallback));
@@ -162,7 +184,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>Writes the current state now, replacing a pending automatic save. Does nothing before
-    /// <see cref="LoadAsync"/> has completed. Never throws for a failed write: it ends up in
+    /// <see cref="LoadAsync()"/> has completed. Never throws for a failed write: it ends up in
     /// <see cref="LastSaveError"/>.</summary>
     public void Save()
     {

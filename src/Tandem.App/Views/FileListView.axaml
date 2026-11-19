@@ -1,0 +1,71 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Tandem.App.ViewModels"
+             xmlns:v="using:Tandem.App.Views"
+             x:Class="Tandem.App.Views.FileListView"
+             x:DataType="vm:SideViewModel">
+    <UserControl.Styles>
+        <!-- Fixed row height: the virtualizing panel never measures rows one by one. -->
+        <Style Selector="ListBox#Rows ListBoxItem">
+            <Setter Property="Height" Value="{x:Static v:FileListColumns.RowHeight}" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Padding" Value="6,0" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <!-- The cursor: a filled row in the active panel, an outlined row in the other one. -->
+        <Style Selector="ListBox#Rows ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource Tandem.CursorBackground}" />
+        </Style>
+        <Style Selector="ListBox#Rows ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource Tandem.CursorBackground}" />
+        </Style>
+        <Style Selector="ListBox#Rows.inactive ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource Tandem.Transparent}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Tandem.CursorBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+        <!-- Marked rows: coloured text. -->
+        <Style Selector="Grid.marked TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Tandem.MarkedForeground}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style Selector="Grid.folder TextBlock.name">
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+    </UserControl.Styles>
+
+    <!-- The list's own selection is the cursor only (one way, from CursorIndex); marking is EntryRowViewModel.IsSelected.
+         Clicks and keys are handled before the list sees them. -->
+    <ListBox x:Name="Rows"
+             ItemsSource="{Binding Panel.Rows}"
+             SelectedIndex="{Binding Panel.CursorIndex, Mode=OneWay}"
+             SelectionMode="Single"
+             IsTextSearchEnabled="False"
+             AutoScrollToSelectedItem="True"
+             Classes.inactive="{Binding !IsActive}"
+             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+        <ListBox.ItemsPanel>
+            <ItemsPanelTemplate>
+                <VirtualizingStackPanel />
+            </ItemsPanelTemplate>
+        </ListBox.ItemsPanel>
+        <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:EntryRowViewModel">
+                <Grid Classes.marked="{Binding IsSelected}" Classes.folder="{Binding IsDirectoryLike}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="{x:Static v:FileListColumns.Name}" />
+                        <ColumnDefinition Width="{x:Static v:FileListColumns.Extension}" />
+                        <ColumnDefinition Width="{x:Static v:FileListColumns.Size}" />
+                        <ColumnDefinition Width="{x:Static v:FileListColumns.Date}" />
+                        <ColumnDefinition Width="{x:Static v:FileListColumns.Mode}" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Classes="name" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Column="1" Text="{Binding Extension}" TextTrimming="CharacterEllipsis" Margin="6,0,0,0" />
+                    <TextBlock Grid.Column="2" Text="{Binding SizeText}" TextAlignment="Right" Margin="0,0,8,0" />
+                    <TextBlock Grid.Column="3" Text="{Binding DateText}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Column="4" Text="{Binding ModeText}" />
+                </Grid>
+            </DataTemplate>
+        </ListBox.ItemTemplate>
+    </ListBox>
+</UserControl>

@@ -1,0 +1,38 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Tandem.App.ViewModels"
+             xmlns:v="using:Tandem.App.Views"
+             xmlns:loc="using:Tandem.App.Resources"
+             xmlns:platform="using:Tandem.Core.Platform"
+             x:Class="Tandem.App.Views.SidebarView"
+             x:DataType="vm:MainViewModel">
+    <Border Background="{DynamicResource Tandem.BarBackground}" BorderBrush="{DynamicResource Tandem.DividerBrush}"
+            BorderThickness="0,0,1,0">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+            <StackPanel>
+                <TextBlock Classes="caption" Text="{loc:Tr Key=Sidebar_Favorites}" />
+                <ItemsControl x:Name="FavoriteItems" ItemsSource="{Binding Workspace.Favorites.Items}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="x:String">
+                            <Button Classes="flat" HorizontalAlignment="Stretch" Content="{Binding}" ToolTip.Tip="{Binding}"
+                                    Command="{Binding $parent[v:SidebarView].((vm:MainViewModel)DataContext).OpenFavoriteCommand}"
+                                    CommandParameter="{Binding}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <TextBlock Classes="caption" Text="{loc:Tr Key=Sidebar_Volumes}" />
+                <ItemsControl x:Name="VolumeItems" ItemsSource="{Binding Volumes}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="platform:VolumeInfo">
+                            <Button Classes="flat" HorizontalAlignment="Stretch" Content="{Binding Name}"
+                                    ToolTip.Tip="{Binding MountPoint}"
+                                    Command="{Binding $parent[v:SidebarView].((vm:MainViewModel)DataContext).OpenVolumeCommand}"
+                                    CommandParameter="{Binding}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </ScrollViewer>
+    </Border>
+</UserControl>

@@ -1,0 +1,241 @@
+using Avalonia.Headless.XUnit;
+using Avalonia.Input;
+using Tandem.App.Commands;
+using Tandem.App.Resources;
+using Tandem.App.Services;
+using Tandem.App.Tests.Views;
+using Tandem.App.ViewModels;
+using Tandem.Core.Platform;
+using Tandem.Core.Settings;
+using Tandem.Core.Vfs;
+
+namespace Tandem.App.Tests.ViewModels;
+
+[Collection(LanguageCollection.Name)]
+public class MainViewModelTests : LanguageTestBase
+{
+    [AvaloniaFact]
+    public async Task Start_applies_the_saved_language_before_building()
+    {
+        await using var app = await TestApp.StartAsync(
+            state: AppState.Default(TestApp.Home) with { Language = "ru" }, show: false);
+
+        Assert.Equal("ru", Loc.Language);
+        Assert.Equal("ru", app.Main.Workspace.Language);
+        Assert.Equal("Копия", app.Main.FKeys[2].Label); // view-model text was made in the saved language
+    }
+
+    [AvaloniaFact]
+    public async Task Registers_this_tasks_commands_only()
+    {
+        await using var app = await TestApp.StartAsync(show: false);
+        string[] registered =
+        [
+            CommandIds.PanelSwitch, CommandIds.PanelRefresh, CommandIds.PanelSwap, CommandIds.PanelMirror,
+            CommandIds.NavUp, CommandIds.NavBack, CommandIds.NavForward, CommandIds.PathEdit, CommandIds.CmdlineFocus,
+            CommandIds.SelectToggleDown, CommandIds.SelectAll, CommandIds.SelectInvert, CommandIds.TabNew,
+            CommandIds.TabClose, CommandIds.TabNext, CommandIds.TabPrev, CommandIds.FavoritesShow,
+            CommandIds.ViewToggleHidden,
+        ];
+
+        foreach (var id in CommandIds.All)
+            Assert.Equal(registered.Contains(id), app.Main.Commands.CanExecute(id));
+    }
+
+    [AvaloniaFact]
+    public async Task Unknown_or_unregistered_chords_are_not_handled()
+    {
+        await using var app = await TestApp.StartAsync(show: false);
+
+        Assert.False(await app.Main.HandleKeyAsync(KeyChord.Parse("Cmd+J")));
+        Assert.False(await app.Main.HandleKeyAsync(KeyChord.Parse("F5"))); // file.copy comes later
+        Assert.True(await app.Main.HandleKeyAsync(KeyChord.Parse("Tab")));
+    }
+
+    [AvaloniaFact]
+    public async Task A_failing_command_is_reported_not_thrown()
+    {
+        await using var app = await TestApp.StartAsync(show: false);
+        var failure = new InvalidOperationException("boom");
+        app.Main.Commands.Register(CommandIds.PanelRefresh, () => throw failure);
+
+        Assert.True(await app.Main.HandleKeyAsync(KeyChord.Parse("Cmd+R")));
+        await app.Main.ExecuteCommandAsync(CommandIds.PanelRefresh);
+
+        Assert.Equal([failure, failure], app.Failures);
+    }
+
+    [AvaloniaFact]
+    public async Task Quick_search_ignores_blank_and_control_text()
+    {
+        await using var app = await TestApp.StartAsync(show: false);
+
+        Assert.False(app.Main.HandleTextInput(" "));
+        Assert.False(app.Main.HandleTextInput("\r"));
+        Assert.True(app.Main.HandleTextInput("no"));
+        Assert.Equal("notes.txt", app.Left.CursorRow?.Name);
+    }
+
+    [AvaloniaFact]
+    public async Task Volume_changes_are_posted_to_the_ui_and_ignored_after_dispose()
+    {
+        await using var app = await TestApp.StartAsync(show: false);
+        await TestApp.WaitUntil(() => app.Main.Volumes.Count == 1);
+        Assert.Equal(1, app.Volumes.HandlerCount);
+        var main = app.Main;
+        var notified = 0;
+        main.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainViewModel.Volumes)) notified++;
+        };
+
+        main.Dispose();
+        Assert.Equal(0, app.Volumes.HandlerCount);
+        var reads = app.Volumes.Reads;
+        await app.Volumes.ChangeAsync([]);
+        await Task.Delay(100);
+
+        Assert.Single(main.Volumes);
+        Assert.Equal(0, notified);
+        Assert.Equal(reads, app.Volumes.Reads);
+    }
+
+    [AvaloniaFact]
+    public async Task Free_space_of_the_volume_holding_the_folder_is_shown()
+    {
+        await using var app = await TestApp.StartAsync(show: false);
+        await app.Volumes.ChangeAsync(
+        [
+            new VolumeInfo("Macintosh HD", "/", 2048L * 1024 * 1024, 1024L * 1024 * 1024, false),
+            new VolumeInfo("Other", "/other", 100, 40, true),
+        ]);
+        await TestApp.WaitUntil(() => app.Main.Volumes.Count == 2);
+
+        Assert.Equal("1.0 GB free of 2.0 GB", app.Main.Left.VolumeText);
+        await app.Left.NavigateToAsync(VfsPath.Local("/other"));
+        Assert.Equal("40 B free of 100 B", app.Main.Left.VolumeText);
+    }
+
+    [AvaloniaFact]
+    public async Task Language_choice_is_saved_and_needs_a_restart()
+    {
+        await using var app = await TestApp.StartAsync(show: false);
+        var notices = new List<string>();
+        app.Main.NoticeRequested += (_, text) => notices.Add(text);
+
+        app.Main.SetLanguage("ru");
+
+        Assert.Equal("ru", app.Main.Workspace.Language);
+        Assert.Equal("en", Loc.Language); // the running app keeps its language
+        Assert.Equal([Loc.Get("Menu_LanguageRestartNotice")], notices);
+        app.Main.Workspace.Save();
+        Assert.Equal("ru", new JsonStateStore(app.StateDirectory).Load(TestApp.Home).Language);
+
+        app.Main.SetLanguage(null);
+        Assert.Null(app.Main.Workspace.Language);
+    }
+
+    [AvaloniaFact]
+    public async Task Favorites_add_and_remove_the_current_folder()
+    {
+        await using var app = await TestApp.StartAsync(show: false);
+
+        app.Main.AddCurrentToFavorites();
+        Assert.Equal(["/home"], app.Main.Workspace.Favorites.Items);
+        Assert.True(app.Main.IsCurrentFavorite);
+
+        await app.Main.OpenFavoriteAsync("/other");
+        Assert.Equal("/other", app.Left.CurrentPath.Path);
+        Assert.False(app.Main.IsCurrentFavorite);
+        await app.Main.OpenFavoriteAsync("/home");
+        app.Main.RemoveCurrentFromFavorites();
+        Assert.Empty(app.Main.Workspace.Favorites.Items);
+    }
+
+    [AvaloniaFact]
+    public async Task Tab_and_view_commands_act_on_the_workspace()
+    {
+        await using var app = await TestApp.StartAsync(show: false);
+
+        await app.Main.HandleKeyAsync(KeyChord.Parse("Cmd+T"));
+        Assert.Equal(2, app.Main.Workspace.Left.Tabs.Count);
+        await app.Main.HandleKeyAsync(KeyChord.Parse("Cmd+W"));
+        Assert.Single(app.Main.Workspace.Left.Tabs);
+
+        await app.Main.HandleKeyAsync(KeyChord.Parse("Cmd+Shift+OemPeriod"));
+        Assert.True(app.Main.Workspace.ShowHidden);
+
+        await app.Main.HandleKeyAsync(KeyChord.Parse("Cmd+A"));
+        Assert.Equal(app.Left.TotalCount, app.Left.SelectedCount);
+        await app.Main.HandleKeyAsync(KeyChord.Parse("Shift+Cmd+A"));
+        Assert.Equal(0, app.Left.SelectedCount);
+    }
+
+    [AvaloniaFact]
+    public async Task Choosing_a_tab_activates_it_and_its_side()
+    {
+        await using var app = await TestApp.StartAsync(show: false);
+        await app.Main.Workspace.Right.NewTabAsync();
+        var first = app.Main.Workspace.Right.Tabs[0];
+
+        app.Main.Right.SelectedTab = first;
+
+        Assert.Same(first, app.Main.Workspace.Right.Active);
+        Assert.Equal(PanelSide.Right, app.Main.Workspace.ActiveSide);
+        Assert.Same(first.Panel, app.Main.Right.Panel);
+
+        app.Main.Right.SelectedTab = null; // what the tab strip pushes while its items are replaced
+        Assert.Same(first, app.Main.Workspace.Right.Active);
+    }
+
+    [AvaloniaFact]
+    public async Task Escape_and_backspace_edit_a_running_quick_search()
+    {
+        await using var app = await TestApp.StartAsync(show: false);
+        app.Main.HandleTextInput("rep");
+
+        Assert.True(await app.Main.HandleKeyAsync(new KeyChord(Key.Back, KeyModifiers.None)));
+        Assert.Equal("re", app.Left.QuickSearchText);
+        Assert.Equal("/home", app.Left.CurrentPath.Path); // Backspace edited the search, it did not go up
+        Assert.True(await app.Main.HandleKeyAsync(new KeyChord(Key.Escape, KeyModifiers.None)));
+        Assert.Equal("", app.Left.QuickSearchText);
+    }
+
+    [AvaloniaFact]
+    public async Task Every_command_has_a_menu_label_in_both_languages()
+    {
+        foreach (var language in new[] { "en", "ru" })
+        {
+            Loc.SetLanguage(language);
+            foreach (var id in CommandIds.All)
+            {
+                var key = Tandem.App.Views.MainMenu.LabelKey(id);
+                Assert.NotEqual(key, Loc.Get(key));
+            }
+        }
+        await Task.CompletedTask;
+    }
+
+    [Fact]
+    public void Error_log_never_throws()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "tandem-log-tests-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var log = new ErrorLog(Path.Combine(directory, "logs", "tandem.log"));
+            log.Write(new InvalidOperationException("first failure"));
+            var text = File.ReadAllText(Path.Combine(directory, "logs", "tandem.log"));
+            Assert.Contains("first failure", text);
+            Assert.Contains(nameof(InvalidOperationException), text);
+
+            // A path that cannot be a file: writing fails inside, silently.
+            Directory.CreateDirectory(Path.Combine(directory, "dir.log"));
+            new ErrorLog(Path.Combine(directory, "dir.log")).Write(new InvalidOperationException("lost"));
+            new ErrorLog("\0bad").Write(new InvalidOperationException("lost"));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+}

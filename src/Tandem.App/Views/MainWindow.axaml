@@ -1,0 +1,35 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Tandem.App.ViewModels"
+        xmlns:v="using:Tandem.App.Views"
+        x:Class="Tandem.App.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Title="Tandem"
+        MinWidth="640" MinHeight="400">
+    <!-- Top to bottom: the two panels (with the sidebar on the left), the command line, the F-key bar. -->
+    <DockPanel>
+        <v:FKeyBar x:Name="FKeyBar" DockPanel.Dock="Bottom" IsVisible="{Binding Workspace.View.FKeyBar}" />
+
+        <!-- The command line: only the field for now; running commands comes with Task 24. -->
+        <Border x:Name="CommandLine" DockPanel.Dock="Bottom" IsVisible="{Binding Workspace.View.CommandLine}"
+                Background="{DynamicResource Tandem.BarBackground}" BorderBrush="{DynamicResource Tandem.DividerBrush}"
+                BorderThickness="0,1,0,0" Padding="6,3">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Left" Classes="secondary" VerticalAlignment="Center" Margin="0,0,6,0"
+                           MaxWidth="360" TextTrimming="LeadingCharacterEllipsis"
+                           Text="{Binding ActiveSide.Panel.CurrentPath.Path, StringFormat='{}{0}&gt;'}" />
+                <TextBox x:Name="CommandLineBox" MinHeight="0" Padding="4,1" />
+            </DockPanel>
+        </Border>
+
+        <Grid ColumnDefinitions="Auto,*">
+            <v:SidebarView x:Name="Sidebar" Width="200" IsVisible="{Binding Workspace.View.Sidebar}" />
+            <Grid x:Name="Panels" Grid.Column="1" ColumnDefinitions="*,4,*">
+                <v:PanelView x:Name="LeftPanel" DataContext="{Binding Left}" />
+                <GridSplitter x:Name="Splitter" Grid.Column="1" ResizeDirection="Columns"
+                              Background="{DynamicResource Tandem.DividerBrush}" />
+                <v:PanelView x:Name="RightPanel" Grid.Column="2" DataContext="{Binding Right}" />
+            </Grid>
+        </Grid>
+    </DockPanel>
+</Window>

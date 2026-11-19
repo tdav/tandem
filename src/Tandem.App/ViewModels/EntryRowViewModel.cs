@@ -33,6 +33,7 @@ public sealed partial class EntryRowViewModel : ObservableObject
         IsParentLink = true;
         _name = ParentLinkName;
         _extension = "";
+        _sizeText = "";
         _dateText = "";
         _modeText = "";
     }
@@ -53,7 +54,7 @@ public sealed partial class EntryRowViewModel : ObservableObject
 
     public string Extension => _extension ??= Entry!.Extension;
 
-    /// <summary>The size for files; the word "Folder" for directory-like rows, ".." included.</summary>
+    /// <summary>The size for files; the word "Folder" for folders and links to folders; empty for "..".</summary>
     public string SizeText => _sizeText ??= IsDirectoryLike ? Loc.Get("Panel_Folder") : SizeFormatter.Format(Entry!.Size);
 
     /// <summary>The modification time as short date and time in the current language; empty for "..".</summary>
