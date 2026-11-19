@@ -214,6 +214,48 @@ public class DialogOperationInteractionTests : LanguageTestBase
         Assert.False(interaction.WasAbortedByUser(new IOException("never asked")));
     }
 
+    /// <summary>Shows an error dialog until its token closes it, then answers Abort, as the real dialog closed by
+    /// its token does.</summary>
+    private sealed class ClosedByTokenDialogs : ScriptedDialogs
+    {
+        public TaskCompletionSource Shown { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Returned { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public override async Task<ErrorAction> AskErrorAsync(VfsPath item, string message, string? detail,
+            CancellationToken ct)
+        {
+            Shown.TrySetResult();
+            try
+            {
+                await Task.Delay(Timeout.Infinite, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                // the dialog was closed by its token
+            }
+            Returned.TrySetResult();
+            return ErrorAction.Abort;
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task An_abort_from_a_dialog_closed_by_its_token_is_not_the_users()
+    {
+        var dialogs = new ClosedByTokenDialogs();
+        var interaction = new DialogOperationInteraction(dialogs);
+        using var cts = new CancellationTokenSource();
+        var error = new IOException("x");
+        var asked = Task.Run(() => interaction.ResolveErrorAsync(VfsPath.Local("/a"), error, cts.Token));
+        await dialogs.Shown.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        await cts.CancelAsync();
+
+        Assert.Equal(ErrorAction.Abort, await asked.WaitAsync(TimeSpan.FromSeconds(5)));
+        await dialogs.Returned.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await Task.Delay(50); // let the dialog's continuation run on the UI thread
+        Assert.False(interaction.WasAbortedByUser(error));
+    }
+
     [AvaloniaFact]
     public async Task A_failing_dialog_aborts_instead_of_hanging_and_is_reported()
     {

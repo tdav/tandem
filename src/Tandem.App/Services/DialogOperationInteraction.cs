@@ -45,7 +45,9 @@ public sealed class DialogOperationInteraction : IOperationInteraction
         AskAsync(ct, ErrorAction.Abort, async token =>
         {
             var action = await _dialogs.AskErrorAsync(item, OperationTexts.ForError(item, error), error.Message, token);
-            if (action == ErrorAction.Abort) _userAborts.AddOrUpdate(error, error);
+            // A dialog closed by its token (operation cancelled, window closing) answers Abort too; that is not
+            // the user's choice, so the failure must still be reported.
+            if (action == ErrorAction.Abort && !token.IsCancellationRequested) _userAborts.AddOrUpdate(error, error);
             return action;
         });
 
