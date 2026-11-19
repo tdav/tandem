@@ -66,6 +66,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         RegisterCommands();
         Files = new FileCommands(workspace, services.Providers, services.Operations, services.Dialogs, services.Trash,
             services.NativeCopy, Commands, Operations, Interaction, ReportFailure);
+        Drops = new DropHandler(workspace, Files);
         Shell = new ShellCommands(workspace, services.Shell, services.QuickLook, services.Dialogs, Commands,
             services.Providers, services.Metadata, ReportFailure, quickLookDelay);
         Commands.RaiseCanExecuteChanged();
@@ -88,6 +89,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     /// <summary>Copy, move, new folder, delete, rename and marking by mask.</summary>
     public FileCommands Files { get; }
+
+    /// <summary>Drag and drop of files onto the panels, through the copy/move dialog.</summary>
+    public DropHandler Drops { get; }
 
     /// <summary>Opening files, Quick Look, Reveal in Finder, the terminal, "Open With" and the properties dialog.</summary>
     public ShellCommands Shell { get; }

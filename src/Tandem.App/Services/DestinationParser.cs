@@ -19,12 +19,12 @@ public sealed record DestinationParseResult(DestinationTarget? Target, string? E
 
 /// <summary>
 /// Turns the text typed in the copy/move dialog into a destination folder and an optional new name. The text always
-/// refers to the passive panel's source.
+/// refers to the source (provider) of the destination: the passive panel for F5/F6, the panel dropped on for a drop.
 /// <list type="bullet">
 /// <item>Empty or only spaces: an error. Other spaces are kept: they are legal in names.</item>
 /// <item>"~" and "~/…" mean the home folder, on the local disk only.</item>
-/// <item>An absolute path is taken as it is; a relative one starts at the active panel's folder (only when both panels
-/// show the same source). "." and ".." are resolved; going above the root is an error.</item>
+/// <item>An absolute path is taken as it is; a relative one starts at the items' folder (the active panel's for F5/F6;
+/// only when it is on the destination's source). "." and ".." are resolved; going above the root is an error.</item>
 /// <item>Ending in "/" (or the root): that folder, created if it does not exist.</item>
 /// <item>An existing folder: that folder, the items keep their names. With one item whose own name is the last
 /// segment, the item goes into the parent under its own name instead (so "/dst/docs" for the folder "docs" merges
@@ -35,17 +35,19 @@ public sealed record DestinationParseResult(DestinationTarget? Target, string? E
 /// </summary>
 public static class DestinationParser
 {
-    /// <param name="probe">What exists at a path in the passive panel's source; called off the UI thread is not
+    /// <param name="baseDirectory">Where a relative path starts: the folder of the items.</param>
+    /// <param name="destinationDirectory">The proposed destination; its provider is the one the text refers to.</param>
+    /// <param name="probe">What exists at a path in the destination's source; called off the UI thread is not
     /// required. Its failures become an error result.</param>
-    public static async Task<DestinationParseResult> ParseAsync(string text, VfsPath activeDirectory,
-        VfsPath passiveDirectory, int itemCount, string? singleName, string homeDirectory,
+    public static async Task<DestinationParseResult> ParseAsync(string text, VfsPath baseDirectory,
+        VfsPath destinationDirectory, int itemCount, string? singleName, string homeDirectory,
         Func<VfsPath, CancellationToken, Task<DestinationKind>> probe, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(text);
         ArgumentNullException.ThrowIfNull(probe);
         if (string.IsNullOrWhiteSpace(text)) return DestinationParseResult.Fail(Loc.Get("Destination_Empty"));
 
-        var providerId = passiveDirectory.ProviderId;
+        var providerId = destinationDirectory.ProviderId;
         var expanded = text;
         if (providerId == VfsPath.LocalProviderId && (text == "~" || text.StartsWith("~/", StringComparison.Ordinal)))
             expanded = homeDirectory.TrimEnd('/') + text[1..];
@@ -57,9 +59,9 @@ public static class DestinationParser
         }
         else
         {
-            if (activeDirectory.ProviderId != providerId)
+            if (baseDirectory.ProviderId != providerId)
                 return DestinationParseResult.Fail(Loc.Get("Destination_RelativeOtherSource"));
-            raw = activeDirectory.Path.TrimEnd('/') + "/" + expanded;
+            raw = baseDirectory.Path.TrimEnd('/') + "/" + expanded;
         }
 
         VfsPath path;

@@ -182,6 +182,37 @@ public sealed partial class SideViewModel : ObservableObject
         return _panel is null ? [] : ContextMenuModel.ForEmptySpace(_main);
     }
 
+    /// <summary>What a drop at row <paramref name="rowIndex"/> (or below the rows, -1) would go into, when the
+    /// dragged <paramref name="localPaths"/> may be dropped there; null otherwise.</summary>
+    public DropTarget? DropTargetFor(IReadOnlyList<string> localPaths, int rowIndex) =>
+        _panel is { } panel && DropHandler.TargetAt(panel, rowIndex) is { } target &&
+        _main.Drops.CanDrop(localPaths, Side, target.Directory)
+            ? target
+            : null;
+
+    /// <summary>Files dropped on this side into <paramref name="target"/>: the copy or move dialog, then the
+    /// operation; this side becomes active once the user accepts. An unexpected failure is reported, not
+    /// thrown.</summary>
+    public async Task DropAsync(IReadOnlyList<string> localPaths, DropTarget target, bool move)
+    {
+        try
+        {
+            await _main.Drops.DropAsync(localPaths, Side, target.Directory, move);
+        }
+        catch (Exception e)
+        {
+            _main.ReportFailure(e);
+        }
+    }
+
+    /// <summary>The items a drag starting on row <paramref name="rowIndex"/> carries (see
+    /// <see cref="DropHandler.DragItems"/>).</summary>
+    public IReadOnlyList<FileEntry> DragItems(int rowIndex) =>
+        _panel is { } panel ? DropHandler.DragItems(panel, rowIndex) : [];
+
+    /// <summary>An unexpected failure in this side's view (e.g. starting a drag): logged and told, not thrown.</summary>
+    internal void ReportFailure(Exception error) => _main.ReportFailure(error);
+
     /// <summary>The access-denied button: opens the system's Full Disk Access settings.</summary>
     [RelayCommand]
     private void OpenAccessSettings() => _main.Shell.OpenAccessSettings();

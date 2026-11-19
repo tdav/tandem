@@ -3,21 +3,49 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Tandem.App.Input;
 using Tandem.App.ViewModels;
+using Tandem.Core.Vfs;
 
 namespace Tandem.App.Views;
 
 /// <summary>The rows of one panel. Mouse: a click moves the cursor and activates the side, Cmd+click toggles the
 /// row's mark, a double click opens the row, a right click moves the cursor there and opens the row's context menu;
-/// a right click below the rows opens the folder's context menu and leaves the cursor alone.</summary>
+/// a right click below the rows opens the folder's context menu and leaves the cursor alone.
+/// Drag and drop: pressing a row of a local panel and moving past a few pixels drags its items (the marked ones when
+/// the row is marked) to the other panel or to Finder, offering copy and move; files dragged onto the list from
+/// Finder or the other panel go, through the copy/move dialog, into the folder row under the pointer or the panel's
+/// folder (Cmd held: move). The target is highlighted while the drag is over it.</summary>
 public partial class FileListView : UserControl
 {
+    private const string DropTargetClass = "dropTarget";
+
+    private readonly DragGesture _gesture = new();
+    private PointerPressedEventArgs? _pressed;
+    private int _pressedIndex = -1;
+    private Control? _highlightedRow;
+    private IDataTransfer? _draggedData;
+    private IReadOnlyList<string>? _draggedPaths;
+
     public FileListView()
     {
         InitializeComponent();
+        DragStarter = StartSystemDragAsync;
         Rows.AddHandler(PointerPressedEvent, OnPointerPressed, RoutingStrategies.Tunnel);
+        Rows.AddHandler(PointerMovedEvent, OnPointerMoved, RoutingStrategies.Tunnel, handledEventsToo: true);
+        Rows.AddHandler(PointerReleasedEvent, (_, _) => _gesture.Release(), RoutingStrategies.Tunnel,
+            handledEventsToo: true);
+        Rows.AddHandler(PointerCaptureLostEvent, (_, _) =>
+        {
+            if (!_gesture.IsDragging) _gesture.Cancel();
+        }, RoutingStrategies.Bubble, handledEventsToo: true);
+        Rows.AddHandler(DragDrop.DragEnterEvent, OnDragOver);
+        Rows.AddHandler(DragDrop.DragOverEvent, OnDragOver);
+        Rows.AddHandler(DragDrop.DragLeaveEvent, OnDragLeave);
+        Rows.AddHandler(DragDrop.DropEvent, OnDrop);
         // The highlight only ever changes through the panel's cursor; keep the focused row on it as well.
         // When the rows are replaced the focused row may be recycled and the focus lost; it then returns to the
         // cursor's row (for the active side), so no key can fall through to the window's focus navigation.
@@ -33,6 +61,10 @@ public partial class FileListView : UserControl
         Rows.SizeChanged += (_, e) => PageSizeChanged?.Invoke(this,
             Math.Max(1, (int)(e.NewSize.Height / FileListColumns.RowHeightValue) - 1));
     }
+
+    /// <summary>Hands the dragged items to the system's drag and drop, for the press that started it; tests replace
+    /// it, as a real drag cannot run headless.</summary>
+    public Func<PointerPressedEventArgs, IReadOnlyList<FileEntry>, Task> DragStarter { get; set; }
 
     /// <summary>The context menu open now, if any; for tests.</summary>
     public ContextMenu? OpenMenu { get; private set; }
@@ -93,6 +125,7 @@ public partial class FileListView : UserControl
         if (DataContext is not SideViewModel side) return;
         // Clicks inside the rename editor belong to it (caret, selection).
         if ((e.Source as Visual)?.FindAncestorOfType<TextBox>(includeSelf: true) is not null) return;
+        _gesture.Cancel(); // only a plain single press on a row below may start a drag
         var point = e.GetCurrentPoint(Rows);
         var item = (e.Source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true);
         var index = item is null ? -1 : Rows.IndexFromContainer(item);
@@ -129,7 +162,155 @@ public partial class FileListView : UserControl
                 _ = side.OpenRowAsync(index);
             else
                 side.ClickRow(index, toggleMark: cmd);
+            // A plain single press may become a drag; Cmd+click and double clicks stay what they were.
+            if (e.ClickCount == 1 && !cmd)
+            {
+                _gesture.Press(point.Position);
+                _pressed = e;
+                _pressedIndex = index;
+            }
         }
         FocusList();
+    }
+
+    // ---- Dragging out --------------------------------------------------------------------------------------
+
+    private void OnPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (!_gesture.IsPressed || _gesture.IsDragging) return;
+        var point = e.GetCurrentPoint(Rows);
+        if (!point.Properties.IsLeftButtonPressed)
+        {
+            _gesture.Cancel(); // the release happened somewhere we did not see
+            return;
+        }
+        if (!_gesture.Move(point.Position) || _pressed is not { } pressed || DataContext is not SideViewModel side)
+            return;
+        var items = side.DragItems(_pressedIndex);
+        if (items.Count == 0)
+        {
+            _gesture.Cancel();
+            return;
+        }
+        _ = RunDragAsync(side, pressed, items);
+    }
+
+    private async Task RunDragAsync(SideViewModel side, PointerPressedEventArgs pressed, IReadOnlyList<FileEntry> items)
+    {
+        try
+        {
+            await DragStarter(pressed, items);
+        }
+        catch (Exception e)
+        {
+            side.ReportFailure(e);
+        }
+        finally
+        {
+            _gesture.Cancel();
+            if (ReferenceEquals(_pressed, pressed)) _pressed = null;
+        }
+    }
+
+    /// <summary>The items as files and folders of the system's drag, copy or move as the target chooses; what
+    /// Finder then does with them is Finder's business.</summary>
+    private async Task StartSystemDragAsync(PointerPressedEventArgs pressed, IReadOnlyList<FileEntry> items)
+    {
+        if (TopLevel.GetTopLevel(this)?.StorageProvider is not { } storage) return;
+        var data = new DataTransfer();
+        foreach (var entry in items)
+        {
+            var path = entry.Path.Path;
+            IStorageItem? item = entry.IsDirectoryLike
+                ? await storage.TryGetFolderFromPathAsync(path)
+                : await storage.TryGetFileFromPathAsync(path);
+            if (item is null) return; // gone meanwhile: no drag
+            data.Add(DataTransferItem.CreateFile(item));
+        }
+        if (!_gesture.IsDragging) return; // released while the items were looked up
+        await DragDrop.DoDragDropAsync(pressed, data, DragDropEffects.Copy | DragDropEffects.Move);
+    }
+
+    // ---- Dropping in ---------------------------------------------------------------------------------------
+
+    /// <summary>The local paths of the files dragged; null when anything dragged is not a local file or folder.
+    /// Read once per drag.</summary>
+    private IReadOnlyList<string>? DraggedPaths(IDataTransfer data)
+    {
+        if (ReferenceEquals(data, _draggedData)) return _draggedPaths;
+        _draggedData = data;
+        _draggedPaths = LocalPathsOf(data);
+        return _draggedPaths;
+    }
+
+    /// <summary>The local paths of every item of <paramref name="data"/>; null when there is none, or any item is not
+    /// a file or folder with a local path (a web link, text, a file promise).</summary>
+    public static IReadOnlyList<string>? LocalPathsOf(IDataTransfer data)
+    {
+        ArgumentNullException.ThrowIfNull(data);
+        var items = data.Items;
+        if (items.Count == 0) return null;
+        var paths = new List<string>(items.Count);
+        foreach (var item in items)
+        {
+            if (!item.Contains(DataFormat.File) || item.TryGetFile()?.TryGetLocalPath() is not { Length: > 0 } path)
+                return null;
+            paths.Add(path);
+        }
+        return paths;
+    }
+
+    /// <summary>Where a drop with these event arguments would go and with which effect: Cmd held moves, otherwise
+    /// copies (when the source allows it); no effect when the drop is not allowed there.</summary>
+    private (IReadOnlyList<string> Paths, DropTarget Target, DragDropEffects Effect)? Evaluate(DragEventArgs e)
+    {
+        if (DataContext is not SideViewModel side || DraggedPaths(e.DataTransfer) is not { } paths) return null;
+        var item = (e.Source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true);
+        var index = item is null ? -1 : Rows.IndexFromContainer(item);
+        if (side.DropTargetFor(paths, index) is not { } target) return null;
+        var wanted = e.KeyModifiers.HasFlag(KeyModifiers.Meta) ? DragDropEffects.Move : DragDropEffects.Copy;
+        return (e.DragEffects & wanted) == 0 ? null : (paths, target, wanted);
+    }
+
+    private void OnDragOver(object? sender, DragEventArgs e)
+    {
+        var drop = Evaluate(e);
+        e.DragEffects = drop?.Effect ?? DragDropEffects.None;
+        e.Handled = true;
+        Highlight(drop?.Target);
+    }
+
+    private void OnDragLeave(object? sender, DragEventArgs e)
+    {
+        Highlight(null);
+        _draggedData = null;
+        _draggedPaths = null;
+    }
+
+    private void OnDrop(object? sender, DragEventArgs e)
+    {
+        var drop = Evaluate(e);
+        Highlight(null);
+        _draggedData = null;
+        _draggedPaths = null;
+        e.DragEffects = drop?.Effect ?? DragDropEffects.None;
+        e.Handled = true;
+        if (drop is not { } accepted || DataContext is not SideViewModel side) return;
+        // The dialog opens after the system's drop has returned, never inside it.
+        Dispatcher.UIThread.Post(() => _ = side.DropAsync(accepted.Paths, accepted.Target,
+            accepted.Effect == DragDropEffects.Move));
+    }
+
+    /// <summary>Highlights the target's folder row, or the whole list for the panel's own folder; null clears.</summary>
+    private void Highlight(DropTarget? target)
+    {
+        var row = target?.RowIndex is { } index ? Rows.ContainerFromIndex(index) : null;
+        if (!ReferenceEquals(row, _highlightedRow))
+        {
+            _highlightedRow?.Classes.Remove(DropTargetClass);
+            row?.Classes.Add(DropTargetClass);
+            _highlightedRow = row;
+        }
+        Rows.Classes.Set(DropTargetClass, target is { RowIndex: null });
     }
 }

@@ -17,7 +17,8 @@ namespace Tandem.App.ViewModels;
 /// <remarks>
 /// Created and used on the UI thread. What the commands apply to is <see cref="PanelViewModel.GetOperationTargets"/>
 /// of the active panel; nothing to apply to (the cursor on "..", an empty folder) disables them. Copy and move go to
-/// the passive panel's source and are disabled while that panel shows no folder or an error.
+/// the passive panel's source and are disabled while that panel shows no folder or an error. Drag and drop goes through
+/// the same copy/move flow (<see cref="CopyOrMoveAsync(IReadOnlyList{VfsPath}, VfsPath, bool)"/>).
 /// <see cref="CommandRegistry.RaiseCanExecuteChanged"/> is raised only when one of these commands' availability
 /// actually changes.
 /// </remarks>
@@ -121,8 +122,7 @@ public sealed class FileCommands : IDisposable
 
     private PanelViewModel? Passive => _workspace.IsLoaded ? _workspace.PassivePanel : null;
 
-    private bool CanWrite(PanelViewModel panel) =>
-        panel.CurrentPath != default && _providers.For(panel.CurrentPath).Capabilities.HasFlag(ProviderCapabilities.Write);
+    private bool CanWrite(PanelViewModel panel) => CanWriteTo(panel.CurrentPath);
 
     private bool HasTargets() =>
         Active is { } panel && panel.CurrentPath != default &&
@@ -183,42 +183,73 @@ public sealed class FileCommands : IDisposable
 
     // ---- Copy and move -----------------------------------------------------------------------------------
 
+    /// <summary>F5/F6: the active panel's targets to the passive panel's folder.</summary>
     private async Task CopyOrMoveAsync(bool move)
     {
         if (!(move ? CanMove() : CanCopyOrMove()) || Active is not { } active || Passive is not { } passive) return;
         var targets = active.GetOperationTargets();
         if (targets.Count == 0) return;
+        await CopyOrMoveCoreAsync(targets.Select(t => t.Path).ToArray(), active.CurrentPath, passive.CurrentPath,
+            move);
+    }
 
-        var single = targets.Count == 1 ? targets[0].Name : null;
-        var (from, to) = (active.CurrentPath, passive.CurrentPath);
+    /// <summary>Whether items can be copied into <paramref name="directory"/>: its provider can write.</summary>
+    public bool CanWriteTo(VfsPath directory) =>
+        directory != default && _providers.For(directory).Capabilities.HasFlag(ProviderCapabilities.Write);
+
+    /// <summary>
+    /// The copy/move flow shared by F5/F6 and drag and drop: the ordinary copy or move dialog, its text proposed from
+    /// <paramref name="destinationDirectory"/> and referring to that folder's provider (a relative text starts at the
+    /// items' folder); then the operation through the queue and the usual aftermath. Nothing happens unless the user
+    /// accepts the dialog. True when an operation was started.
+    /// </summary>
+    /// <remarks>Does nothing (false) for no sources, sources on different providers, a destination that cannot be
+    /// written, or a move of items whose provider cannot be written. Waits for the dialog, not the operation.</remarks>
+    public Task<bool> CopyOrMoveAsync(IReadOnlyList<VfsPath> sources, VfsPath destinationDirectory, bool move)
+    {
+        ArgumentNullException.ThrowIfNull(sources);
+        if (sources.Count == 0 || sources.Any(s => s.ProviderId != sources[0].ProviderId) ||
+            !CanWriteTo(destinationDirectory) || (move && !CanWriteTo(sources[0].Parent ?? sources[0])))
+            return Task.FromResult(false);
+        var task = CopyOrMoveCoreAsync(sources.ToArray(), sources[0].Parent ?? sources[0], destinationDirectory, move);
+        Tracked(task);
+        return task;
+    }
+
+    /// <param name="baseDirectory">Where a relative destination text starts (the items' folder).</param>
+    private async Task<bool> CopyOrMoveCoreAsync(IReadOnlyList<VfsPath> sources, VfsPath baseDirectory,
+        VfsPath destinationDirectory, bool move)
+    {
+        var single = sources.Count == 1 ? sources[0].Name : null;
+        var to = destinationDirectory;
         var proposal = single is null ? to.Path : to.Combine(single).Path;
         var probe = OffTheUiThread(DestinationParser.ProbeOf(_providers));
-        Task<DestinationParseResult> Parse(string text) => DestinationParser.ParseAsync(text, from, to,
-            targets.Count, single, _workspace.HomeDirectory, probe);
+        Task<DestinationParseResult> Parse(string text) => DestinationParser.ParseAsync(text, baseDirectory, to,
+            sources.Count, single, _workspace.HomeDirectory, probe);
 
-        var answer = await _dialogs.AskCopyMoveAsync(new CopyMoveRequest(move, targets.Count, single, proposal,
+        var answer = await _dialogs.AskCopyMoveAsync(new CopyMoveRequest(move, sources.Count, single, proposal,
             async text => (await Parse(text)).Error));
-        if (answer is null) return;
+        if (answer is null) return false;
 
         // The dialog closes only on text its validator accepted; things may have changed since, so look again.
         var parsed = await Parse(answer.Destination);
         if (parsed.Target is not { } target)
         {
             await _dialogs.ShowMessageAsync(parsed.Error!);
-            return;
+            return false;
         }
-        if (target.CreateDirectory && !await CreateDirectoryAsync(target.Directory)) return;
-        // A folder made for the copy shows up in its parent, which the passive panel may be showing.
+        if (target.CreateDirectory && !await CreateDirectoryAsync(target.Directory)) return false;
+        // A folder made for the copy shows up in its parent, which the destination panel may be showing.
         IReadOnlyList<VfsPath> alsoChanged = target.CreateDirectory
             ? [target.Directory.Parent ?? target.Directory, to]
             : [];
 
-        var sources = targets.Select(t => t.Path).ToArray();
         var options = new CopyOptions(answer.VerifyContent, target.NewName);
         FileOperation operation = move
             ? new MoveOperation(_providers, sources, target.Directory, options, _interaction, _nativeCopy)
             : new CopyOperation(_providers, sources, target.Directory, options, _interaction, _nativeCopy);
         Start(operation, answer.RunImmediately, alsoChanged: alsoChanged);
+        return true;
     }
 
     private static Func<VfsPath, CancellationToken, Task<DestinationKind>> OffTheUiThread(

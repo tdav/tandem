@@ -32,6 +32,20 @@
         <Style Selector="TextBox.error">
             <Setter Property="BorderBrush" Value="{DynamicResource Tandem.ErrorForeground}" />
         </Style>
+        <!-- Drag and drop: the folder row a drop would go into, or the whole list for the panel's own folder. -->
+        <Style Selector="ListBox#Rows ListBoxItem.dropTarget /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource Tandem.DropTargetBackground}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Tandem.DropTargetBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+        <Style Selector="ListBox#Rows ListBoxItem.dropTarget:selected /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource Tandem.DropTargetBackground}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Tandem.DropTargetBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+        <Style Selector="ListBox#Rows.dropTarget">
+            <Setter Property="Background" Value="{DynamicResource Tandem.DropTargetBackground}" />
+        </Style>
         <Style Selector="Grid.folder TextBlock.name">
             <Setter Property="FontWeight" Value="SemiBold" />
         </Style>
@@ -46,6 +60,7 @@
              IsTextSearchEnabled="False"
              AutoScrollToSelectedItem="True"
              Classes.inactive="{Binding !IsActive}"
+             DragDrop.AllowDrop="True"
              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
         <v:PanelListBox.ItemsPanel>
             <ItemsPanelTemplate>
