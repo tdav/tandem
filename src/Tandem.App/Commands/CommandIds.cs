@@ -47,6 +47,7 @@ public static class CommandIds
     public const string SortByExtension = "sort.byExtension";
     public const string SortBySize = "sort.bySize";
     public const string SortByDate = "sort.byDate";
+    public const string SortByMode = "sort.byMode";
     public const string SortReverse = "sort.reverse";
 
     public const string FavoritesShow = "favorites.show";

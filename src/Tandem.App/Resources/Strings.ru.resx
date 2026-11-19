@@ -917,4 +917,7 @@
   <data name="Button_Stay" xml:space="preserve">
     <value>Остаться</value>
   </data>
+  <data name="Menu_sort_byMode" xml:space="preserve">
+    <value>По правам</value>
+  </data>
 </root>

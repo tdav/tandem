@@ -122,6 +122,51 @@ public sealed class JsonStateStoreTests : IDisposable
     }
 
     [Fact]
+    public void A_state_file_written_before_sorting_by_permissions_existed_loads_unchanged()
+    {
+        // Exactly what a stage 1 build before the permissions sort wrote.
+        const string content = """
+            {
+              "Version": 1,
+              "Left": { "Tabs": [ { "ProviderId": "local", "Path": "/Users/someone", "SortColumn": "Modified",
+                "SortDescending": true, "Pinned": false } ], "ActiveTab": 0 },
+              "Right": { "Tabs": [ { "ProviderId": "local", "Path": "/tmp", "SortColumn": "Name",
+                "SortDescending": false, "Pinned": true } ], "ActiveTab": 0 },
+              "LeftIsActive": true,
+              "View": { "Sidebar": false, "VolumeBars": true, "CommandLine": true, "FKeyBar": true },
+              "Window": null,
+              "Favorites": [ "/Users/someone/my_project" ],
+              "ShowHidden": false,
+              "Language": "ru"
+            }
+            """;
+        WriteRaw(content);
+
+        var state = Store().Load(Home);
+
+        Assert.Equal([new TabState(VfsPath.LocalProviderId, "/Users/someone", SortColumn.Modified, true, false)],
+            state.Left.Tabs);
+        Assert.Equal([new TabState(VfsPath.LocalProviderId, "/tmp", SortColumn.Name, false, true)], state.Right.Tabs);
+        Assert.Equal(["/Users/someone/my_project"], state.Favorites);
+        Assert.Equal("ru", state.Language);
+        Assert.False(File.Exists(BadFile));
+    }
+
+    [Fact]
+    public void Sorting_by_permissions_round_trips_by_name()
+    {
+        var state = AppState.Default(Home) with
+        {
+            Left = new PanelState([new TabState(VfsPath.LocalProviderId, "/tmp", SortColumn.Mode, true, false)], 0),
+        };
+
+        Store().Save(state);
+
+        Assert.Contains("\"Mode\"", File.ReadAllText(StateFile));
+        Assert.Equal(state.Left.Tabs, Store().Load(Home).Left.Tabs);
+    }
+
+    [Fact]
     public void Corrupt_json_gives_default_and_keeps_bad_copy()
     {
         const string content = "{ \"Version\": 1, \"Left\": ";

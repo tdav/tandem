@@ -60,6 +60,7 @@ public sealed class KeyMap
             (CommandIds.SortByExtension, "Ctrl+Cmd+2"),
             (CommandIds.SortBySize, "Ctrl+Cmd+3"),
             (CommandIds.SortByDate, "Ctrl+Cmd+4"),
+            (CommandIds.SortByMode, "Ctrl+Cmd+5"),
             (CommandIds.SortReverse, "Ctrl+Cmd+R"),
             (CommandIds.TabTogglePin, "Ctrl+Cmd+P"),
         }.Select(b => (b.Item1, KeyChord.Parse(b.Item2))));

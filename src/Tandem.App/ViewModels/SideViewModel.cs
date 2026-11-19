@@ -105,6 +105,7 @@ public sealed partial class SideViewModel : ObservableObject
     public string ExtensionSortMark => SortMark(SortColumn.Extension);
     public string SizeSortMark => SortMark(SortColumn.Size);
     public string DateSortMark => SortMark(SortColumn.Modified);
+    public string ModeSortMark => SortMark(SortColumn.Mode);
 
     /// <summary>The folders of the active tab's history, latest first, for the back/forward menu.</summary>
     public IReadOnlyList<VfsPath> HistoryEntries => _panel is null ? [] : Tabs.Active.History.Recent;
@@ -387,6 +388,7 @@ public sealed partial class SideViewModel : ObservableObject
         OnPropertyChanged(nameof(ExtensionSortMark));
         OnPropertyChanged(nameof(SizeSortMark));
         OnPropertyChanged(nameof(DateSortMark));
+        OnPropertyChanged(nameof(ModeSortMark));
     }
 
     private string SortMark(SortColumn column) =>

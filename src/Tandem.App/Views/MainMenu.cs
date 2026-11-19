@@ -158,6 +158,7 @@ public static class MainMenu
             (SortColumn.Extension, CommandItem(main, CommandIds.SortByExtension)),
             (SortColumn.Size, CommandItem(main, CommandIds.SortBySize)),
             (SortColumn.Modified, CommandItem(main, CommandIds.SortByDate)),
+            (SortColumn.Mode, CommandItem(main, CommandIds.SortByMode)),
         ];
         foreach (var (_, item) in columns) item.ToggleType = MenuItemToggleType.Radio;
         var reverse = CommandItem(main, CommandIds.SortReverse);

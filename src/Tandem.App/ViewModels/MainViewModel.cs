@@ -391,6 +391,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         On(CommandIds.SortByExtension, () => ActiveSide.SortBy(SortColumn.Extension));
         On(CommandIds.SortBySize, () => ActiveSide.SortBy(SortColumn.Size));
         On(CommandIds.SortByDate, () => ActiveSide.SortBy(SortColumn.Modified));
+        On(CommandIds.SortByMode, () => ActiveSide.SortBy(SortColumn.Mode));
         On(CommandIds.SortReverse, () => ActiveSide.ReverseSort());
         Commands.RaiseCanExecuteChanged();
     }

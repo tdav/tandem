@@ -47,8 +47,30 @@ public class SortCommandsTests : LanguageTestBase
         await Run(app, CommandIds.SortByDate);
         Assert.Equal(new SortSpec(SortColumn.Modified), app.Left.Sort);
         Assert.Equal("▲", app.Main.Left.DateSortMark);
+        await Run(app, CommandIds.SortByMode);
+        Assert.Equal(new SortSpec(SortColumn.Mode), app.Left.Sort);
+        Assert.Equal("▲", app.Main.Left.ModeSortMark);
+        Assert.Equal("", app.Main.Left.DateSortMark);
         await Run(app, CommandIds.SortByName);
         Assert.Equal(new SortSpec(SortColumn.Name), app.Left.Sort);
+    }
+
+    [AvaloniaFact]
+    public async Task Sort_by_permissions_orders_rows_by_mode()
+    {
+        var fs = SizedFileSystem();
+        await fs.SetModeAsync(Tandem.Core.Vfs.VfsPath.Local(TestApp.Home + "/a.txt"),
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute, CancellationToken.None);
+        await fs.SetModeAsync(Tandem.Core.Vfs.VfsPath.Local(TestApp.Home + "/b.txt"),
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead, CancellationToken.None);
+        await fs.SetModeAsync(Tandem.Core.Vfs.VfsPath.Local(TestApp.Home + "/c.txt"), UnixFileMode.UserRead,
+            CancellationToken.None);
+        await using var app = await TestApp.StartAsync(fs, show: false);
+
+        await app.Main.HandleKeyAsync(KeyChord.Parse("Ctrl+Cmd+5"));
+
+        Assert.Equal(new SortSpec(SortColumn.Mode), app.Left.Sort);
+        await TestApp.WaitUntil(() => Names(app.Left, "a.txt", "b.txt", "c.txt") is ["c.txt", "b.txt", "a.txt"]);
     }
 
     [AvaloniaFact]
@@ -135,7 +157,11 @@ public class SortCommandsTests : LanguageTestBase
         var menu = MainMenu.Build(app.Main);
         var items = AllItems(menu).ToList();
         NativeMenuItem Item(string id) => items.Single(i => i.CommandParameter as string == id);
-        string[] columns = [CommandIds.SortByName, CommandIds.SortByExtension, CommandIds.SortBySize, CommandIds.SortByDate];
+        string[] columns =
+        [
+            CommandIds.SortByName, CommandIds.SortByExtension, CommandIds.SortBySize, CommandIds.SortByDate,
+            CommandIds.SortByMode,
+        ];
         string[] Checked() => columns.Where(id => Item(id).IsChecked).ToArray();
 
         // The submenu sits in View, with the columns and "Reversed", each showing its chord.
@@ -144,7 +170,9 @@ public class SortCommandsTests : LanguageTestBase
         Assert.Contains(view.Menu!.Items, i => ReferenceEquals(i, sort));
         var sortItems = sort.Menu!.Items.OfType<NativeMenuItem>().Where(i => i is not NativeMenuItemSeparator).ToList();
         Assert.Equal([..columns, CommandIds.SortReverse], sortItems.Select(i => i.CommandParameter as string));
-        Assert.Equal(["By Name", "By Extension", "By Size", "By Date", "Reversed"], sortItems.Select(i => i.Header));
+        Assert.Equal(["By Name", "By Extension", "By Size", "By Date", "By Permissions", "Reversed"],
+            sortItems.Select(i => i.Header));
+        Assert.Equal(new KeyGesture(Key.D5, KeyModifiers.Control | KeyModifiers.Meta), Item(CommandIds.SortByMode).Gesture);
         Assert.Equal(new KeyGesture(Key.D3, KeyModifiers.Control | KeyModifiers.Meta), Item(CommandIds.SortBySize).Gesture);
         Assert.Equal(new KeyGesture(Key.R, KeyModifiers.Control | KeyModifiers.Meta), Item(CommandIds.SortReverse).Gesture);
         Assert.All(sortItems, i => Assert.NotEqual(MenuItemToggleType.None, i.ToggleType));
@@ -174,6 +202,20 @@ public class SortCommandsTests : LanguageTestBase
         app.Main.Workspace.Left.Previous();
         Assert.Equal([CommandIds.SortBySize], Checked());
         Assert.True(Item(CommandIds.SortReverse).IsChecked);
+
+        await Run(app, CommandIds.SortByMode);
+        Assert.Equal([CommandIds.SortByMode], Checked());
+    }
+
+    [AvaloniaFact]
+    public async Task Russian_sort_menu_names_the_permissions_item()
+    {
+        await using var app = await TestApp.StartAsync(state: AppState.Default(TestApp.Home) with { Language = "ru" },
+            show: false);
+
+        var item = AllItems(MainMenu.Build(app.Main)).Single(i => i.CommandParameter as string == CommandIds.SortByMode);
+
+        Assert.Equal("По правам", item.Header);
     }
 
     private static IEnumerable<NativeMenuItem> AllItems(NativeMenu menu)

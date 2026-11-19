@@ -224,6 +224,16 @@ public class MainWindowTests : LanguageTestBase
 
         app.Click(app.PanelView(PanelSide.Left).GetVisualDescendants().OfType<Button>().Single(b => b.Name == "SortByName"));
         Assert.Equal(new SortSpec(SortColumn.Name), app.Left.Sort);
+
+        var permissions = app.PanelView(PanelSide.Left).GetVisualDescendants().OfType<Button>()
+            .Single(b => b.Name == "SortByMode");
+        app.Click(permissions);
+        Assert.Equal(new SortSpec(SortColumn.Mode), app.Left.Sort);
+        Assert.Equal("▲", app.Main.Left.ModeSortMark);
+        Assert.Contains(permissions.GetVisualDescendants().OfType<TextBlock>(),
+            t => t.Text == Tandem.App.Resources.Loc.Get("Column_Mode"));
+        app.Click(permissions);
+        Assert.Equal(new SortSpec(SortColumn.Mode, Descending: true), app.Left.Sort);
     }
 
     [AvaloniaFact]

@@ -9,9 +9,9 @@ public class EntrySorterTests
     private static readonly DateTimeOffset T0 = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
     private static FileEntry Entry(string name, EntryKind kind = EntryKind.File, long size = 0,
-        DateTimeOffset? modified = null, bool linkPointsToDirectory = false) =>
+        DateTimeOffset? modified = null, bool linkPointsToDirectory = false, UnixFileMode? mode = null) =>
         new(VfsPath.Local("/dir").Combine(name), kind, size, modified ?? T0, T0,
-            Mode: null, IsHidden: false, LinkTarget: kind == EntryKind.Symlink ? "/target" : null,
+            Mode: mode, IsHidden: false, LinkTarget: kind == EntryKind.Symlink ? "/target" : null,
             LinkPointsToDirectory: linkPointsToDirectory);
 
     private static string[] Sorted(SortSpec spec, params FileEntry[] entries)
@@ -40,6 +40,24 @@ public class EntrySorterTests
     public void Symlink_to_file_sorts_with_files() =>
         Assert.Equal(["d", "a", "b"],
             Sorted(new SortSpec(SortColumn.Name), Entry("b"), Entry("a", EntryKind.Symlink), Entry("d", EntryKind.Directory)));
+
+    [Fact]
+    public void Mode_sorts_by_permissions_with_entries_without_a_mode_together_then_by_name()
+    {
+        const UnixFileMode rw = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+        const UnixFileMode rwr = rw | UnixFileMode.GroupRead | UnixFileMode.OtherRead;
+        const UnixFileMode rwx = rwr | UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute;
+        FileEntry[] entries =
+        [
+            Entry("e.sh", mode: rwx), Entry("d.txt", mode: rwr), Entry("x.bin"), Entry("c.txt", mode: rw),
+            Entry("b.txt", mode: rwr), Entry("a.bin"), Entry("dir", EntryKind.Directory, mode: rwx),
+        ];
+
+        Assert.Equal(["dir", "a.bin", "x.bin", "c.txt", "b.txt", "d.txt", "e.sh"],
+            Sorted(new SortSpec(SortColumn.Mode), entries));
+        Assert.Equal(["dir", "e.sh", "b.txt", "d.txt", "c.txt", "a.bin", "x.bin"],
+            Sorted(new SortSpec(SortColumn.Mode, Descending: true), entries));
+    }
 
     [Fact]
     public void Natural_numeric_order() =>

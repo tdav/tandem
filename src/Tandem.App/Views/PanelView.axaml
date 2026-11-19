@@ -169,8 +169,13 @@
                     <TextBlock Text="{Binding DateSortMark}" />
                 </StackPanel>
             </Button>
-            <TextBlock Grid.Column="4" Classes="secondary" Text="{loc:Tr Key=Column_Mode}"
-                       VerticalAlignment="Center" Margin="6,0,0,0" />
+            <Button x:Name="SortByMode" Grid.Column="4" Classes="flat" Command="{Binding SortByCommand}"
+                    CommandParameter="{x:Static listing:SortColumn.Mode}">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                    <TextBlock Text="{loc:Tr Key=Column_Mode}" />
+                    <TextBlock Text="{Binding ModeSortMark}" />
+                </StackPanel>
+            </Button>
         </Grid>
 
         <v:FileListView x:Name="FileList" />

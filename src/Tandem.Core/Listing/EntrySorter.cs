@@ -7,7 +7,8 @@ namespace Tandem.Core.Listing;
 /// <summary>
 /// Builds comparers for directory listings. Directory-like entries always come before files, in either
 /// direction. Names compare case-insensitively, after normalization to form C, with digit runs compared
-/// by numeric value (<c>file2</c> &lt; <c>file10</c>). Ties on the sort key fall back to the name in
+/// by numeric value (<c>file2</c> &lt; <c>file10</c>). Permissions compare by their numeric mode, entries without one
+/// first (last when descending). Ties on the sort key fall back to the name in
 /// ascending order, and names equal after folding are finally ordered ordinally, so the order is total.
 /// </summary>
 public static class EntrySorter
@@ -45,12 +46,16 @@ public static class EntrySorter
                 SortColumn.Extension => CompareNatural(KeysOf(x).Extension, KeysOf(y).Extension),
                 SortColumn.Size => x.Size.CompareTo(y.Size),
                 SortColumn.Modified => x.Modified.UtcTicks.CompareTo(y.Modified.UtcTicks),
+                // Entries without a mode (a provider without permissions) come together, before any mode.
+                SortColumn.Mode => Nullable.Compare(ModeKey(x), ModeKey(y)),
                 _ => CompareNames(x, y),
             };
             if (spec.Descending) result = -result;
             if (result != 0 || spec.Column == SortColumn.Name) return result;
             return CompareNames(x, y);
         }
+
+        private static int? ModeKey(FileEntry entry) => entry.Mode is { } mode ? (int)mode : null;
 
         private static int CompareNames(FileEntry x, FileEntry y)
         {
