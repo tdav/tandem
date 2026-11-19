@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Resources;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Tandem.App.Commands;
@@ -88,16 +90,61 @@ public class MainViewModelTests : LanguageTestBase
         {
             if (e.PropertyName == nameof(MainViewModel.Volumes)) notified++;
         };
+        var lateHandlers = app.Volumes.Handlers!; // what the service may still be raising when Dispose runs
 
         main.Dispose();
         Assert.Equal(0, app.Volumes.HandlerCount);
         var reads = app.Volumes.Reads;
-        await app.Volumes.ChangeAsync([]);
+        await Task.Run(() => lateHandlers(app.Volumes, EventArgs.Empty)); // a late event, from a background thread
         await Task.Delay(100);
 
         Assert.Single(main.Volumes);
         Assert.Equal(0, notified);
         Assert.Equal(reads, app.Volumes.Reads);
+    }
+
+    [AvaloniaFact]
+    public async Task A_late_event_posted_before_dispose_reads_nothing_afterwards()
+    {
+        await using var app = await TestApp.StartAsync(show: false);
+        await TestApp.WaitUntil(() => app.Main.Volumes.Count == 1);
+        var reads = app.Volumes.Reads;
+
+        app.Volumes.Handlers!(app.Volumes, EventArgs.Empty); // posts a read to the UI thread...
+        app.Main.Dispose(); // ...which runs only after the model is gone
+        await Task.Delay(100);
+
+        Assert.Equal(reads, app.Volumes.Reads);
+    }
+
+    [AvaloniaFact]
+    public async Task A_failing_volume_read_is_logged_and_keeps_the_known_volumes()
+    {
+        await using var app = await TestApp.StartAsync(show: false);
+        await TestApp.WaitUntil(() => app.Main.Volumes.Count == 1);
+
+        app.Volumes.Failure = new IOException("volumes unreadable");
+        await app.Volumes.ChangeAsync([]);
+        await TestApp.WaitUntil(() => File.Exists(app.LogFile));
+
+        Assert.Contains("volumes unreadable", File.ReadAllText(app.LogFile));
+        Assert.Single(app.Main.Volumes);
+        Assert.Empty(app.Failures); // logged, not shown as a command failure
+    }
+
+    [AvaloniaFact]
+    public async Task A_failing_path_commit_is_reported_not_thrown()
+    {
+        await using var app = await TestApp.StartAsync(show: false);
+        var failure = new InvalidOperationException("navigated handler broke");
+        app.Left.Navigated += (_, _) => throw failure;
+        app.Main.Left.BeginPathEdit();
+        app.Main.Left.PathText = "/other";
+
+        Assert.False(await app.Main.Left.CommitPathEditAsync());
+
+        Assert.Equal([failure], app.Failures);
+        Assert.True(app.Main.Left.IsEditingPath);
     }
 
     [AvaloniaFact]
@@ -201,19 +248,18 @@ public class MainViewModelTests : LanguageTestBase
         Assert.Equal("", app.Left.QuickSearchText);
     }
 
-    [AvaloniaFact]
-    public async Task Every_command_has_a_menu_label_in_both_languages()
+    [Fact]
+    public void Every_command_has_a_menu_label_in_both_languages()
     {
-        foreach (var language in new[] { "en", "ru" })
+        var strings = new ResourceManager("Tandem.App.Resources.Strings", typeof(Loc).Assembly);
+        foreach (var culture in new[] { CultureInfo.InvariantCulture, CultureInfo.GetCultureInfo("ru") })
         {
-            Loc.SetLanguage(language);
+            // Without falling back to the parent culture, so a missing Russian label is caught.
+            var set = strings.GetResourceSet(culture, createIfNotExists: true, tryParents: false)!;
             foreach (var id in CommandIds.All)
-            {
-                var key = Tandem.App.Views.MainMenu.LabelKey(id);
-                Assert.NotEqual(key, Loc.Get(key));
-            }
+                Assert.False(string.IsNullOrEmpty(set.GetString(Tandem.App.Views.MainMenu.LabelKey(id))),
+                    $"No {culture.Name} label for {id}.");
         }
-        await Task.CompletedTask;
     }
 
     [Fact]

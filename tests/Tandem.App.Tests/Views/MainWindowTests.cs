@@ -142,6 +142,51 @@ public class MainWindowTests : LanguageTestBase
     }
 
     [AvaloniaFact]
+    public async Task The_list_never_moves_its_highlight_on_its_own()
+    {
+        await using var app = await TestApp.StartAsync();
+        var list = app.FileList(PanelSide.Left);
+        app.Left.CursorIndex = 3;
+        app.Pump();
+        Assert.Equal(3, list.SelectedIndex);
+        Assert.True(list.IsKeyboardFocusWithin);
+
+        var moves = new (Key Key, PhysicalKey Physical)[]
+        {
+            (Key.Down, PhysicalKey.ArrowDown), (Key.Up, PhysicalKey.ArrowUp), (Key.Home, PhysicalKey.Home),
+            (Key.End, PhysicalKey.End), (Key.PageUp, PhysicalKey.PageUp), (Key.PageDown, PhysicalKey.PageDown),
+        };
+        foreach (var modifiers in new[] { RawInputModifiers.Alt, RawInputModifiers.Meta, RawInputModifiers.Control })
+        foreach (var (key, physical) in moves)
+        {
+            app.Press(key, modifiers, physical);
+            await TestApp.WaitUntil(() => !app.Left.IsLoading); // Cmd+Up is nav.up: let the folder load
+            app.Pump();
+            AssertListFollowsCursor(app, list, $"{modifiers}+{key}");
+        }
+
+        app.Type("z"); // no name starts with z
+        AssertListFollowsCursor(app, list, "typed z");
+        app.Press(Key.A, RawInputModifiers.Meta, PhysicalKey.A, "a"); // select.all marks rows; the highlight stays one
+        AssertListFollowsCursor(app, list, "Cmd+A");
+        Assert.Equal(app.Left.TotalCount, app.Left.SelectedCount);
+        app.Press(Key.Down, physical: PhysicalKey.ArrowDown);
+        AssertListFollowsCursor(app, list, "Down");
+    }
+
+    private static void AssertListFollowsCursor(TestApp app, ListBox list, string after)
+    {
+        Assert.True(list.SelectedIndex == app.Left.CursorIndex,
+            $"After {after}: list highlight {list.SelectedIndex}, cursor {app.Left.CursorIndex}.");
+        Assert.True(list.Selection.Count <= 1, $"After {after}: {list.Selection.Count} rows highlighted.");
+        Assert.True(list.IsKeyboardFocusWithin, $"After {after}: the focus left the list ({app.Focused?.GetType().Name}).");
+        var focusedRow = (app.Focused as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true);
+        if (focusedRow is not null)
+            Assert.True(list.IndexFromContainer(focusedRow) == app.Left.CursorIndex,
+                $"After {after}: focus on row {list.IndexFromContainer(focusedRow)}, cursor {app.Left.CursorIndex}.");
+    }
+
+    [AvaloniaFact]
     public async Task Enter_opens_a_folder_and_reports_a_file()
     {
         await using var app = await TestApp.StartAsync();

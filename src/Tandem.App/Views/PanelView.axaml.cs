@@ -76,7 +76,7 @@ public partial class PanelView : UserControl
         {
             case Key.Enter:
                 e.Handled = true;
-                _ = side.CommitPathEditAsync();
+                _ = side.CommitPathEditAsync(); // never throws: failures are reported by the side
                 break;
             case Key.Escape:
                 e.Handled = true;

@@ -17,6 +17,18 @@ public partial class FileListView : UserControl
     {
         InitializeComponent();
         Rows.AddHandler(PointerPressedEvent, OnPointerPressed, RoutingStrategies.Tunnel);
+        // The highlight only ever changes through the panel's cursor; keep the focused row on it as well.
+        // When the rows are replaced the focused row may be recycled and the focus lost; it then returns to the
+        // cursor's row (for the active side), so no key can fall through to the window's focus navigation.
+        Rows.SelectionChanged += (_, _) =>
+        {
+            if (!OwnsFocus()) return;
+            if (!FocusCursorRow())
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (OwnsFocus()) FocusCursorRow();
+                }, DispatcherPriority.Loaded);
+        };
         Rows.SizeChanged += (_, e) => PageSizeChanged?.Invoke(this,
             Math.Max(1, (int)(e.NewSize.Height / FileListColumns.RowHeightValue) - 1));
     }
@@ -39,6 +51,12 @@ public partial class FileListView : UserControl
             if (focused is null || ReferenceEquals(focused, Rows)) FocusCursorRow();
         }, DispatcherPriority.Loaded);
     }
+
+    /// <summary>The list has the focus, or nobody has and this is the active side's list.</summary>
+    private bool OwnsFocus() =>
+        Rows.IsKeyboardFocusWithin ||
+        (DataContext is SideViewModel { IsActive: true } &&
+         TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is null);
 
     private bool FocusCursorRow() =>
         Rows.SelectedIndex >= 0 && Rows.ContainerFromIndex(Rows.SelectedIndex) is { } row && row.Focus();

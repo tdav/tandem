@@ -29,7 +29,7 @@ public partial class App : Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            _log = new ErrorLog(Path.Combine(home, "Library", "Logs", "Tandem", "tandem.log"));
+            _log = new ErrorLog(Composition.DefaultLogFile(home));
             InstallErrorHandlers();
             desktop.ShutdownMode = ShutdownMode.OnMainWindowClose;
             desktop.Exit += (_, _) =>
@@ -49,7 +49,7 @@ public partial class App : Application
         try
         {
             if (!OperatingSystem.IsMacOS()) throw new PlatformNotSupportedException("Tandem runs on macOS only.");
-            _services = Composition.CreatePlatformServices();
+            _services = Composition.CreatePlatformServices(_log!);
             var stateDirectory = Path.Combine(home, "Library", "Application Support", "Tandem");
             _main = await Composition.StartAsync(_services, stateDirectory, home);
             _main.CommandFailed += (_, e) => ReportUnexpected(e, "command");

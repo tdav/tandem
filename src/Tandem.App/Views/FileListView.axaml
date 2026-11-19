@@ -36,7 +36,7 @@
 
     <!-- The list's own selection is the cursor only (one way, from CursorIndex); marking is EntryRowViewModel.IsSelected.
          Clicks and keys are handled before the list sees them. -->
-    <ListBox x:Name="Rows"
+    <v:PanelListBox x:Name="Rows"
              ItemsSource="{Binding Panel.Rows}"
              SelectedIndex="{Binding Panel.CursorIndex, Mode=OneWay}"
              SelectionMode="Single"
@@ -44,12 +44,12 @@
              AutoScrollToSelectedItem="True"
              Classes.inactive="{Binding !IsActive}"
              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-        <ListBox.ItemsPanel>
+        <v:PanelListBox.ItemsPanel>
             <ItemsPanelTemplate>
                 <VirtualizingStackPanel />
             </ItemsPanelTemplate>
-        </ListBox.ItemsPanel>
-        <ListBox.ItemTemplate>
+        </v:PanelListBox.ItemsPanel>
+        <v:PanelListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:EntryRowViewModel">
                 <Grid Classes.marked="{Binding IsSelected}" Classes.folder="{Binding IsDirectoryLike}">
                     <Grid.ColumnDefinitions>
@@ -66,6 +66,6 @@
                     <TextBlock Grid.Column="4" Text="{Binding ModeText}" />
                 </Grid>
             </DataTemplate>
-        </ListBox.ItemTemplate>
-    </ListBox>
+        </v:PanelListBox.ItemTemplate>
+    </v:PanelListBox>
 </UserControl>

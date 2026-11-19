@@ -1,6 +1,7 @@
 using System.Runtime.Versioning;
 using Tandem.App.Commands;
 using Tandem.App.Resources;
+using Tandem.App.Services;
 using Tandem.App.ViewModels;
 using Tandem.Core.Operations;
 using Tandem.Core.Platform;
@@ -12,7 +13,7 @@ using Tandem.Platform.Mac;
 namespace Tandem.App;
 
 /// <summary>Everything the view models use from outside the app: file systems, platform services, the operation
-/// queue. The app gets the real ones from <see cref="Composition.CreatePlatformServices"/>; tests pass in-memory and
+/// queue, the error log. The app gets the real ones from <see cref="Composition.CreatePlatformServices"/>; tests pass in-memory and
 /// fake ones.</summary>
 public sealed record AppServices(
     ProviderRegistry Providers,
@@ -24,7 +25,8 @@ public sealed record AppServices(
     INativeCopy NativeCopy,
     IProcessRunner Processes,
     OperationQueue Operations,
-    IFileAccessBroker AccessBroker) : IDisposable
+    IFileAccessBroker AccessBroker,
+    ErrorLog Log) : IDisposable
 {
     /// <summary>Disposes the services that hold resources (the volume watch).</summary>
     public void Dispose()
@@ -38,7 +40,7 @@ public static class Composition
 {
     /// <summary>The real services: the local disk with unrestricted access, and the macOS implementations.</summary>
     [SupportedOSPlatform("macos")]
-    public static AppServices CreatePlatformServices()
+    public static AppServices CreatePlatformServices(ErrorLog log)
     {
         var broker = new UnrestrictedAccessBroker();
         var providers = new ProviderRegistry();
@@ -46,7 +48,7 @@ public static class Composition
         var processes = new ProcessRunner();
         return new AppServices(providers, new MacVolumeService(), new MacShellIntegration(processes),
             new MacQuickLook(processes), new MacFileMetadataService(broker), new MacTrash(broker),
-            new MacNativeCopy(broker), processes, new OperationQueue(), broker);
+            new MacNativeCopy(broker), processes, new OperationQueue(), broker, log);
     }
 
     /// <summary>The main view model on the real services, its state kept in <paramref name="stateDirectory"/>. Not
@@ -54,7 +56,12 @@ public static class Composition
     /// <see cref="StartAsync"/> does both.</summary>
     [SupportedOSPlatform("macos")]
     public static MainViewModel Build(string stateDirectory, string homeDirectory) =>
-        Build(CreatePlatformServices(), new JsonStateStore(stateDirectory), homeDirectory);
+        Build(CreatePlatformServices(new ErrorLog(DefaultLogFile(homeDirectory))), new JsonStateStore(stateDirectory),
+            homeDirectory);
+
+    /// <summary>Where the app writes unexpected errors: <c>~/Library/Logs/Tandem/tandem.log</c>.</summary>
+    public static string DefaultLogFile(string homeDirectory) =>
+        Path.Combine(homeDirectory, "Library", "Logs", "Tandem", "tandem.log");
 
     /// <summary>The main view model on <paramref name="services"/>; not loaded yet.</summary>
     public static MainViewModel Build(AppServices services, JsonStateStore store, string homeDirectory,

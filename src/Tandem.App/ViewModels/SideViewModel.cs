@@ -115,8 +115,22 @@ public sealed partial class SideViewModel : ObservableObject
     }
 
     /// <summary>Enter in the path editor: goes to the typed folder ("~" is the home folder) and closes the editor.
-    /// If the folder cannot be shown, the reason is in the status row and the editor stays open. True on success.</summary>
+    /// If the folder cannot be shown, the reason is in the status row and the editor stays open. True on success.
+    /// An unexpected failure is reported, not thrown, and leaves the editor open.</summary>
     public async Task<bool> CommitPathEditAsync()
+    {
+        try
+        {
+            return await CommitPathAsync();
+        }
+        catch (Exception e)
+        {
+            _main.ReportFailure(e);
+            return false;
+        }
+    }
+
+    private async Task<bool> CommitPathAsync()
     {
         if (_panel is not { } panel) return false;
         var text = PathText.Trim();

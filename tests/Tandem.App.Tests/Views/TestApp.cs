@@ -5,6 +5,7 @@ using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Tandem.App.Services;
 using Tandem.App.ViewModels;
 using Tandem.App.Views;
 using Tandem.Core.Operations;
@@ -54,13 +55,16 @@ internal sealed class TestApp : IAsyncDisposable
         return fs;
     }
 
-    public static AppServices Services(InMemoryFileSystem fs, FakeVolumeService volumes)
+    /// <summary>The error log of this app, in its temporary state folder.</summary>
+    public string LogFile => Path.Combine(StateDirectory, "logs", "tandem.log");
+
+    public static AppServices Services(InMemoryFileSystem fs, FakeVolumeService volumes, string logFile)
     {
         var providers = new ProviderRegistry();
         providers.Register(fs);
         var platform = new FakePlatform();
         return new AppServices(providers, volumes, platform, platform, platform, platform, platform, platform,
-            new OperationQueue(), new UnrestrictedAccessBroker());
+            new OperationQueue(), new UnrestrictedAccessBroker(), new ErrorLog(logFile));
     }
 
     public static async Task<TestApp> StartAsync(InMemoryFileSystem? fs = null, AppState? state = null,
@@ -71,7 +75,7 @@ internal sealed class TestApp : IAsyncDisposable
         new JsonStateStore(stateDirectory).Save(state ?? AppState.Default(Home) with { Language = "en" });
 
         var app = new TestApp(fs, new FakeVolumeService(), stateDirectory);
-        app.Main = await Composition.StartAsync(Services(fs, app.Volumes), stateDirectory, Home,
+        app.Main = await Composition.StartAsync(Services(fs, app.Volumes, app.LogFile), stateDirectory, Home,
             autosaveDelay: (_, ct) => Task.Delay(Timeout.Infinite, ct));
         app.Main.CommandFailed += (_, e) => app.Failures.Add(e);
         if (show) app.ShowWindow();
@@ -171,11 +175,18 @@ internal sealed class FakeVolumeService : IVolumeService
 
     public int Reads;
 
+    /// <summary>When set, <see cref="GetVolumes"/> throws it.</summary>
+    public volatile Exception? Failure;
+
     public IReadOnlyList<VolumeInfo> GetVolumes()
     {
         Interlocked.Increment(ref Reads);
+        if (Failure is { } failure) throw failure;
         return _volumes;
     }
+
+    /// <summary>The handlers subscribed now, to raise later as a late event would.</summary>
+    public EventHandler? Handlers => Changed;
 
     /// <summary>Replaces the volumes and raises <see cref="Changed"/> from a background thread, as the real one does.</summary>
     public Task ChangeAsync(IReadOnlyList<VolumeInfo> volumes)

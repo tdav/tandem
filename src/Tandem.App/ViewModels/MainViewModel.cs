@@ -335,9 +335,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             var service = _volumeService;
             volumes = await Task.Run(service.GetVolumes);
         }
-        catch (Exception)
+        catch (Exception e)
         {
-            return; // keep the volumes known so far
+            Services.Log.Write(e, "volumes"); // keep the volumes known so far
+            return;
         }
         if (_disposed || version != _volumeReadVersion) return;
         Volumes = volumes;
