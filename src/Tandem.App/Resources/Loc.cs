@@ -3,6 +3,9 @@ using System.Resources;
 
 namespace Tandem.App.Resources;
 
+/// <summary>The form a noun takes after a number (<see cref="Loc.PluralFormOf"/>).</summary>
+public enum PluralForm { One, Few, Many }
+
 /// <summary>
 /// The interface's text, from <c>Strings.resx</c> (English, the fallback) and <c>Strings.ru.resx</c> (Russian).
 /// The language is chosen once at startup, before the window is created; switching it later does not update
@@ -40,6 +43,23 @@ public static class Loc
     /// <summary>The text for an enum member, stored under the key <c>&lt;EnumName&gt;_&lt;Member&gt;</c>.</summary>
     public static string Enum<TEnum>(TEnum value) where TEnum : struct, Enum =>
         Get($"{typeof(TEnum).Name}_{value}");
+
+    /// <summary>Which plural form a count takes in the current language. Russian: 1, 21, 101 → One;
+    /// 2–4, 22–24 → Few; 0, 5–20, 25–30, 111–114 → Many. English: 1 → One, anything else → Many.</summary>
+    public static PluralForm PluralFormOf(long n)
+    {
+        n = Math.Abs(n);
+        if (_culture.Name != Russian) return n == 1 ? PluralForm.One : PluralForm.Many;
+        var (lastDigit, lastTwo) = (n % 10, n % 100);
+        if (lastDigit == 1 && lastTwo != 11) return PluralForm.One;
+        if (lastDigit is >= 2 and <= 4 && lastTwo is < 12 or > 14) return PluralForm.Few;
+        return PluralForm.Many;
+    }
+
+    /// <summary>A number with its noun, e.g. "3 объекта": the text under <c>{keyBase}_One</c>, <c>_Few</c> or
+    /// <c>_Many</c> (see <see cref="PluralFormOf"/>), with <paramref name="n"/> as its <c>{0}</c>. Both languages
+    /// have all three keys; English uses the same text for Few and Many.</summary>
+    public static string Count(string keyBase, long n) => Format($"{keyBase}_{PluralFormOf(n)}", n);
 
     private static CultureInfo Resolve(string? code)
     {

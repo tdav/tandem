@@ -457,4 +457,45 @@ Details were written to {1}. Tandem keeps running.</value>
     <value>Tandem could not start: {0}
 Details were written to {1}.</value>
   </data>
+
+  <!-- Counts with their noun (Loc.Count): {0} = the number; One / Few (2-4) / Many -->
+  <data name="Count_Items_One" xml:space="preserve">
+    <value>{0} item</value>
+  </data>
+  <data name="Count_Items_Few" xml:space="preserve">
+    <value>{0} items</value>
+  </data>
+  <data name="Count_Items_Many" xml:space="preserve">
+    <value>{0} items</value>
+  </data>
+  <data name="Count_Operations_One" xml:space="preserve">
+    <value>{0} operation</value>
+  </data>
+  <data name="Count_Operations_Few" xml:space="preserve">
+    <value>{0} operations</value>
+  </data>
+  <data name="Count_Operations_Many" xml:space="preserve">
+    <value>{0} operations</value>
+  </data>
+  <data name="Destination_Empty" xml:space="preserve">
+    <value>Type the folder to copy to</value>
+  </data>
+  <data name="Destination_Invalid" xml:space="preserve">
+    <value>“{0}” is not a valid path</value>
+  </data>
+  <data name="Destination_NotAFolder" xml:space="preserve">
+    <value>“{0}” is a file, not a folder</value>
+  </data>
+  <data name="Destination_FolderMissing" xml:space="preserve">
+    <value>The folder {0} does not exist</value>
+  </data>
+  <data name="Destination_NewNameManyItems" xml:space="preserve">
+    <value>Several items cannot all get the name “{0}”. To copy them into a new folder, end the path with “/”.</value>
+  </data>
+  <data name="Destination_RelativeOtherSource" xml:space="preserve">
+    <value>Type the full path: the panels show different sources</value>
+  </data>
+  <data name="Destination_Unreadable" xml:space="preserve">
+    <value>Cannot check {0}: {1}</value>
+  </data>
 </root>
