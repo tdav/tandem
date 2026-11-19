@@ -1,3 +1,4 @@
+using Tandem.App.ViewModels;
 using Tandem.Core.Operations;
 using Tandem.Core.Vfs;
 
@@ -47,6 +48,10 @@ public interface IDialogService
 
     /// <summary>The items an operation left alone, and why.</summary>
     Task ShowSummaryAsync(IReadOnlyList<SkippedItem> skipped);
+
+    /// <summary>The properties dialog of one item; its Apply button runs <see cref="PropertiesViewModel.ApplyAsync"/>
+    /// and closes the dialog when that succeeds. True when the changes were applied, false when cancelled.</summary>
+    Task<bool> ShowPropertiesAsync(PropertiesViewModel properties);
 
     /// <summary>A message; <paramref name="detail"/>, when given, is secondary (e.g. the system's own words).</summary>
     Task ShowMessageAsync(string text, string? detail = null);

@@ -35,8 +35,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private volatile bool _disposed;
 
     /// <param name="progressWindowDelay">Waits before the progress window may appear; the real delay when null.</param>
+    /// <param name="quickLookDelay">Waits before an open Quick Look follows the cursor; the real delay when null.</param>
     public MainViewModel(WorkspaceViewModel workspace, AppServices services, KeyMap keyMap,
-        Func<TimeSpan, CancellationToken, Task>? progressWindowDelay = null)
+        Func<TimeSpan, CancellationToken, Task>? progressWindowDelay = null,
+        Func<TimeSpan, CancellationToken, Task>? quickLookDelay = null)
     {
         ArgumentNullException.ThrowIfNull(workspace);
         ArgumentNullException.ThrowIfNull(services);
@@ -64,6 +66,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         RegisterCommands();
         Files = new FileCommands(workspace, services.Providers, services.Operations, services.Dialogs, services.Trash,
             services.NativeCopy, Commands, Operations, Interaction, ReportFailure);
+        Shell = new ShellCommands(workspace, services.Shell, services.QuickLook, services.Dialogs, Commands,
+            services.Providers, services.Metadata, ReportFailure, quickLookDelay);
         Commands.RaiseCanExecuteChanged();
         workspace.PropertyChanged += OnWorkspacePropertyChanged;
         _volumeService = services.Volumes;
@@ -84,6 +88,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     /// <summary>Copy, move, new folder, delete, rename and marking by mask.</summary>
     public FileCommands Files { get; }
+
+    /// <summary>Opening files, Quick Look, Reveal in Finder, the terminal, "Open With" and the properties dialog.</summary>
+    public ShellCommands Shell { get; }
 
     /// <summary>Puts the operations' questions to the user, one at a time.</summary>
     public DialogOperationInteraction Interaction { get; }
@@ -228,14 +235,20 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _volumeService.Changed -= OnVolumesChanged;
         Workspace.PropertyChanged -= OnWorkspacePropertyChanged;
         Interaction.Close();
+        Shell.CloseQuickLook();
+        Shell.Dispose();
         Files.Dispose();
         Operations.Dispose();
         Workspace.Dispose();
     }
 
     /// <summary>The main window is closing: questions of running operations are answered as cancelled, so no
-    /// operation waits for a dialog that will never be shown.</summary>
-    public void OnWindowClosing() => Interaction.Close();
+    /// operation waits for a dialog that will never be shown, and Quick Look closes.</summary>
+    public void OnWindowClosing()
+    {
+        Interaction.Close();
+        Shell.CloseQuickLook();
+    }
 
     internal void ReportFailure(Exception error) => CommandFailed?.Invoke(this, error);
 

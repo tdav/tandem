@@ -14,13 +14,13 @@ namespace Tandem.App;
 
 /// <summary>Everything the view models use from outside the app: file systems, platform services, the operation
 /// queue, the error log. The app gets the real ones from <see cref="Composition.CreatePlatformServices"/>; tests pass in-memory and
-/// fake ones.</summary>
+/// fake ones. Without <see cref="Metadata"/> the properties dialog shows tags and owner as unavailable.</summary>
 public sealed record AppServices(
     ProviderRegistry Providers,
     IVolumeService Volumes,
     IShellIntegration Shell,
     IQuickLook QuickLook,
-    IFileMetadataService Metadata,
+    IFileMetadataService? Metadata,
     ITrash Trash,
     INativeCopy NativeCopy,
     IProcessRunner Processes,
@@ -67,13 +67,16 @@ public static class Composition
     /// <summary>The main view model on <paramref name="services"/>; not loaded yet.</summary>
     /// <param name="progressWindowDelay">How long an operation runs before the progress window appears; see
     /// <see cref="OperationsViewModel"/>.</param>
+    /// <param name="quickLookDelay">How long the cursor rests before an open Quick Look follows it; see
+    /// <see cref="ShellCommands"/>.</param>
     public static MainViewModel Build(AppServices services, JsonStateStore store, string homeDirectory,
         Func<TimeSpan, CancellationToken, Task>? autosaveDelay = null,
-        Func<TimeSpan, CancellationToken, Task>? progressWindowDelay = null)
+        Func<TimeSpan, CancellationToken, Task>? progressWindowDelay = null,
+        Func<TimeSpan, CancellationToken, Task>? quickLookDelay = null)
     {
         ArgumentNullException.ThrowIfNull(services);
         var workspace = new WorkspaceViewModel(services.Providers, store, homeDirectory, autosaveDelay);
-        return new MainViewModel(workspace, services, KeyMap.Default, progressWindowDelay);
+        return new MainViewModel(workspace, services, KeyMap.Default, progressWindowDelay, quickLookDelay);
     }
 
     /// <summary>
@@ -83,13 +86,14 @@ public static class Composition
     /// </summary>
     public static async Task<MainViewModel> StartAsync(AppServices services, string stateDirectory,
         string homeDirectory, Func<TimeSpan, CancellationToken, Task>? autosaveDelay = null,
-        Func<TimeSpan, CancellationToken, Task>? progressWindowDelay = null)
+        Func<TimeSpan, CancellationToken, Task>? progressWindowDelay = null,
+        Func<TimeSpan, CancellationToken, Task>? quickLookDelay = null)
     {
         ArgumentNullException.ThrowIfNull(services);
         var store = new JsonStateStore(stateDirectory);
         var state = await Task.Run(() => store.Load(homeDirectory));
         Loc.SetLanguage(state.Language);
-        var main = Build(services, store, homeDirectory, autosaveDelay, progressWindowDelay);
+        var main = Build(services, store, homeDirectory, autosaveDelay, progressWindowDelay, quickLookDelay);
         try
         {
             await main.Workspace.LoadAsync(state);

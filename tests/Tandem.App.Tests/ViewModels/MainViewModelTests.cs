@@ -28,34 +28,22 @@ public class MainViewModelTests : LanguageTestBase
     }
 
     [AvaloniaFact]
-    public async Task Registers_the_navigation_and_file_commands()
+    public async Task Registers_every_command()
     {
         await using var app = await TestApp.StartAsync(show: false);
-        string[] registered =
-        [
-            CommandIds.PanelSwitch, CommandIds.PanelRefresh, CommandIds.PanelSwap, CommandIds.PanelMirror,
-            CommandIds.NavUp, CommandIds.NavBack, CommandIds.NavForward, CommandIds.PathEdit, CommandIds.CmdlineFocus,
-            CommandIds.SelectToggleDown, CommandIds.SelectAll, CommandIds.SelectInvert, CommandIds.TabNew,
-            CommandIds.TabClose, CommandIds.TabNext, CommandIds.TabPrev, CommandIds.FavoritesShow,
-            CommandIds.ViewToggleHidden,
-            // File commands: available once the cursor is on an item.
-            CommandIds.FileCopy, CommandIds.FileMove, CommandIds.FileMkdir, CommandIds.FileDelete,
-            CommandIds.FileDeletePermanent, CommandIds.FileRename, CommandIds.SelectByMask, CommandIds.UnselectByMask,
-        ];
         var panel = app.Main.Workspace.ActivePanel;
+        // The file and shell commands are available once the cursor is on a local file.
         panel.CursorIndex = panel.Rows.ToList().FindIndex(r => r.Name == "notes.txt");
 
-        foreach (var id in CommandIds.All)
-            Assert.Equal(registered.Contains(id), app.Main.Commands.CanExecute(id));
+        Assert.All(CommandIds.All, id => Assert.True(app.Main.Commands.CanExecute(id), id));
     }
 
     [AvaloniaFact]
-    public async Task Unknown_or_unregistered_chords_are_not_handled()
+    public async Task Unbound_chords_are_not_handled()
     {
         await using var app = await TestApp.StartAsync(show: false);
 
         Assert.False(await app.Main.HandleKeyAsync(KeyChord.Parse("Cmd+J")));
-        Assert.False(await app.Main.HandleKeyAsync(KeyChord.Parse("F3"))); // file.view comes later
         Assert.True(await app.Main.HandleKeyAsync(KeyChord.Parse("Tab")));
     }
 

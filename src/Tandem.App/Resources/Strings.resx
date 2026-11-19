@@ -443,9 +443,6 @@
   </data>
 
   <!-- Errors; {0} = the error message, {1} = the log file -->
-  <data name="Error_GrantAccess" xml:space="preserve">
-    <value>Grant Access…</value>
-  </data>
   <data name="Error_Title" xml:space="preserve">
     <value>Unexpected Error</value>
   </data>
@@ -678,5 +675,128 @@ Details were written to {1}.</value>
   </data>
   <data name="OperationFailed_Other" xml:space="preserve">
     <value>an unexpected error occurred.</value>
+  </data>
+
+  <!-- Context menus of the panels (ContextMenuModel) -->
+  <data name="Context_Open" xml:space="preserve">
+    <value>Open</value>
+  </data>
+  <data name="Context_OpenWith" xml:space="preserve">
+    <value>Open With</value>
+  </data>
+  <data name="Context_NoApps" xml:space="preserve">
+    <value>No applications</value>
+  </data>
+  <data name="Context_Reveal" xml:space="preserve">
+    <value>Show in Finder</value>
+  </data>
+  <data name="Context_QuickLook" xml:space="preserve">
+    <value>Quick Look</value>
+  </data>
+  <data name="Context_Copy" xml:space="preserve">
+    <value>Copy…</value>
+  </data>
+  <data name="Context_Move" xml:space="preserve">
+    <value>Move…</value>
+  </data>
+  <data name="Context_Rename" xml:space="preserve">
+    <value>Rename</value>
+  </data>
+  <data name="Context_Delete" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="Context_Properties" xml:space="preserve">
+    <value>Properties</value>
+  </data>
+  <data name="Context_NewFolder" xml:space="preserve">
+    <value>New folder…</value>
+  </data>
+  <data name="Context_OpenTerminal" xml:space="preserve">
+    <value>Open Terminal here</value>
+  </data>
+  <data name="Context_Refresh" xml:space="preserve">
+    <value>Refresh</value>
+  </data>
+
+  <!-- The properties dialog (PropertiesViewModel, PropertiesDialog) -->
+  <data name="Properties_Title" xml:space="preserve">
+    <value>Properties</value>
+  </data>
+  <data name="Properties_Name" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="Properties_LinkTarget" xml:space="preserve">
+    <value>Link to</value>
+  </data>
+  <data name="Properties_Size" xml:space="preserve">
+    <value>Size</value>
+  </data>
+  <data name="Properties_Modified" xml:space="preserve">
+    <value>Modified</value>
+  </data>
+  <data name="Properties_Owner" xml:space="preserve">
+    <value>Owner</value>
+  </data>
+  <data name="Properties_Unavailable" xml:space="preserve">
+    <value>Not available</value>
+  </data>
+  <data name="Properties_Permissions" xml:space="preserve">
+    <value>Permissions</value>
+  </data>
+  <data name="Properties_Read" xml:space="preserve">
+    <value>Read</value>
+  </data>
+  <data name="Properties_Write" xml:space="preserve">
+    <value>Write</value>
+  </data>
+  <data name="Properties_Execute" xml:space="preserve">
+    <value>Execute</value>
+  </data>
+  <data name="Properties_OwnerClass" xml:space="preserve">
+    <value>Owner</value>
+  </data>
+  <data name="Properties_GroupClass" xml:space="preserve">
+    <value>Group</value>
+  </data>
+  <data name="Properties_OthersClass" xml:space="preserve">
+    <value>Others</value>
+  </data>
+  <data name="Properties_Octal" xml:space="preserve">
+    <value>Octal</value>
+  </data>
+  <data name="Properties_InvalidOctal" xml:space="preserve">
+    <value>Enter three octal digits, for example 755.</value>
+  </data>
+  <data name="Properties_Tags" xml:space="preserve">
+    <value>Tags</value>
+  </data>
+  <data name="Properties_TagsHint" xml:space="preserve">
+    <value>Separate tags with commas.</value>
+  </data>
+  <data name="Properties_ApplyFailed" xml:space="preserve">
+    <value>Could not apply the changes: {0}</value>
+  </data>
+  <data name="Properties_Apply" xml:space="preserve">
+    <value>Apply</value>
+  </data>
+
+  <!-- Handing items to macOS (ShellCommands); {0} is the item's name or the folder's path -->
+  <data name="Shell_OpenFailed" xml:space="preserve">
+    <value>Could not open “{0}”.</value>
+  </data>
+  <data name="Shell_RevealFailed" xml:space="preserve">
+    <value>Could not show “{0}” in Finder.</value>
+  </data>
+  <data name="Shell_TerminalFailed" xml:space="preserve">
+    <value>Could not open Terminal in {0}.</value>
+  </data>
+  <data name="Shell_QuickLookFailed" xml:space="preserve">
+    <value>Could not open Quick Look.</value>
+  </data>
+  <data name="Shell_AccessSettingsFailed" xml:space="preserve">
+    <value>Could not open the access settings.</value>
+  </data>
+  <data name="Shell_OpenAccessSettings" xml:space="preserve">
+    <value>Open access settings</value>
   </data>
 </root>

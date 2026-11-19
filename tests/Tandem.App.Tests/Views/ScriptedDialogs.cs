@@ -1,4 +1,5 @@
 using Tandem.App.Services;
+using Tandem.App.ViewModels;
 using Tandem.Core.Operations;
 using Tandem.Core.Vfs;
 
@@ -30,15 +31,19 @@ internal class ScriptedDialogs : IDialogService
     public List<IReadOnlyList<SkippedItem>> Summaries { get; } = [];
     public List<string> Messages { get; } = [];
     public List<(string Text, string? Detail)> MessagesWithDetail { get; } = [];
+    public List<PropertiesViewModel> PropertiesRequests { get; } = [];
     public List<string> ValidationErrors { get; } = [];
     public List<string> Unscripted { get; } = [];
 
     /// <summary>Every dialog asked for, in order, by kind ("copyMove", "name", "delete", "mask", "conflict", "error",
-    /// "summary", "message").</summary>
+    /// "summary", "message", "properties").</summary>
     public List<string> Log { get; } = [];
 
     /// <summary>As a scripted destination: accept the text the dialog proposed.</summary>
     public const string Proposed = "\0proposed";
+
+    /// <summary>What the properties dialog does with its model (e.g. edit and apply); closes unchanged when null.</summary>
+    public Func<PropertiesViewModel, Task<bool>>? OnProperties { get; set; }
 
     /// <summary>When set, <see cref="ShowSummaryAsync"/> throws it.</summary>
     public Exception? ThrowOnSummary { get; set; }
@@ -122,6 +127,12 @@ internal class ScriptedDialogs : IDialogService
             MessagesWithDetail.Add((text, detail));
         });
         return Task.CompletedTask;
+    }
+
+    public virtual Task<bool> ShowPropertiesAsync(PropertiesViewModel properties)
+    {
+        Record("properties", () => PropertiesRequests.Add(properties));
+        return OnProperties?.Invoke(properties) ?? Task.FromResult(false);
     }
 
     private void Record(string kind, Action add)

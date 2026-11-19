@@ -1,0 +1,357 @@
+using System.ComponentModel;
+using Tandem.App.Commands;
+using Tandem.App.Resources;
+using Tandem.App.Services;
+using Tandem.Core.Platform;
+using Tandem.Core.Vfs;
+
+namespace Tandem.App.ViewModels;
+
+/// <summary>
+/// The commands that hand items to macOS: Quick Look (F3, Cmd+Y), the text editor (F4), the properties dialog
+/// (Cmd+I), Reveal in Finder, a terminal in the current folder, and "Open With" (menu only); Enter on a file opens it
+/// with its default application.
+/// </summary>
+/// <remarks>
+/// Created and used on the UI thread. Everything but the properties dialog works for the local provider only and is
+/// disabled elsewhere; Enter on a file elsewhere does nothing. A launch that fails (<see cref="IOException"/>) is told
+/// to the user in words; anything unexpected goes to the failure handler. While Quick Look is open, moving the cursor
+/// shows the new item after a short pause (holding an arrow key starts one preview, not one per row); going to
+/// another folder, switching the active panel or closing the window closes it.
+/// <see cref="CommandRegistry.RaiseCanExecuteChanged"/> is raised only when one of these commands' availability flips.
+/// </remarks>
+public sealed class ShellCommands : IDisposable
+{
+    /// <summary>How long the cursor must rest before an open preview follows it.</summary>
+    public static readonly TimeSpan QuickLookFollowDelay = TimeSpan.FromMilliseconds(150);
+
+    private static readonly string[] Ids =
+    [
+        CommandIds.FileView, CommandIds.FileEdit, CommandIds.FileQuickLook, CommandIds.FileProperties,
+        CommandIds.ShellReveal, CommandIds.ShellOpenTerminal, CommandIds.ShellOpenWith,
+    ];
+
+    private readonly WorkspaceViewModel _workspace;
+    private readonly IShellIntegration _shell;
+    private readonly IQuickLook _quickLook;
+    private readonly IDialogService _dialogs;
+    private readonly CommandRegistry _commands;
+    private readonly ProviderRegistry _providers;
+    private readonly IFileMetadataService? _metadata;
+    private readonly Action<Exception> _reportFailure;
+    private readonly Func<TimeSpan, CancellationToken, Task> _delay;
+    private readonly List<PanelViewModel> _watched = [];
+    private PanelViewModel? _activePanel;
+    private bool[] _available = [];
+    private IReadOnlyList<string> _previewed = [];
+    private CancellationTokenSource? _follow;
+    private bool _disposed;
+
+    /// <param name="quickLookDelay">Waits <see cref="QuickLookFollowDelay"/> before an open preview follows the
+    /// cursor; <see cref="Task.Delay(TimeSpan, CancellationToken)"/> when null.</param>
+    public ShellCommands(WorkspaceViewModel workspace, IShellIntegration shell, IQuickLook quickLook,
+        IDialogService dialogs, CommandRegistry commands, ProviderRegistry providers, IFileMetadataService? metadata,
+        Action<Exception> reportFailure, Func<TimeSpan, CancellationToken, Task>? quickLookDelay = null)
+    {
+        _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
+        _shell = shell ?? throw new ArgumentNullException(nameof(shell));
+        _quickLook = quickLook ?? throw new ArgumentNullException(nameof(quickLook));
+        _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
+        _commands = commands ?? throw new ArgumentNullException(nameof(commands));
+        _providers = providers ?? throw new ArgumentNullException(nameof(providers));
+        _metadata = metadata;
+        _reportFailure = reportFailure ?? throw new ArgumentNullException(nameof(reportFailure));
+        _delay = quickLookDelay ?? Task.Delay;
+
+        commands.Register(CommandIds.FileView, ToggleQuickLookAsync, IsActiveLocal);
+        commands.Register(CommandIds.FileQuickLook, ToggleQuickLookAsync, IsActiveLocal);
+        commands.Register(CommandIds.FileEdit, EditAsync, () => LocalCursorEntry() is { IsDirectoryLike: false });
+        commands.Register(CommandIds.FileProperties, ShowPropertiesAsync, () => CursorEntry() is not null);
+        commands.Register(CommandIds.ShellReveal, RevealAsync, () => LocalCursorEntry() is not null);
+        commands.Register(CommandIds.ShellOpenTerminal, OpenTerminalAsync, IsActiveLocal);
+        commands.Register(CommandIds.ShellOpenWith, RequestOpenWithMenu, () => LocalCursorEntry() is not null);
+
+        workspace.PropertyChanged += OnWorkspacePropertyChanged;
+        WatchPanels();
+    }
+
+    /// <summary>"Open With" was chosen from the main menu: the view shows the applications of
+    /// <see cref="GetOpenWithApps"/> at the cursor.</summary>
+    public event EventHandler? OpenWithMenuRequested;
+
+    /// <summary>The applications that can open the item under the cursor of the active panel; empty when it is not a
+    /// local item. Asks the system each time.</summary>
+    public IReadOnlyList<AppInfo> GetOpenWithApps() =>
+        LocalCursorEntry() is { } entry ? _shell.GetAppsFor(entry.Path.Path) : [];
+
+    /// <summary>Opens the item under the cursor of the active panel with <paramref name="app"/>; a failure is told
+    /// to the user.</summary>
+    public void OpenWith(AppInfo app)
+    {
+        ArgumentNullException.ThrowIfNull(app);
+        if (LocalCursorEntry() is { } entry)
+            _ = RunAsync(() => _shell.OpenWith(entry.Path.Path, app), Loc.Format("Shell_OpenFailed", entry.Name));
+    }
+
+    /// <summary>The button of an access-denied panel: the system settings page for Full Disk Access.</summary>
+    public void OpenAccessSettings() =>
+        _ = RunAsync(_shell.OpenFullDiskAccessSettings, Loc.Get("Shell_AccessSettingsFailed"));
+
+    /// <summary>Whether a folder of <paramref name="panel"/> is on the local disk.</summary>
+    public static bool IsLocal(PanelViewModel? panel) =>
+        panel is not null && panel.CurrentPath != default && panel.CurrentPath.ProviderId == VfsPath.LocalProviderId;
+
+    /// <summary>Closes Quick Look (the main window is closing).</summary>
+    public void CloseQuickLook()
+    {
+        CancelFollow();
+        _previewed = [];
+        try
+        {
+            _quickLook.Close();
+        }
+        catch (Exception e)
+        {
+            _reportFailure(e);
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        CancelFollow();
+        _workspace.PropertyChanged -= OnWorkspacePropertyChanged;
+        foreach (var panel in _watched)
+        {
+            panel.PropertyChanged -= OnPanelPropertyChanged;
+            panel.FileActivated -= OnFileActivated;
+        }
+        _watched.Clear();
+    }
+
+    // ---- Targets and availability -----------------------------------------------------------------------
+
+    private PanelViewModel? Active => _workspace.IsLoaded ? _workspace.ActivePanel : null;
+
+    private bool IsActiveLocal() => IsLocal(Active);
+
+    private FileEntry? CursorEntry() =>
+        Active is { CursorRow: { IsParentLink: false, Entry: { } entry } } panel && panel.CurrentPath != default
+            ? entry
+            : null;
+
+    private FileEntry? LocalCursorEntry() => IsActiveLocal() ? CursorEntry() : null;
+
+    private IReadOnlyList<string> QuickLookTargets() =>
+        Active is { } panel && IsLocal(panel) ? panel.GetOperationTargets().Select(e => e.Path.Path).ToArray() : [];
+
+    private void OnWorkspacePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(WorkspaceViewModel.ActivePanel) or nameof(WorkspaceViewModel.PassivePanel))
+            WatchPanels();
+    }
+
+    private void WatchPanels()
+    {
+        foreach (var panel in _watched)
+        {
+            panel.PropertyChanged -= OnPanelPropertyChanged;
+            panel.FileActivated -= OnFileActivated;
+        }
+        _watched.Clear();
+        if (_workspace.IsLoaded)
+        {
+            foreach (var panel in new[] { _workspace.ActivePanel, _workspace.PassivePanel })
+            {
+                panel.PropertyChanged += OnPanelPropertyChanged;
+                panel.FileActivated += OnFileActivated;
+                _watched.Add(panel);
+            }
+            if (_activePanel is not null && _activePanel != _workspace.ActivePanel) ClosePreview();
+            _activePanel = _workspace.ActivePanel;
+        }
+        UpdateAvailability();
+    }
+
+    private void OnPanelPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(PanelViewModel.CurrentPath):
+                if (sender == Active) ClosePreview();
+                UpdateAvailability();
+                break;
+            case nameof(PanelViewModel.CursorIndex):
+                if (sender == Active) FollowCursor();
+                UpdateAvailability();
+                break;
+        }
+    }
+
+    private void UpdateAvailability()
+    {
+        var available = Ids.Select(_commands.CanExecute).ToArray();
+        if (available.SequenceEqual(_available)) return;
+        _available = available;
+        _commands.RaiseCanExecuteChanged();
+    }
+
+    // ---- Opening ----------------------------------------------------------------------------------------
+
+    /// <summary>Enter on a file: its default application, for a local file only.</summary>
+    private void OnFileActivated(object? sender, FileEntry entry)
+    {
+        if (entry.Path.ProviderId != VfsPath.LocalProviderId) return;
+        _ = RunAsync(() => _shell.OpenDefault(entry.Path.Path), Loc.Format("Shell_OpenFailed", entry.Name));
+    }
+
+    private Task EditAsync() =>
+        LocalCursorEntry() is { IsDirectoryLike: false } entry
+            ? RunAsync(() => _shell.OpenInTextEditor(entry.Path.Path), Loc.Format("Shell_OpenFailed", entry.Name))
+            : Task.CompletedTask;
+
+    private Task RevealAsync() =>
+        LocalCursorEntry() is { } entry
+            ? RunAsync(() => _shell.RevealInFinder(entry.Path.Path), Loc.Format("Shell_RevealFailed", entry.Name))
+            : Task.CompletedTask;
+
+    private Task OpenTerminalAsync() =>
+        Active is { } panel && IsLocal(panel)
+            ? RunAsync(() => _shell.OpenTerminal(panel.CurrentPath.Path),
+                Loc.Format("Shell_TerminalFailed", panel.CurrentPath.Path))
+            : Task.CompletedTask;
+
+    private Task RequestOpenWithMenu()
+    {
+        OpenWithMenuRequested?.Invoke(this, EventArgs.Empty);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Runs a shell call: a launch failure is told to the user as <paramref name="failureText"/> with the
+    /// system's words as detail; anything else goes to the failure handler. Never throws.</summary>
+    private async Task RunAsync(Action launch, string failureText)
+    {
+        try
+        {
+            launch();
+        }
+        catch (IOException e)
+        {
+            await TellAsync(failureText, e);
+        }
+        catch (Exception e)
+        {
+            _reportFailure(e);
+        }
+    }
+
+    private async Task TellAsync(string text, Exception e)
+    {
+        try
+        {
+            await _dialogs.ShowMessageAsync(text, e.Message);
+        }
+        catch (Exception failure)
+        {
+            _reportFailure(failure);
+        }
+    }
+
+    // ---- Quick Look --------------------------------------------------------------------------------------
+
+    private async Task ToggleQuickLookAsync()
+    {
+        if (!IsActiveLocal()) return;
+        CancelFollow();
+        var targets = QuickLookTargets();
+        try
+        {
+            _quickLook.Toggle(targets);
+            _previewed = _quickLook.IsOpen ? targets : [];
+        }
+        catch (IOException e)
+        {
+            _previewed = [];
+            await TellAsync(Loc.Get("Shell_QuickLookFailed"), e);
+        }
+    }
+
+    /// <summary>The cursor moved: an open preview shows the new targets once the cursor rests.</summary>
+    private void FollowCursor()
+    {
+        if (!_quickLook.IsOpen || _previewed.Count == 0) return;
+        CancelFollow();
+        var follow = new CancellationTokenSource();
+        _follow = follow;
+        _ = FollowAsync(follow);
+    }
+
+    private async Task FollowAsync(CancellationTokenSource follow)
+    {
+        try
+        {
+            await _delay(QuickLookFollowDelay, follow.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception e)
+        {
+            _reportFailure(e);
+            return;
+        }
+        if (follow.IsCancellationRequested || _follow != follow || _disposed) return;
+        _follow = null;
+        follow.Dispose();
+
+        // The user may have closed the preview meanwhile; it is not reopened then.
+        if (!_quickLook.IsOpen) return;
+        var targets = QuickLookTargets();
+        if (targets.Count == 0 || targets.SequenceEqual(_previewed, StringComparer.Ordinal)) return;
+        try
+        {
+            _quickLook.Close();
+            _quickLook.Toggle(targets);
+            _previewed = targets;
+        }
+        catch (IOException e)
+        {
+            _previewed = [];
+            await TellAsync(Loc.Get("Shell_QuickLookFailed"), e);
+        }
+        catch (Exception e)
+        {
+            _reportFailure(e);
+        }
+    }
+
+    private void ClosePreview()
+    {
+        CancelFollow();
+        if (_previewed.Count == 0 && !_quickLook.IsOpen) return;
+        CloseQuickLook();
+    }
+
+    private void CancelFollow()
+    {
+        if (_follow is not { } follow) return;
+        _follow = null;
+        follow.Cancel();
+        follow.Dispose();
+    }
+
+    // ---- Properties --------------------------------------------------------------------------------------
+
+    private async Task ShowPropertiesAsync()
+    {
+        if (Active is not { } panel || CursorEntry() is not { } entry) return;
+        var folder = panel.CurrentPath;
+        var properties = new PropertiesViewModel(entry, _providers.For(entry.Path), _metadata);
+        await properties.LoadAsync();
+        if (!await _dialogs.ShowPropertiesAsync(properties)) return;
+        // Applied: show the new mode; the refresh keeps the cursor on the same name.
+        if (panel.CurrentPath == folder) await panel.RefreshAsync();
+    }
+}

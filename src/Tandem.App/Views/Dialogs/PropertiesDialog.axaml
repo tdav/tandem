@@ -1,0 +1,68 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Tandem.App.ViewModels"
+        xmlns:loc="using:Tandem.App.Resources"
+        x:Class="Tandem.App.Views.Dialogs.PropertiesDialog"
+        x:DataType="vm:PropertiesViewModel"
+        Title="{loc:Tr Key=Properties_Title}"
+        SizeToContent="WidthAndHeight" CanResize="False" CanMinimize="False" CanMaximize="False"
+        ShowInTaskbar="False" WindowStartupLocation="CenterOwner">
+    <!-- Cmd+I: what the item is, its permissions and its tags. Enter applies, Esc cancels. -->
+    <StackPanel Margin="20" Spacing="12" MinWidth="380" MaxWidth="560">
+        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="6">
+            <TextBlock Classes="secondary" Text="{loc:Tr Key=Properties_Name}" />
+            <SelectableTextBlock x:Name="NameText" Grid.Column="1" Text="{Binding Name}" FontWeight="SemiBold"
+                                 TextWrapping="Wrap" />
+            <TextBlock Grid.Row="1" Classes="secondary" Text="{loc:Tr Key=Properties_LinkTarget}"
+                       IsVisible="{Binding LinkTarget, Converter={x:Static ObjectConverters.IsNotNull}}" />
+            <SelectableTextBlock Grid.Row="1" Grid.Column="1" Text="{Binding LinkTarget}" TextWrapping="Wrap"
+                                 IsVisible="{Binding LinkTarget, Converter={x:Static ObjectConverters.IsNotNull}}" />
+            <TextBlock Grid.Row="2" Classes="secondary" Text="{loc:Tr Key=Properties_Size}" />
+            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SizeText}" />
+            <TextBlock Grid.Row="3" Classes="secondary" Text="{loc:Tr Key=Properties_Modified}" />
+            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding ModifiedText}" />
+            <TextBlock Grid.Row="4" Classes="secondary" Text="{loc:Tr Key=Properties_Owner}" />
+            <TextBlock x:Name="OwnerText" Grid.Row="4" Grid.Column="1" Text="{Binding OwnerText}" />
+        </Grid>
+
+        <TextBlock Text="{loc:Tr Key=Properties_Permissions}" FontWeight="SemiBold" />
+        <Grid x:Name="Permissions" ColumnDefinitions="Auto,Auto,Auto,Auto" RowDefinitions="Auto,Auto,Auto,Auto"
+              ColumnSpacing="16" RowSpacing="2" IsEnabled="{Binding CanEditMode}">
+            <TextBlock Grid.Column="1" Classes="secondary" Text="{loc:Tr Key=Properties_Read}" />
+            <TextBlock Grid.Column="2" Classes="secondary" Text="{loc:Tr Key=Properties_Write}" />
+            <TextBlock Grid.Column="3" Classes="secondary" Text="{loc:Tr Key=Properties_Execute}" />
+            <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="{loc:Tr Key=Properties_OwnerClass}" />
+            <CheckBox Grid.Row="1" Grid.Column="1" IsChecked="{Binding OwnerRead}" />
+            <CheckBox Grid.Row="1" Grid.Column="2" IsChecked="{Binding OwnerWrite}" />
+            <CheckBox Grid.Row="1" Grid.Column="3" IsChecked="{Binding OwnerExecute}" />
+            <TextBlock Grid.Row="2" VerticalAlignment="Center" Text="{loc:Tr Key=Properties_GroupClass}" />
+            <CheckBox Grid.Row="2" Grid.Column="1" IsChecked="{Binding GroupRead}" />
+            <CheckBox Grid.Row="2" Grid.Column="2" IsChecked="{Binding GroupWrite}" />
+            <CheckBox Grid.Row="2" Grid.Column="3" IsChecked="{Binding GroupExecute}" />
+            <TextBlock Grid.Row="3" VerticalAlignment="Center" Text="{loc:Tr Key=Properties_OthersClass}" />
+            <CheckBox Grid.Row="3" Grid.Column="1" IsChecked="{Binding OtherRead}" />
+            <CheckBox Grid.Row="3" Grid.Column="2" IsChecked="{Binding OtherWrite}" />
+            <CheckBox Grid.Row="3" Grid.Column="3" IsChecked="{Binding OtherExecute}" />
+        </Grid>
+        <StackPanel Orientation="Horizontal" Spacing="8">
+            <TextBlock VerticalAlignment="Center" Text="{loc:Tr Key=Properties_Octal}" />
+            <TextBox x:Name="Octal" Width="64" MaxLength="3" Text="{Binding Octal}"
+                     IsEnabled="{Binding CanEditMode}" />
+        </StackPanel>
+
+        <TextBlock Text="{loc:Tr Key=Properties_Tags}" FontWeight="SemiBold" />
+        <TextBox x:Name="Tags" Text="{Binding TagsText}" IsEnabled="{Binding CanEditTags}" MinWidth="360" />
+        <TextBlock Classes="secondary" Text="{loc:Tr Key=Properties_TagsHint}" TextWrapping="Wrap" />
+
+        <TextBlock x:Name="Error" Text="{Binding Error}" Foreground="{DynamicResource Tandem.ErrorForeground}"
+                   TextWrapping="Wrap" MaxWidth="520"
+                   IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right" Margin="0,8,0,0">
+            <Button x:Name="Apply" MinWidth="90" HorizontalContentAlignment="Center" IsDefault="True"
+                    Content="{loc:Tr Key=Properties_Apply}" Click="OnApply" />
+            <Button x:Name="Cancel" MinWidth="90" HorizontalContentAlignment="Center" IsCancel="True"
+                    Content="{loc:Tr Key=Button_Cancel}" Click="OnCancel" />
+        </StackPanel>
+    </StackPanel>
+</Window>

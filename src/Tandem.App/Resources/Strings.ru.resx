@@ -435,9 +435,6 @@
   </data>
 
   <!-- Errors; {0} = the error message, {1} = the log file -->
-  <data name="Error_GrantAccess" xml:space="preserve">
-    <value>Разрешить доступ…</value>
-  </data>
   <data name="Error_Title" xml:space="preserve">
     <value>Непредвиденная ошибка</value>
   </data>
@@ -670,5 +667,128 @@
   </data>
   <data name="OperationFailed_Other" xml:space="preserve">
     <value>произошла непредвиденная ошибка.</value>
+  </data>
+
+  <!-- Context menus of the panels (ContextMenuModel) -->
+  <data name="Context_Open" xml:space="preserve">
+    <value>Открыть</value>
+  </data>
+  <data name="Context_OpenWith" xml:space="preserve">
+    <value>Открыть в</value>
+  </data>
+  <data name="Context_NoApps" xml:space="preserve">
+    <value>Нет программ</value>
+  </data>
+  <data name="Context_Reveal" xml:space="preserve">
+    <value>Показать в Finder</value>
+  </data>
+  <data name="Context_QuickLook" xml:space="preserve">
+    <value>Быстрый просмотр</value>
+  </data>
+  <data name="Context_Copy" xml:space="preserve">
+    <value>Копировать…</value>
+  </data>
+  <data name="Context_Move" xml:space="preserve">
+    <value>Перенести…</value>
+  </data>
+  <data name="Context_Rename" xml:space="preserve">
+    <value>Переименовать</value>
+  </data>
+  <data name="Context_Delete" xml:space="preserve">
+    <value>Удалить</value>
+  </data>
+  <data name="Context_Properties" xml:space="preserve">
+    <value>Свойства</value>
+  </data>
+  <data name="Context_NewFolder" xml:space="preserve">
+    <value>Новая папка…</value>
+  </data>
+  <data name="Context_OpenTerminal" xml:space="preserve">
+    <value>Открыть терминал здесь</value>
+  </data>
+  <data name="Context_Refresh" xml:space="preserve">
+    <value>Обновить</value>
+  </data>
+
+  <!-- The properties dialog (PropertiesViewModel, PropertiesDialog) -->
+  <data name="Properties_Title" xml:space="preserve">
+    <value>Свойства</value>
+  </data>
+  <data name="Properties_Name" xml:space="preserve">
+    <value>Имя</value>
+  </data>
+  <data name="Properties_LinkTarget" xml:space="preserve">
+    <value>Ссылка на</value>
+  </data>
+  <data name="Properties_Size" xml:space="preserve">
+    <value>Размер</value>
+  </data>
+  <data name="Properties_Modified" xml:space="preserve">
+    <value>Изменён</value>
+  </data>
+  <data name="Properties_Owner" xml:space="preserve">
+    <value>Владелец</value>
+  </data>
+  <data name="Properties_Unavailable" xml:space="preserve">
+    <value>Недоступно</value>
+  </data>
+  <data name="Properties_Permissions" xml:space="preserve">
+    <value>Права доступа</value>
+  </data>
+  <data name="Properties_Read" xml:space="preserve">
+    <value>Чтение</value>
+  </data>
+  <data name="Properties_Write" xml:space="preserve">
+    <value>Запись</value>
+  </data>
+  <data name="Properties_Execute" xml:space="preserve">
+    <value>Выполнение</value>
+  </data>
+  <data name="Properties_OwnerClass" xml:space="preserve">
+    <value>Владелец</value>
+  </data>
+  <data name="Properties_GroupClass" xml:space="preserve">
+    <value>Группа</value>
+  </data>
+  <data name="Properties_OthersClass" xml:space="preserve">
+    <value>Остальные</value>
+  </data>
+  <data name="Properties_Octal" xml:space="preserve">
+    <value>Восьмеричное значение</value>
+  </data>
+  <data name="Properties_InvalidOctal" xml:space="preserve">
+    <value>Введите три восьмеричные цифры, например 755.</value>
+  </data>
+  <data name="Properties_Tags" xml:space="preserve">
+    <value>Теги</value>
+  </data>
+  <data name="Properties_TagsHint" xml:space="preserve">
+    <value>Теги разделяются запятыми.</value>
+  </data>
+  <data name="Properties_ApplyFailed" xml:space="preserve">
+    <value>Не удалось применить изменения: {0}</value>
+  </data>
+  <data name="Properties_Apply" xml:space="preserve">
+    <value>Применить</value>
+  </data>
+
+  <!-- Handing items to macOS (ShellCommands); {0} is the item's name or the folder's path -->
+  <data name="Shell_OpenFailed" xml:space="preserve">
+    <value>Не удалось открыть «{0}».</value>
+  </data>
+  <data name="Shell_RevealFailed" xml:space="preserve">
+    <value>Не удалось показать «{0}» в Finder.</value>
+  </data>
+  <data name="Shell_TerminalFailed" xml:space="preserve">
+    <value>Не удалось открыть терминал в папке {0}.</value>
+  </data>
+  <data name="Shell_QuickLookFailed" xml:space="preserve">
+    <value>Не удалось открыть быстрый просмотр.</value>
+  </data>
+  <data name="Shell_AccessSettingsFailed" xml:space="preserve">
+    <value>Не удалось открыть настройки доступа.</value>
+  </data>
+  <data name="Shell_OpenAccessSettings" xml:space="preserve">
+    <value>Открыть настройки доступа</value>
   </data>
 </root>

@@ -103,9 +103,10 @@
         <!-- Status row: selection, or why the folder cannot be shown. -->
         <Border DockPanel.Dock="Bottom" Background="{DynamicResource Tandem.BarBackground}" Padding="6,2">
             <DockPanel>
-                <!-- Placeholder: Task 22 connects it to the access request. -->
-                <Button x:Name="GrantAccess" DockPanel.Dock="Right" Classes="flat" IsEnabled="False"
-                        Content="{loc:Tr Key=Error_GrantAccess}" IsVisible="{Binding IsAccessDenied}" />
+                <!-- A local folder that cannot be read for lack of permission: the system's Full Disk Access page. -->
+                <Button x:Name="OpenAccessSettings" DockPanel.Dock="Right" Classes="flat"
+                        Content="{loc:Tr Key=Shell_OpenAccessSettings}" IsVisible="{Binding IsAccessDenied}"
+                        Command="{Binding OpenAccessSettingsCommand}" />
                 <TextBlock x:Name="Status" Text="{Binding StatusLine}" Classes.error="{Binding HasError}"
                            VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
             </DockPanel>

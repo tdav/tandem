@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Threading;
 using Tandem.App.Resources;
+using Tandem.App.ViewModels;
 using Tandem.App.ViewModels.Dialogs;
 using Tandem.App.Views;
 using Tandem.App.Views.Dialogs;
@@ -47,6 +48,9 @@ public sealed class DialogService : IDialogService
 
     public Task ShowSummaryAsync(IReadOnlyList<SkippedItem> skipped) =>
         ShowAsync<object>(new SummaryDialog(new SummaryDialogViewModel(skipped)));
+
+    public async Task<bool> ShowPropertiesAsync(PropertiesViewModel properties) =>
+        await ShowAsync<object>(new PropertiesDialog(properties)) is true;
 
     public Task ShowMessageAsync(string text, string? detail = null) =>
         MessageDialog.ShowAsync(Owner, "Tandem", string.IsNullOrWhiteSpace(detail) ? text : text + "\n\n" + detail);

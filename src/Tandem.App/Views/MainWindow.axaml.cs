@@ -55,6 +55,7 @@ public partial class MainWindow : Window
         main.CommandLineFocusRequested += OnCommandLineFocusRequested;
         main.FavoritesMenuRequested += OnFavoritesMenuRequested;
         main.NoticeRequested += OnNoticeRequested;
+        main.Shell.OpenWithMenuRequested += OnOpenWithMenuRequested;
         main.Operations.PropertyChanged += OnOperationsPropertyChanged;
         PositionChanged += (_, _) => RecordPlacement();
         SizeChanged += (_, _) => RecordPlacement();
@@ -178,6 +179,14 @@ public partial class MainWindow : Window
         flyout.ShowAt((main.Workspace.ActiveSide == PanelSide.Left ? LeftPanel : RightPanel).PathRowControl);
     }
 
+    /// <summary>"Open With" from the main menu: the applications for the cursor item, at its row.</summary>
+    private void OnOpenWithMenuRequested(object? sender, EventArgs e)
+    {
+        if (_main is not { } main) return;
+        (main.Workspace.ActiveSide == PanelSide.Left ? LeftPanel : RightPanel).List
+            .ShowMenuAtCursor(ContextMenuModel.OpenWithItems(main));
+    }
+
     /// <summary>The progress window: shown while the operations model says so, modeless and owned by this window.
     /// The user closing it only hides it; the operations go on.</summary>
     private void OnOperationsPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -214,6 +223,7 @@ public partial class MainWindow : Window
         main.CommandLineFocusRequested -= OnCommandLineFocusRequested;
         main.FavoritesMenuRequested -= OnFavoritesMenuRequested;
         main.NoticeRequested -= OnNoticeRequested;
+        main.Shell.OpenWithMenuRequested -= OnOpenWithMenuRequested;
         main.Operations.PropertyChanged -= OnOperationsPropertyChanged;
     }
 }

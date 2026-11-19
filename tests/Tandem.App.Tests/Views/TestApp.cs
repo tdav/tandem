@@ -40,6 +40,16 @@ internal sealed class TestApp : IAsyncDisposable
 
     /// <summary>The Trash: items "moved" there are removed from <see cref="Fs"/> and listed.</summary>
     public InMemoryTrash Trash { get; }
+
+    /// <summary>Records every shell call; launches nothing.</summary>
+    public RecordingShell Shell { get; } = new();
+
+    /// <summary>Records Quick Look calls; shows nothing.</summary>
+    public RecordingQuickLook QuickLook { get; } = new();
+
+    /// <summary>Tags and owners kept in memory; never touches real files.</summary>
+    public FakeMetadata Metadata { get; } = new();
+
     public FakeVolumeService Volumes { get; }
     public string StateDirectory { get; }
     public MainViewModel Main { get; private set; } = null!;
@@ -66,17 +76,22 @@ internal sealed class TestApp : IAsyncDisposable
     public string LogFile => Path.Combine(StateDirectory, "logs", "tandem.log");
 
     /// <param name="trashCapable">Whether the in-memory "local disk" says it has a Trash (the real one does).</param>
+    /// <param name="extraProviders">Providers besides the "local disk", e.g. a non-local one.</param>
     public static AppServices Services(InMemoryFileSystem fs, FakeVolumeService volumes, string logFile,
         IDialogService? dialogs = null, ITrash? trash = null, bool trashCapable = false,
-        ProviderCapabilities removedCapabilities = ProviderCapabilities.None)
+        ProviderCapabilities removedCapabilities = ProviderCapabilities.None, IShellIntegration? shell = null,
+        IQuickLook? quickLook = null, IFileMetadataService? metadata = null,
+        IReadOnlyList<IFileSystemProvider>? extraProviders = null)
     {
         var providers = new ProviderRegistry();
         var added = trashCapable ? ProviderCapabilities.Trash : ProviderCapabilities.None;
         providers.Register(added == ProviderCapabilities.None && removedCapabilities == ProviderCapabilities.None
             ? fs
             : new CapabilityProvider(fs, added, removedCapabilities));
+        foreach (var provider in extraProviders ?? []) providers.Register(provider);
         var platform = new FakePlatform();
-        return new AppServices(providers, volumes, platform, platform, platform, trash ?? platform,
+        return new AppServices(providers, volumes, shell ?? platform, quickLook ?? platform, metadata,
+            trash ?? platform,
             new InMemoryNativeCopy(fs), platform, new OperationQueue(), new UnrestrictedAccessBroker(),
             new ErrorLog(logFile), dialogs ?? new ScriptedDialogs());
     }
@@ -85,7 +100,9 @@ internal sealed class TestApp : IAsyncDisposable
     public static async Task<TestApp> StartAsync(InMemoryFileSystem? fs = null, AppState? state = null,
         bool show = true, bool trashCapable = false,
         Func<TimeSpan, CancellationToken, Task>? progressWindowDelay = null,
-        ProviderCapabilities removedCapabilities = ProviderCapabilities.None)
+        ProviderCapabilities removedCapabilities = ProviderCapabilities.None,
+        Func<TimeSpan, CancellationToken, Task>? quickLookDelay = null,
+        IReadOnlyList<IFileSystemProvider>? extraProviders = null, bool withMetadata = true)
     {
         fs ??= DefaultFileSystem();
         var stateDirectory = Path.Combine(Path.GetTempPath(), "tandem-window-tests-" + Guid.NewGuid().ToString("N"));
@@ -93,10 +110,12 @@ internal sealed class TestApp : IAsyncDisposable
 
         var app = new TestApp(fs, new FakeVolumeService(), stateDirectory);
         app.Main = await Composition.StartAsync(
-            Services(fs, app.Volumes, app.LogFile, app.Dialogs, app.Trash, trashCapable, removedCapabilities),
+            Services(fs, app.Volumes, app.LogFile, app.Dialogs, app.Trash, trashCapable, removedCapabilities,
+                app.Shell, app.QuickLook, withMetadata ? app.Metadata : null, extraProviders),
             stateDirectory, Home,
             autosaveDelay: (_, ct) => Task.Delay(Timeout.Infinite, ct),
-            progressWindowDelay: progressWindowDelay ?? ((_, ct) => Task.Delay(Timeout.Infinite, ct)));
+            progressWindowDelay: progressWindowDelay ?? ((_, ct) => Task.Delay(Timeout.Infinite, ct)),
+            quickLookDelay: quickLookDelay ?? ((_, _) => Task.CompletedTask));
         app.Main.CommandFailed += (_, e) => app.Failures.Add(e);
         if (show) app.ShowWindow();
         return app;
@@ -280,6 +299,96 @@ internal sealed class CapabilityProvider(IFileSystemProvider inner, ProviderCapa
     public Task<bool> IsSameEntryAsync(VfsPath a, VfsPath b, CancellationToken ct) => inner.IsSameEntryAsync(a, b, ct);
     public Task<string> GetVolumeKeyAsync(VfsPath path, CancellationToken ct) => inner.GetVolumeKeyAsync(path, ct);
     public IDisposable? Watch(VfsPath directory, Action changed) => inner.Watch(directory, changed);
+}
+
+/// <summary>Records every shell call instead of launching anything. A failure set in <see cref="Failure"/> is thrown
+/// by every launching call; the apps reported for any item are <see cref="Apps"/>.</summary>
+internal sealed class RecordingShell : IShellIntegration
+{
+    public List<(string Call, string Path)> Calls { get; } = [];
+    public List<(string Path, AppInfo App)> OpenedWith { get; } = [];
+    public List<string> AppQueries { get; } = [];
+    public IReadOnlyList<AppInfo> Apps { get; set; } = [];
+    public Exception? Failure { get; set; }
+
+    private void Record(string call, string path)
+    {
+        if (!path.StartsWith('/') && call != "settings") throw new ArgumentException("Relative path.", nameof(path));
+        if (Failure is { } failure) throw failure;
+        Calls.Add((call, path));
+    }
+
+    public void OpenDefault(string path) => Record("open", path);
+    public void OpenInTextEditor(string path) => Record("edit", path);
+    public IReadOnlyList<AppInfo> GetAppsFor(string path)
+    {
+        AppQueries.Add(path);
+        return Apps;
+    }
+    public void OpenWith(string path, AppInfo app)
+    {
+        Record("openWith", path);
+        OpenedWith.Add((path, app));
+    }
+    public void RevealInFinder(string path) => Record("reveal", path);
+    public void OpenTerminal(string directory) => Record("terminal", directory);
+    public void OpenFullDiskAccessSettings() => Record("settings", "");
+}
+
+/// <summary>Records Quick Look calls: <see cref="Toggles"/> holds the paths of each toggle, <see cref="Closes"/> counts
+/// closes; <see cref="IsOpen"/> follows them as the real preview would.</summary>
+internal sealed class RecordingQuickLook : IQuickLook
+{
+    public List<IReadOnlyList<string>> Toggles { get; } = [];
+    public int Closes { get; private set; }
+    public bool IsOpen { get; set; }
+    public Exception? Failure { get; set; }
+
+    public void Toggle(IReadOnlyList<string> paths)
+    {
+        if (Failure is { } failure) throw failure;
+        Toggles.Add(paths.ToArray());
+        if (IsOpen) IsOpen = false;
+        else if (paths.Count > 0) IsOpen = true;
+    }
+
+    public void Close()
+    {
+        if (!IsOpen) return;
+        Closes++;
+        IsOpen = false;
+    }
+}
+
+/// <summary>Tags and owners in memory, by path. <see cref="Failure"/>, when set, is thrown by every call.</summary>
+internal sealed class FakeMetadata : IFileMetadataService
+{
+    public Dictionary<string, IReadOnlyList<string>> Tags { get; } = new(StringComparer.Ordinal);
+    public List<(string Path, IReadOnlyList<string> Tags)> SetCalls { get; } = [];
+    public OwnerInfo Owner { get; set; } = new("user", "staff");
+    public List<string> OwnerQueries { get; } = [];
+    public Exception? Failure { get; set; }
+    public Exception? SetFailure { get; set; }
+
+    public IReadOnlyList<string> GetTags(string path)
+    {
+        if (Failure is { } failure) throw failure;
+        return Tags.GetValueOrDefault(path) ?? [];
+    }
+
+    public void SetTags(string path, IReadOnlyList<string> tags)
+    {
+        if ((SetFailure ?? Failure) is { } failure) throw failure;
+        SetCalls.Add((path, tags.ToArray()));
+        Tags[path] = tags.ToArray();
+    }
+
+    public OwnerInfo GetOwner(string path)
+    {
+        if (Failure is { } failure) throw failure;
+        OwnerQueries.Add(path);
+        return Owner;
+    }
 }
 
 /// <summary>Platform services this task does not use; each call fails loudly.</summary>

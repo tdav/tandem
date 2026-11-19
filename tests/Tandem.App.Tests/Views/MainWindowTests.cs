@@ -428,9 +428,12 @@ public class MainWindowTests : LanguageTestBase
         copy.Command.Execute(copy.CommandParameter); // does nothing, throws nothing
         Assert.Equal(new KeyGesture(Key.F5), copy.Gesture);
 
-        // Copy is off with the cursor on ".."; commands of later tasks are off.
-        foreach (var id in new[] { CommandIds.FileView, CommandIds.FileQuickLook, CommandIds.ShellReveal })
+        // Copy is off with the cursor on ".."; so are the commands that need an item.
+        foreach (var id in new[] { CommandIds.FileEdit, CommandIds.ShellReveal, CommandIds.FileProperties })
             Assert.False(items.Single(i => i.CommandParameter as string == id).Command!.CanExecute(id));
+        var view = items.Single(i => i.CommandParameter as string == CommandIds.FileView);
+        Assert.True(view.Command!.CanExecute(view.CommandParameter));
+        Assert.Equal(new KeyGesture(Key.F3), view.Gesture);
 
         var refresh = items.Single(i => i.CommandParameter as string == CommandIds.PanelRefresh);
         Assert.True(refresh.Command!.CanExecute(refresh.CommandParameter));
@@ -494,22 +497,27 @@ public class MainWindowTests : LanguageTestBase
     }
 
     [AvaloniaFact]
-    public async Task Access_denied_shows_the_error_and_the_access_placeholder()
+    public async Task Access_denied_shows_the_error_and_the_access_settings_button()
     {
         var fs = TestApp.DefaultFileSystem();
         fs.AddDirectory("/locked");
         fs.FailOn((op, path) => op == "Enumerate" && path.Path == "/locked",
             () => new VfsAccessDeniedException("/locked"));
         await using var app = await TestApp.StartAsync(fs);
-        var placeholder = app.Find<Button>("GrantAccess");
-        Assert.False(placeholder.IsVisible);
+        var button = app.PanelView(PanelSide.Left).GetVisualDescendants().OfType<Button>()
+            .Single(b => b.Name == "OpenAccessSettings");
+        Assert.False(button.IsVisible);
 
         await app.Left.NavigateToAsync(VfsPath.Local("/locked"));
         app.Pump();
 
         Assert.Equal(PanelErrorKind.AccessDenied, app.Left.ErrorKind);
         Assert.Equal(app.Left.Error, app.Main.Left.StatusLine);
-        Assert.True(placeholder.IsVisible);
+        Assert.True(button.IsVisible);
+        Assert.True(button.IsEffectivelyEnabled);
+        Assert.Equal("Open access settings", button.Content);
+        app.Click(button);
+        Assert.Equal([("settings", "")], app.Shell.Calls);
     }
 
     [AvaloniaFact]

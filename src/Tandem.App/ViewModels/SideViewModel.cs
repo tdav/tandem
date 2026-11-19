@@ -91,8 +91,11 @@ public sealed partial class SideViewModel : ObservableObject
 
     public bool HasError => Message is not null || _panel?.Error is not null;
 
-    /// <summary>The panel cannot show its folder for lack of permission: the status row offers to grant access.</summary>
-    public bool IsAccessDenied => Message is null && _panel?.ErrorKind == PanelErrorKind.AccessDenied;
+    /// <summary>The panel on the local disk cannot show a folder for lack of permission: the status row offers the
+    /// system's access settings.</summary>
+    public bool IsAccessDenied =>
+        Message is null && _panel?.ErrorKind == PanelErrorKind.AccessDenied &&
+        (_panel.CurrentPath == default || _panel.CurrentPath.ProviderId == VfsPath.LocalProviderId);
 
     public string NameSortMark => SortMark(SortColumn.Name);
     public string ExtensionSortMark => SortMark(SortColumn.Extension);
@@ -163,6 +166,25 @@ public sealed partial class SideViewModel : ObservableObject
         if (toggleMark) panel.Rows[index].IsSelected = !panel.Rows[index].IsSelected;
         panel.CursorIndex = index;
     }
+
+    /// <summary>A right click on a row: puts the cursor there and activates this side (as a click does), so the menu
+    /// acts on the row under the pointer. Empty when there is no such row.</summary>
+    public IReadOnlyList<ContextMenuItem> ContextMenuForRow(int index)
+    {
+        ClickRow(index, toggleMark: false);
+        return _panel is { } panel && index >= 0 && index < panel.Rows.Count ? ContextMenuModel.ForRow(_main) : [];
+    }
+
+    /// <summary>A right click below the rows: activates this side and leaves the cursor where it is.</summary>
+    public IReadOnlyList<ContextMenuItem> ContextMenuForEmptySpace()
+    {
+        Activate();
+        return _panel is null ? [] : ContextMenuModel.ForEmptySpace(_main);
+    }
+
+    /// <summary>The access-denied button: opens the system's Full Disk Access settings.</summary>
+    [RelayCommand]
+    private void OpenAccessSettings() => _main.Shell.OpenAccessSettings();
 
     /// <summary>A double click on a row: as Enter on it. An unexpected failure is reported, not thrown.</summary>
     public async Task OpenRowAsync(int index)
