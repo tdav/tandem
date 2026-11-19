@@ -827,7 +827,7 @@ Details were written to {1}.</value>
     <value>The command could not be followed to the end: {0}</value>
   </data>
   <data name="CommandLine_CdFailed" xml:space="preserve">
-    <value>Cannot open the folder {0}: {1}</value>
+    <value>Cannot open the folder {0}</value>
   </data>
   <data name="CommandLine_CdPreviousUnsupported" xml:space="preserve">
     <value>“cd -” is not supported</value>
@@ -839,7 +839,7 @@ Details were written to {1}.</value>
     <value>The cd path has an unclosed quote or ends in a backslash</value>
   </data>
   <data name="CommandLine_CdTooManyArguments" xml:space="preserve">
-    <value>cd takes one folder; put a name with spaces in quotes</value>
+    <value>Only a plain “cd folder” moves the panel; commands after cd are not supported (put a name with spaces in quotes)</value>
   </data>
   <data name="Output_ExitCode" xml:space="preserve">
     <value>The command finished with code {0}</value>
@@ -858,5 +858,11 @@ Details were written to {1}.</value>
   </data>
   <data name="Output_Title" xml:space="preserve">
     <value>Output</value>
+  </data>
+  <data name="Output_Killed" xml:space="preserve">
+    <value>The command was stopped</value>
+  </data>
+  <data name="Output_LineShortened" xml:space="preserve">
+    <value>… (line shortened)</value>
   </data>
 </root>

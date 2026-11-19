@@ -40,8 +40,9 @@ internal sealed class FakeProcessRunner : IProcessRunner
     }
 }
 
-/// <summary>A scripted process: the test writes its output lines and ends it with <see cref="Exit"/>. A kill ends it
-/// with code 137, as SIGKILL would.</summary>
+/// <summary>A scripted process: the test writes its output lines and ends it with <see cref="Exit"/>. A kill ends a
+/// process still running with code 137, as SIGKILL would; like the real one, a kill after the exit does nothing, even
+/// while the output is still open (<see cref="ExitKeepingOutputOpen"/>: a background child holds the pipe).</summary>
 internal sealed class FakeProcess : IRunningProcess
 {
     public const int KilledExitCode = 137;
@@ -72,16 +73,22 @@ internal sealed class FakeProcess : IRunningProcess
         _exit.TrySetResult(code);
     }
 
+    /// <summary>The shell exits, but its output stays open, as when a job it started in the background still holds
+    /// the pipe.</summary>
+    public void ExitKeepingOutputOpen(int code) => _exit.TrySetResult(code);
+
+    public bool IsOutputOpen => !_lines.Reader.Completion.IsCompleted;
+
     public void Kill()
     {
         Interlocked.Increment(ref _kills);
-        Exit(KilledExitCode);
+        if (!HasExited) Exit(KilledExitCode);
     }
 
     public ValueTask DisposeAsync()
     {
         Interlocked.Increment(ref _disposals);
-        Exit(KilledExitCode);
+        Exit(KilledExitCode); // the exit code stays if it had exited; the output is closed either way
         return ValueTask.CompletedTask;
     }
 }

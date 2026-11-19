@@ -819,7 +819,7 @@
     <value>Не удалось дождаться завершения команды: {0}</value>
   </data>
   <data name="CommandLine_CdFailed" xml:space="preserve">
-    <value>Не удалось открыть папку {0}: {1}</value>
+    <value>Не удалось открыть папку {0}</value>
   </data>
   <data name="CommandLine_CdPreviousUnsupported" xml:space="preserve">
     <value>«cd -» не поддерживается</value>
@@ -831,7 +831,7 @@
     <value>В пути для cd не закрыта кавычка или он заканчивается обратной косой чертой</value>
   </data>
   <data name="CommandLine_CdTooManyArguments" xml:space="preserve">
-    <value>cd принимает одну папку; имя с пробелами заключите в кавычки</value>
+    <value>Панель переходит только по простой команде «cd папка»; команды после cd не поддерживаются (имя с пробелами заключите в кавычки)</value>
   </data>
   <data name="Output_ExitCode" xml:space="preserve">
     <value>Команда завершена с кодом {0}</value>
@@ -850,5 +850,11 @@
   </data>
   <data name="Output_Title" xml:space="preserve">
     <value>Вывод</value>
+  </data>
+  <data name="Output_Killed" xml:space="preserve">
+    <value>Команда прервана</value>
+  </data>
+  <data name="Output_LineShortened" xml:space="preserve">
+    <value>… (строка сокращена)</value>
   </data>
 </root>

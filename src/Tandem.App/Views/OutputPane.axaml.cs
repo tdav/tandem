@@ -12,7 +12,8 @@ namespace Tandem.App.Views;
 /// <summary>
 /// The command line's output pane, above the command line. The text is plain, monospace, selectable and copyable
 /// (Cmd+C); Ctrl+C kills a running command. New output keeps the view at the end unless the user has scrolled up,
-/// and a selection survives output being appended.
+/// and a selection survives output being appended. While the pane is hidden its text is not updated; it catches up
+/// when the pane is shown again.
 /// </summary>
 public partial class OutputPane : UserControl
 {
@@ -41,6 +42,12 @@ public partial class OutputPane : UserControl
         ShowOutput();
     }
 
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == IsVisibleProperty && IsVisible) ShowOutput();
+    }
+
     private void OnModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(CommandLineViewModel.Output)) ShowOutput();
@@ -48,6 +55,7 @@ public partial class OutputPane : UserControl
 
     private void ShowOutput()
     {
+        if (!IsVisible) return; // laid out again only when it can be seen
         var text = _model?.Output ?? "";
         var old = OutputText.Text ?? "";
         if (text == old) return;

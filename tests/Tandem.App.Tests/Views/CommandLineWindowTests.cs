@@ -213,6 +213,27 @@ public class CommandLineWindowTests : LanguageTestBase
     }
 
     [AvaloniaFact]
+    public async Task A_closed_pane_is_not_updated_and_catches_up_when_it_opens_again()
+    {
+        await using var f = await StartAsync();
+        await RunAsync(f, "tail -f log");
+        f.App.Click(f.App.Find<Button>("CloseButton"));
+        var shown = f.Pane.Text.Text;
+
+        f.Runner.Last.Write("while closed");
+        await TestApp.WaitUntil(() => f.Line.Output.Contains("while closed"));
+        f.App.Pump();
+        Assert.False(f.Pane.IsVisible);
+        Assert.Equal(shown, f.Pane.Text.Text);
+
+        f.Line.IsOutputVisible = true;
+        f.App.Pump();
+        Assert.Equal(f.Line.Output, f.Pane.Text.Text);
+        f.Line.Kill();
+        await TestApp.WaitUntil(() => !f.Line.IsRunning);
+    }
+
+    [AvaloniaFact]
     public async Task The_output_pane_keeps_its_height_when_it_opens_again()
     {
         await using var f = await StartAsync();

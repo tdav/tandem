@@ -31,6 +31,8 @@ public class CommandLineTests : LanguageTestBase
         public required FakeProcessRunner Runner { get; init; }
         public required CommandLineViewModel Line { get; init; }
         public required ManualFlush Flush { get; init; }
+        /// <summary>The grace period after the shell exits: held (never over) unless released.</summary>
+        public required ManualFlush Grace { get; init; }
         public PanelViewModel Panel => App.Left;
 
         public async ValueTask DisposeAsync()
@@ -80,8 +82,9 @@ public class CommandLineTests : LanguageTestBase
         await app.Left.NavigateToAsync(VfsPath.Local(folder));
         var runner = new FakeProcessRunner();
         var flush = new ManualFlush();
-        var line = new CommandLineViewModel(app.Main.Workspace, runner, TestApp.Home, flush.Wait);
-        return new Fixture { App = app, Runner = runner, Line = line, Flush = flush };
+        var grace = new ManualFlush { Hold = true };
+        var line = new CommandLineViewModel(app.Main.Workspace, runner, TestApp.Home, flush.Wait, grace.Wait);
+        return new Fixture { App = app, Runner = runner, Line = line, Flush = flush, Grace = grace };
     }
 
     private static InMemoryFileSystem RemoteFileSystem()
@@ -138,9 +141,42 @@ public class CommandLineTests : LanguageTestBase
         Assert.Equal(VfsPath.Local("/a/b"), f.Panel.CurrentPath);
         Assert.Equal("cd nowhere", f.Line.Text);
         Assert.True(f.Line.IsOutputVisible);
-        Assert.Contains("/a/b/nowhere", f.Line.Output);
-        Assert.StartsWith(Loc.Format("CommandLine_CdFailed", "/a/b/nowhere", "").TrimEnd(), f.Line.Output);
+        // The panel's own reason, which names the folder once.
+        Assert.Equal([Loc.Format("Panel_Error_NotFound", "/a/b/nowhere")], OutputLines(f.Line));
         Assert.Empty(f.Runner.Started);
+    }
+
+    [AvaloniaFact]
+    public async Task A_cd_in_flight_keeps_the_command_line_busy()
+    {
+        await using var f = await StartAsync();
+        f.Line.Text = "cd c";
+        var cd = f.Line.ExecuteAsync(); // reading the folder happens in the background
+        Assert.False(cd.IsCompleted);
+
+        f.Line.Text = "ls";
+        await f.Line.ExecuteAsync();
+        f.Line.Text = "cd /x";
+        await f.Line.ExecuteAsync();
+        await cd;
+
+        Assert.Empty(f.Runner.Started);
+        Assert.Equal(VfsPath.Local("/a/b/c"), f.Panel.CurrentPath);
+        Assert.Equal("cd /x", f.Line.Text);
+        Assert.Equal(["cd c"], f.Line.History);
+    }
+
+    [AvaloniaFact]
+    public async Task A_compound_command_after_cd_is_explained()
+    {
+        await using var f = await StartAsync();
+        f.Line.Text = "cd c && make";
+
+        await f.Line.ExecuteAsync();
+
+        Assert.Equal([Loc.Get("CommandLine_CdTooManyArguments")], OutputLines(f.Line));
+        Assert.Contains("cd", Loc.Get("CommandLine_CdTooManyArguments"));
+        Assert.Equal(VfsPath.Local("/a/b"), f.Panel.CurrentPath);
     }
 
     [AvaloniaFact]
@@ -305,6 +341,19 @@ public class CommandLineTests : LanguageTestBase
     }
 
     [AvaloniaFact]
+    public async Task A_carriage_return_overwrites_the_line_and_control_characters_are_removed()
+    {
+        await using var f = await StartAsync();
+        var running = await StartCommandAsync(f, "curl -O x");
+
+        f.Runner.Last.Write("10%\r50%\r\e[32m100%\e[0m\r", "a\bb\ac\td\x7f\x01", "\r", "\e");
+        f.Runner.Last.Exit(0);
+        await running;
+
+        Assert.Equal(["100%", "abc\td", "", ""], OutputLines(f.Line)[1..5]);
+    }
+
+    [AvaloniaFact]
     public async Task Exit_refreshes_the_panel_that_ran_the_command()
     {
         await using var f = await StartAsync();
@@ -353,6 +402,114 @@ public class CommandLineTests : LanguageTestBase
         Assert.Equal(Loc.Format("Output_ExitCode", FakeProcess.KilledExitCode), OutputLines(f.Line)[^1]);
         f.Line.Kill(); // nothing running: nothing happens
         Assert.Equal(1, f.Runner.Last.Kills);
+    }
+
+    [AvaloniaFact]
+    public async Task Kill_ends_a_command_whose_shell_exited_but_whose_output_stays_open()
+    {
+        await using var f = await StartAsync();
+        var running = await StartCommandAsync(f, "sleep 300 &");
+        f.Runner.Last.ExitKeepingOutputOpen(0);
+        await Task.Delay(50);
+        Assert.True(f.Line.IsRunning); // the grace period is held
+
+        f.Line.Kill();
+        await running.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.False(f.Line.IsRunning);
+        Assert.True(f.Runner.Last.IsDisposed);
+        Assert.Equal(Loc.Format("Output_ExitCode", 0), OutputLines(f.Line)[^1]);
+        await StartCommandAsync(f, "ls"); // not stuck
+        Assert.Equal(2, f.Runner.Started.Count);
+        f.Runner.Last.Exit(0);
+    }
+
+    [AvaloniaFact]
+    public async Task A_command_ends_a_grace_period_after_its_shell_exits_even_if_output_stays_open()
+    {
+        await using var f = await StartAsync();
+        var running = await StartCommandAsync(f, "python3 -m http.server &");
+        var process = f.Runner.Last;
+
+        process.ExitKeepingOutputOpen(0);
+        await TestApp.WaitUntil(() => f.Grace.HeldCount == 1);
+        process.Write("still writing");
+        await TestApp.WaitUntil(() => f.Line.Output.Contains("still writing"));
+        Assert.True(f.Line.IsRunning);
+        Assert.Equal(0, process.Kills);
+
+        f.Grace.ReleaseAll();
+        await running.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.False(f.Line.IsRunning);
+        Assert.True(process.IsDisposed); // closes the pipe of what the shell left behind
+        Assert.False(process.IsOutputOpen);
+        Assert.Equal(["still writing", Loc.Format("Output_ExitCode", 0)], OutputLines(f.Line)[^2..]);
+    }
+
+    [AvaloniaFact]
+    public async Task Closing_the_pane_while_a_command_writes_keeps_it_closed()
+    {
+        await using var f = await StartAsync();
+        var running = await StartCommandAsync(f, "tail -f log");
+        Assert.True(f.Line.IsOutputVisible);
+
+        f.Line.CloseOutputCommand.Execute(null);
+        f.Runner.Last.Write("more");
+        await TestApp.WaitUntil(() => f.Line.Output.Contains("more"));
+        Assert.False(f.Line.IsOutputVisible);
+
+        f.Runner.Last.Exit(0);
+        await running;
+        Assert.False(f.Line.IsOutputVisible);
+
+        await StartCommandAsync(f, "ls"); // a new command opens it again
+        Assert.True(f.Line.IsOutputVisible);
+        f.Runner.Last.Exit(0);
+    }
+
+    [AvaloniaFact]
+    public async Task A_flood_between_two_flushes_keeps_only_the_last_lines()
+    {
+        await using var f = await StartAsync();
+        f.Flush.Hold = true;
+        var running = await StartCommandAsync(f, "yes");
+
+        for (var i = 0; i < 12000; i++) f.Runner.Last.Write($"y {i}");
+        f.Runner.Last.Exit(0);
+        await TestApp.WaitUntil(() => f.Flush.HeldCount > 0);
+        f.Flush.Hold = false;
+        f.Flush.ReleaseAll();
+        await running;
+
+        var lines = OutputLines(f.Line);
+        Assert.Equal(CommandLineViewModel.MaxOutputLines + 1, lines.Length);
+        Assert.Equal(Loc.Get("Output_EarlierDropped"), lines[0]);
+        Assert.Equal("y 7001", lines[1]);
+        Assert.Equal("y 11999", lines[^2]);
+        Assert.Equal(Loc.Format("Output_ExitCode", 0), lines[^1]);
+    }
+
+    [AvaloniaFact]
+    public async Task A_very_long_line_is_shortened()
+    {
+        await using var f = await StartAsync();
+        var running = await StartCommandAsync(f, "cat big.json");
+
+        f.Runner.Last.Write(new string('x', 10000), new string('y', CommandLineViewModel.MaxLineLength));
+        f.Runner.Last.Exit(0);
+        await running;
+
+        var lines = OutputLines(f.Line);
+        Assert.Equal(new string('x', CommandLineViewModel.MaxLineLength) + Loc.Get("Output_LineShortened"), lines[1]);
+        Assert.Equal(new string('y', CommandLineViewModel.MaxLineLength), lines[2]);
+    }
+
+    [Fact]
+    public void Output_is_flushed_about_ten_times_a_second()
+    {
+        Assert.Equal(TimeSpan.FromMilliseconds(100), CommandLineViewModel.FlushInterval);
+        Assert.Equal(TimeSpan.FromMilliseconds(500), CommandLineViewModel.ExitGracePeriod);
     }
 
     [AvaloniaFact]
@@ -532,6 +689,19 @@ public class CommandLineTests : LanguageTestBase
         Assert.Equal("/x", f.Line.Prompt);
     }
 
+    /// <summary>Hands the command line's spec to the real runner as a non-login shell (<c>-c</c> for <c>-lc</c>),
+    /// so the test does not run the developer's profile; the production spec itself is asserted with the fake.</summary>
+    private sealed class NonLoginRunner(IProcessRunner inner) : IProcessRunner
+    {
+        public List<ProcessSpec> Received { get; } = [];
+
+        public IRunningProcess Start(ProcessSpec spec)
+        {
+            Received.Add(spec);
+            return inner.Start(spec with { Arguments = ["-c", .. spec.Arguments.Skip(1)] });
+        }
+    }
+
     /// <summary>The one test with a real process: the spec's shape works end to end with the real runner.</summary>
     [AvaloniaFact]
     public async Task Real_zsh_runs_the_command_in_the_panel_folder()
@@ -542,14 +712,15 @@ public class CommandLineTests : LanguageTestBase
             await using var f = await StartAsync();
             f.App.Fs.AddDirectory(folder); // the in-memory "local disk" shows the same path as the real one
             await f.Panel.NavigateToAsync(VfsPath.Local(folder));
-            using var line = new CommandLineViewModel(f.App.Main.Workspace, new Tandem.Platform.Mac.ProcessRunner(),
-                TestApp.Home);
+            var runner = new NonLoginRunner(new Tandem.Platform.Mac.ProcessRunner());
+            using var line = new CommandLineViewModel(f.App.Main.Workspace, runner, TestApp.Home);
             line.Text = "echo hi; echo made > made.txt";
 
             await line.ExecuteAsync().WaitAsync(TimeSpan.FromSeconds(30));
 
-            // A login shell may print something of its own first (the user's profile).
-            Assert.Equal(["hi", Loc.Format("Output_ExitCode", 0)], OutputLines(line)[^2..]);
+            Assert.Equal(["-lc", "echo hi; echo made > made.txt"], Assert.Single(runner.Received).Arguments);
+            Assert.Equal([$"{folder}> echo hi; echo made > made.txt", "hi", Loc.Format("Output_ExitCode", 0)],
+                OutputLines(line));
             Assert.Equal("made\n", await File.ReadAllTextAsync(Path.Combine(folder, "made.txt")));
         }
         finally
