@@ -38,6 +38,7 @@ public sealed class FileCommands : IDisposable
     private readonly List<PanelViewModel> _watched = [];
     private bool[] _available = [];
     private InlineRenameViewModel? _rename;
+    private bool _askingCopyOrMove;
     private bool _disposed;
 
     private static readonly string[] Ids =
@@ -197,29 +198,41 @@ public sealed class FileCommands : IDisposable
     public bool CanWriteTo(VfsPath directory) =>
         directory != default && _providers.For(directory).Capabilities.HasFlag(ProviderCapabilities.Write);
 
+    /// <summary>Whether a copy or move dialog (F5, F6 or a drop) is open now: another one is not started.</summary>
+    public bool IsAskingCopyOrMove => _askingCopyOrMove;
+
     /// <summary>
     /// The copy/move flow shared by F5/F6 and drag and drop: the ordinary copy or move dialog, its text proposed from
     /// <paramref name="destinationDirectory"/> and referring to that folder's provider (a relative text starts at the
     /// items' folder); then the operation through the queue and the usual aftermath. Nothing happens unless the user
     /// accepts the dialog. True when an operation was started.
     /// </summary>
+    /// <param name="move">The action; with <paramref name="offerBoth"/> only the one pre-selected.</param>
+    /// <param name="offerBoth">The dialog offers both Copy and Move (a drop), and the user's choice in it decides.</param>
     /// <remarks>Does nothing (false) for no sources, sources on different providers, a destination that cannot be
-    /// written, or a move of items whose provider cannot be written. Waits for the dialog, not the operation.</remarks>
-    public Task<bool> CopyOrMoveAsync(IReadOnlyList<VfsPath> sources, VfsPath destinationDirectory, bool move)
+    /// written, while another copy/move dialog is open, or (once Move is chosen) a move of items whose provider
+    /// cannot be written. Waits for the dialog, not the operation.</remarks>
+    public Task<bool> CopyOrMoveAsync(IReadOnlyList<VfsPath> sources, VfsPath destinationDirectory, bool move,
+        bool offerBoth = false)
     {
         ArgumentNullException.ThrowIfNull(sources);
         if (sources.Count == 0 || sources.Any(s => s.ProviderId != sources[0].ProviderId) ||
-            !CanWriteTo(destinationDirectory) || (move && !CanWriteTo(sources[0].Parent ?? sources[0])))
+            !CanWriteTo(destinationDirectory) || (move && !offerBoth && !CanMoveFrom(sources)) || _askingCopyOrMove)
             return Task.FromResult(false);
-        var task = CopyOrMoveCoreAsync(sources.ToArray(), sources[0].Parent ?? sources[0], destinationDirectory, move);
+        var task = CopyOrMoveCoreAsync(sources.ToArray(), sources[0].Parent ?? sources[0], destinationDirectory, move,
+            offerBoth);
         Tracked(task);
         return task;
     }
 
+    private bool CanMoveFrom(IReadOnlyList<VfsPath> sources) => CanWriteTo(sources[0].Parent ?? sources[0]);
+
     /// <param name="baseDirectory">Where a relative destination text starts (the items' folder).</param>
     private async Task<bool> CopyOrMoveCoreAsync(IReadOnlyList<VfsPath> sources, VfsPath baseDirectory,
-        VfsPath destinationDirectory, bool move)
+        VfsPath destinationDirectory, bool move, bool offerBoth = false)
     {
+        // Drops do not go through the command registry: this flag keeps a drop, F5 and F6 from stacking dialogs.
+        if (_askingCopyOrMove) return false;
         var single = sources.Count == 1 ? sources[0].Name : null;
         var to = destinationDirectory;
         var proposal = single is null ? to.Path : to.Combine(single).Path;
@@ -227,9 +240,20 @@ public sealed class FileCommands : IDisposable
         Task<DestinationParseResult> Parse(string text) => DestinationParser.ParseAsync(text, baseDirectory, to,
             sources.Count, single, _workspace.HomeDirectory, probe);
 
-        var answer = await _dialogs.AskCopyMoveAsync(new CopyMoveRequest(move, sources.Count, single, proposal,
-            async text => (await Parse(text)).Error));
+        CopyMoveAnswer? answer;
+        _askingCopyOrMove = true;
+        try
+        {
+            answer = await _dialogs.AskCopyMoveAsync(new CopyMoveRequest(move, sources.Count, single, proposal,
+                async text => (await Parse(text)).Error, offerBoth));
+        }
+        finally
+        {
+            _askingCopyOrMove = false;
+        }
         if (answer is null) return false;
+        if (offerBoth) move = answer.IsMove;
+        if (move && !CanMoveFrom(sources)) return false;
 
         // The dialog closes only on text its validator accepted; things may have changed since, so look again.
         var parsed = await Parse(answer.Destination);

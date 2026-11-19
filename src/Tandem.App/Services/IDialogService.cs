@@ -10,13 +10,14 @@ public delegate Task<string?> TextValidator(string text);
 
 /// <summary>The copy/move dialog's question. <paramref name="SingleName"/> names the item when there is one;
 /// <paramref name="Destination"/> is the proposed text; <paramref name="Validate"/> checks the typed text before the
-/// dialog closes.</summary>
+/// dialog closes. With <paramref name="OffersBoth"/> (a drop) the dialog offers Copy, Move and Cancel, and
+/// <paramref name="IsMove"/> only says which of the two is pre-selected; otherwise (F5/F6) it is the one action.</summary>
 public sealed record CopyMoveRequest(bool IsMove, int ItemCount, string? SingleName, string Destination,
-    TextValidator? Validate = null);
+    TextValidator? Validate = null, bool OffersBoth = false);
 
-/// <summary>What the user accepted: the typed text, "verify content after copying" and "start now, do not wait in
-/// the queue".</summary>
-public sealed record CopyMoveAnswer(string Destination, bool VerifyContent, bool RunImmediately);
+/// <summary>What the user accepted: the typed text, "verify content after copying", "start now, do not wait in
+/// the queue", and the action chosen (<paramref name="IsMove"/>; always the request's own for F5/F6).</summary>
+public sealed record CopyMoveAnswer(string Destination, bool VerifyContent, bool RunImmediately, bool IsMove = false);
 
 /// <summary>
 /// The dialogs the file commands and running operations show. Called on the UI thread. Each completes when the

@@ -186,8 +186,8 @@ public partial class MainWindow : Window
         if (_main is not { } main) return;
         try
         {
-            var items = await ContextMenuModel.OpenWithItemsAsync(main);
-            if (!IsVisible) return;
+            // Null: the cursor moved to another item meanwhile; its apps are not shown at the new row.
+            if (await ContextMenuModel.OpenWithItemsAsync(main) is not { } items || !IsVisible) return;
             (main.Workspace.ActiveSide == PanelSide.Left ? LeftPanel : RightPanel).List.ShowMenuAtCursor(items);
         }
         catch (Exception failure)

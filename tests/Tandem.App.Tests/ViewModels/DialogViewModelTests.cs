@@ -36,6 +36,45 @@ public class DialogViewModelTests : LanguageTestBase
     }
 
     [Fact]
+    public async Task A_drop_dialog_offers_both_actions_and_answers_the_one_chosen()
+    {
+        var copyFirst = new CopyMoveDialogViewModel(new CopyMoveRequest(false, 1, "a.txt", "/d/a.txt", OffersBoth: true));
+        Assert.True(copyFirst.OffersBoth);
+        Assert.False(copyFirst.MoveIsDefault);
+        Assert.Equal("Copy or Move", copyFirst.Title);
+        Assert.Equal("Copy or move “a.txt” to:", copyFirst.Prompt);
+        Assert.False((await copyFirst.AcceptAsync())!.IsMove); // Enter: the pre-selected Copy
+        Assert.True((await copyFirst.AcceptAsync(move: true))!.IsMove);
+
+        var moveFirst = new CopyMoveDialogViewModel(new CopyMoveRequest(true, 2, null, "/d", OffersBoth: true));
+        Assert.True(moveFirst.MoveIsDefault); // Cmd was reported held at the drop
+        Assert.Equal("Copy or move 2 items to:", moveFirst.Prompt);
+        Assert.True((await moveFirst.AcceptAsync())!.IsMove);
+        Assert.False((await moveFirst.AcceptAsync(move: false))!.IsMove);
+    }
+
+    [Fact]
+    public void The_drop_dialog_in_russian()
+    {
+        Loc.SetLanguage("ru");
+        var vm = new CopyMoveDialogViewModel(new CopyMoveRequest(false, 1, "a.txt", "/d/a.txt", OffersBoth: true));
+
+        Assert.Equal("Копирование или перенос", vm.Title);
+        Assert.Equal("Копировать или перенести «a.txt» в:", vm.Prompt);
+    }
+
+    [Fact]
+    public async Task A_keyboard_dialog_always_answers_its_own_action()
+    {
+        var move = new CopyMoveDialogViewModel(new CopyMoveRequest(true, 1, "a.txt", "/d/a.txt"));
+        var copy = new CopyMoveDialogViewModel(new CopyMoveRequest(false, 1, "a.txt", "/d/a.txt"));
+
+        Assert.False(move.OffersBoth);
+        Assert.True((await move.AcceptAsync(move: false))!.IsMove);
+        Assert.False((await copy.AcceptAsync(move: true))!.IsMove);
+    }
+
+    [Fact]
     public async Task Copy_dialog_starts_with_the_proposed_path_and_safe_defaults()
     {
         var vm = new CopyMoveDialogViewModel(new CopyMoveRequest(false, 1, "a.txt", "/dst/a.txt"));

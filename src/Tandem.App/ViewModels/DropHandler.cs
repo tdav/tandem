@@ -15,7 +15,7 @@ public sealed record DropTarget(VfsPath Directory, int? RowIndex);
 /// <remarks>
 /// Dragged items are local paths (from Finder or from a panel on the local disk). A drop is refused when any item is
 /// not an absolute local path, when the target cannot be written, when every item already lies in the target folder,
-/// or when the target is one of the dragged folders or inside one. UI thread only; no disk access.
+/// when the target is one of the dragged folders or inside one, or while a copy/move dialog is open. UI thread only; no disk access.
 /// </remarks>
 public sealed class DropHandler(WorkspaceViewModel workspace, FileCommands files)
 {
@@ -31,12 +31,16 @@ public sealed class DropHandler(WorkspaceViewModel workspace, FileCommands files
     public bool CanDrop(IReadOnlyList<string> localPaths, PanelSide side, VfsPath targetDirectory) =>
         PanelTakesDrops(side) && CanDrop(localPaths, targetDirectory);
 
-    /// <summary>Drops <paramref name="localPaths"/> into <paramref name="targetDirectory"/>: the copy (or, with
-    /// <paramref name="move"/>, move) dialog, then the operation. Does nothing when the drop is not allowed. True when
-    /// the user accepted and the operation started.</summary>
+    /// <summary>Drops <paramref name="localPaths"/> into <paramref name="targetDirectory"/>: the copy/move dialog
+    /// offering both actions, then the operation the user chose. <paramref name="move"/> only pre-selects Move (Cmd
+    /// was reported at the drop; a hint, see the remarks). Does nothing when the drop is not allowed. True when the
+    /// user accepted and the operation started.</summary>
+    /// <remarks>The modifier is only a hint: on macOS, holding Cmd while dragging makes the system offer no
+    /// operation Avalonia knows (AppKit filters the source's mask to "generic"), and while another app owns the drag
+    /// this app may not see the key at all. So the dialog, not the key, decides between copy and move.</remarks>
     public Task<bool> DropAsync(IReadOnlyList<string> localPaths, VfsPath targetDirectory, bool move) =>
         Sources(localPaths) is { } sources && CanDrop(sources, targetDirectory)
-            ? _files.CopyOrMoveAsync(sources, targetDirectory, move)
+            ? _files.CopyOrMoveAsync(sources, targetDirectory, move, offerBoth: true)
             : Task.FromResult(false);
 
     /// <summary>As <see cref="DropAsync(IReadOnlyList{string}, VfsPath, bool)"/> onto the panel of
@@ -87,6 +91,7 @@ public sealed class DropHandler(WorkspaceViewModel workspace, FileCommands files
         panel.CurrentPath != default;
 
     private bool CanDrop(IReadOnlyList<VfsPath> sources, VfsPath target) =>
+        !_files.IsAskingCopyOrMove &&
         _files.CanWriteTo(target) &&
         !sources.All(s => s.Parent == target) &&
         !sources.Any(s => target.IsSameOrDescendantOf(s));

@@ -35,6 +35,11 @@ public class DialogWindowTests : LanguageTestBase
         Dispatcher.UIThread.RunJobs();
     }
 
+    /// <summary>The buttons of the button row (not the check boxes, which are buttons too).</summary>
+    private static Button[] ActionButtons(Window dialog) =>
+        dialog.GetVisualDescendants().OfType<Button>().Where(b => b is not Avalonia.Controls.Primitives.ToggleButton)
+            .ToArray();
+
     private static TextBox Field(Window dialog) => dialog.GetVisualDescendants().OfType<TextBox>().Single();
 
     private static async Task<T> Finish<T>(Task<T> task)
@@ -64,6 +69,40 @@ public class DialogWindowTests : LanguageTestBase
         Press(dialog, Key.Enter);
 
         Assert.Equal(new CopyMoveAnswer("/dst/ok/", false, false), await Finish(asking));
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task The_drop_dialog_has_copy_move_and_cancel_with_the_preselected_action_on_enter()
+    {
+        var (owner, service) = Start();
+        var asking = service.AskCopyMoveAsync(new CopyMoveRequest(true, 1, "a.txt", "/dst/a.txt", OffersBoth: true));
+        var dialog = Dialog<CopyMoveDialog>(owner);
+        var buttons = ActionButtons(dialog);
+
+        Assert.Equal(["Copy", "Move", "Cancel"], buttons.Select(b => b.Content as string));
+        Assert.Equal(["Move"], buttons.Where(b => b.IsDefault).Select(b => b.Content as string));
+        Press(dialog, Key.Enter);
+        Assert.Equal(new CopyMoveAnswer("/dst/a.txt", false, false, IsMove: true), await Finish(asking));
+
+        asking = service.AskCopyMoveAsync(new CopyMoveRequest(true, 1, "a.txt", "/dst/a.txt", OffersBoth: true));
+        dialog = Dialog<CopyMoveDialog>(owner);
+        dialog.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "Copy")
+            .RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Assert.False((await Finish(asking))!.IsMove);
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task The_keyboard_copy_dialog_still_has_one_action()
+    {
+        var (owner, service) = Start();
+        var asking = service.AskCopyMoveAsync(new CopyMoveRequest(false, 1, "a.txt", "/dst/a.txt"));
+        var dialog = Dialog<CopyMoveDialog>(owner);
+
+        Assert.Equal(["Copy", "Cancel"], ActionButtons(dialog).Select(b => b.Content as string));
+        Press(dialog, Key.Escape);
+        Assert.Null(await Finish(asking));
         owner.Close();
     }
 

@@ -65,7 +65,8 @@ public class DropHandlerTests : LanguageTestBase
         await DropAndWait(app, ["/home/notes.txt"], PanelSide.Right, L("/dst"));
 
         var request = Assert.Single(app.Dialogs.CopyMoveRequests);
-        Assert.False(request.IsMove);
+        Assert.True(request.OffersBoth); // the user chooses copy or move in the dialog
+        Assert.False(request.IsMove); // Copy is pre-selected
         Assert.Equal("/dst/notes.txt", request.Destination); // pre-filled with the drop target, still editable
         Assert.Equal("notes", app.Fs.ReadAllText("/dst/notes.txt"));
         Assert.True(app.Fs.Exists("/home/notes.txt"));
@@ -97,12 +98,69 @@ public class DropHandlerTests : LanguageTestBase
         await DropAndWait(app, ["/home/notes.txt", "/home/report.pdf"], PanelSide.Right, L("/dst"), move: true);
 
         var request = Assert.Single(app.Dialogs.CopyMoveRequests);
-        Assert.True(request.IsMove);
+        Assert.True(request.IsMove); // pre-selected because Cmd was reported; the answer keeps it
+        Assert.True(request.OffersBoth);
         Assert.Equal(2, request.ItemCount);
         Assert.Equal("/dst", request.Destination);
         Assert.True(app.Fs.Exists("/dst/notes.txt"));
         Assert.False(app.Fs.Exists("/home/notes.txt"));
         Assert.DoesNotContain("notes.txt", Names(app.Left)); // the source panel is refreshed too
+    }
+
+    [AvaloniaFact]
+    public async Task Choosing_move_in_the_drop_dialog_moves_although_copy_was_preselected()
+    {
+        await using var app = await StartAsync();
+        app.Dialogs.AnswerCopyMove(move: true);
+
+        await DropAndWait(app, ["/home/notes.txt"], PanelSide.Right, L("/dst"), move: false);
+
+        Assert.False(app.Dialogs.CopyMoveRequests.Single().IsMove);
+        Assert.True(app.Fs.Exists("/dst/notes.txt"));
+        Assert.False(app.Fs.Exists("/home/notes.txt")); // a MoveOperation ran
+    }
+
+    [AvaloniaFact]
+    public async Task Choosing_copy_in_the_drop_dialog_copies_although_cmd_preselected_move()
+    {
+        await using var app = await StartAsync();
+        app.Dialogs.AnswerCopyMove(move: false);
+
+        await DropAndWait(app, ["/home/notes.txt"], PanelSide.Right, L("/dst"), move: true);
+
+        Assert.True(app.Dialogs.CopyMoveRequests.Single().IsMove);
+        Assert.True(app.Fs.Exists("/dst/notes.txt"));
+        Assert.True(app.Fs.Exists("/home/notes.txt")); // a CopyOperation ran
+    }
+
+    [AvaloniaFact]
+    public async Task While_a_copy_or_move_dialog_is_open_no_second_one_is_stacked()
+    {
+        await using var app = await StartAsync();
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        app.Dialogs.CopyMoveGate = gate;
+        app.Dialogs.AnswerCopyMove();
+        app.Left.CursorIndex = IndexOf(app.Left, "README.md");
+
+        var first = app.Main.Drops.DropAsync(["/home/notes.txt"], PanelSide.Right, L("/dst"), move: false);
+        Assert.False(first.IsCompleted);
+        Assert.False(app.Main.Drops.CanDrop(["/home/report.pdf"], PanelSide.Right, L("/dst")));
+        Assert.False(await app.Main.Drops.DropAsync(["/home/report.pdf"], PanelSide.Right, L("/dst"), move: false));
+        var f5 = app.Main.Commands.ExecuteAsync(Tandem.App.Commands.CommandIds.FileCopy); // F5 meanwhile
+        var f6 = app.Main.Commands.ExecuteAsync(Tandem.App.Commands.CommandIds.FileMove); // F6 meanwhile
+        var requests = app.Dialogs.CopyMoveRequests.Count;
+
+        gate.SetResult();
+        Assert.True(await first);
+        await f5;
+        await f6;
+        Assert.Equal(1, requests);
+        Assert.Single(app.Dialogs.CopyMoveRequests);
+        await app.Main.Files.WhenIdleAsync();
+        Assert.True(app.Fs.Exists("/dst/notes.txt"));
+        Assert.False(app.Fs.Exists("/dst/report.pdf"));
+        Assert.False(app.Fs.Exists("/dst/README.md"));
+        Assert.True(app.Main.Drops.CanDrop(["/home/report.pdf"], PanelSide.Right, L("/dst"))); // open again
     }
 
     [AvaloniaFact]
@@ -228,6 +286,7 @@ public class DropHandlerTests : LanguageTestBase
         await app.Main.Files.WhenIdleAsync();
 
         Assert.Equal("/dst/notes.txt", app.Dialogs.CopyMoveRequests.Single().Destination);
+        Assert.False(app.Dialogs.CopyMoveRequests.Single().OffersBoth); // F5 keeps its one action
         Assert.True(app.Fs.Exists("/dst/notes.txt"));
         Assert.Equal(PanelSide.Left, app.Main.Workspace.ActiveSide);
     }

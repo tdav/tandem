@@ -306,13 +306,15 @@ public class ShellCommandsTests : LanguageTestBase
         app.Shell.Apps = [TextEdit, Xcode];
         Cursor(app.Left, "notes.txt");
 
-        Assert.Equal([TextEdit, Xcode], await app.Main.Shell.GetOpenWithAppsAsync());
-        app.Main.Shell.OpenWith(Xcode);
+        var query = await app.Main.Shell.QueryOpenWithAsync();
+        Assert.Equal([TextEdit, Xcode], query!.Apps);
+        Assert.Equal("notes.txt", query.Entry.Name);
+        app.Main.Shell.OpenWith(query.Entry, Xcode);
 
         Assert.Equal(["/home/notes.txt"], app.Shell.AppQueries);
         Assert.Equal([("/home/notes.txt", Xcode)], app.Shell.OpenedWith);
         Cursor(app.Left, "..");
-        Assert.Empty(await app.Main.Shell.GetOpenWithAppsAsync());
+        Assert.Null(await app.Main.Shell.QueryOpenWithAsync());
     }
 
     // ---- Context menu ------------------------------------------------------------------------------------
@@ -397,9 +399,39 @@ public class ShellCommandsTests : LanguageTestBase
         app.Shell.Apps = [TextEdit];
         Cursor(app.Left, "notes.txt");
 
-        Assert.Equal([TextEdit], await app.Main.Shell.GetOpenWithAppsAsync());
+        Assert.Equal([TextEdit], (await app.Main.Shell.QueryOpenWithAsync())!.Apps);
 
         Assert.Equal([false], app.Shell.AppQueriesOnUiThread);
+    }
+
+    [AvaloniaFact]
+    public async Task An_app_query_whose_cursor_moved_meanwhile_is_dropped()
+    {
+        await using var app = await StartAsync();
+        app.Shell.Apps = [TextEdit];
+        Cursor(app.Left, "notes.txt");
+        using var gate = new ManualResetEventSlim(false);
+        app.Shell.AppsGate = gate;
+
+        var query = app.Main.Shell.QueryOpenWithAsync();
+        Cursor(app.Left, "report.pdf");
+        gate.Set();
+
+        Assert.Null(await query); // the apps of notes.txt are not offered for report.pdf
+    }
+
+    [AvaloniaFact]
+    public async Task Open_with_acts_on_the_item_the_apps_were_asked_for()
+    {
+        await using var app = await StartAsync();
+        app.Shell.Apps = [TextEdit];
+        Cursor(app.Left, "notes.txt");
+        var items = await ContextMenuModel.OpenWithItemsAsync(app.Main);
+
+        Cursor(app.Left, "report.pdf"); // e.g. a refresh moved the cursor while the menu was open
+        await Assert.Single(items!).ExecuteAsync();
+
+        Assert.Equal([("/home/notes.txt", TextEdit)], app.Shell.OpenedWith);
     }
 
     [AvaloniaFact]
@@ -425,7 +457,7 @@ public class ShellCommandsTests : LanguageTestBase
         app.Shell.AppsFailure = failure;
         Cursor(app.Left, "notes.txt");
 
-        Assert.Empty(await app.Main.Shell.GetOpenWithAppsAsync());
+        Assert.Empty((await app.Main.Shell.QueryOpenWithAsync())!.Apps);
 
         Assert.Equal([failure], app.Failures);
         Assert.Empty(app.Dialogs.Messages);

@@ -26,7 +26,6 @@ public partial class FileListView : UserControl
     private readonly DragGesture _gesture = new();
     private PointerPressedEventArgs? _pressed;
     private int _pressedIndex = -1;
-    private Control? _highlightedRow;
     private IDataTransfer? _draggedData;
     private IReadOnlyList<string>? _draggedPaths;
 
@@ -46,6 +45,8 @@ public partial class FileListView : UserControl
         Rows.AddHandler(DragDrop.DragOverEvent, OnDragOver);
         Rows.AddHandler(DragDrop.DragLeaveEvent, OnDragLeave);
         Rows.AddHandler(DragDrop.DropEvent, OnDrop);
+        // A row container reused for another item (scrolling, new rows) must not keep a drop highlight.
+        Rows.ContainerClearing += (_, e) => e.Container.Classes.Remove(DropTargetClass);
         // The highlight only ever changes through the panel's cursor; keep the focused row on it as well.
         // When the rows are replaced the focused row may be recycled and the focus lost; it then returns to the
         // cursor's row (for the active side), so no key can fall through to the window's focus navigation.
@@ -260,17 +261,37 @@ public partial class FileListView : UserControl
         return paths;
     }
 
-    /// <summary>Where a drop with these event arguments would go and with which effect: Cmd held moves, otherwise
-    /// copies (when the source allows it); no effect when the drop is not allowed there.</summary>
-    private (IReadOnlyList<string> Paths, DropTarget Target, DragDropEffects Effect)? Evaluate(DragEventArgs e)
+    /// <summary>
+    /// Where a drop with these event arguments would go, the effect to report, and whether Move is to be pre-selected
+    /// in the dialog. Null when the drop is not allowed there, a dialog of the app is open, or the platform offers no
+    /// operation at all.
+    /// </summary>
+    /// <remarks>
+    /// The effect reported to the source is Copy whenever it is offered (else the first offered of Move, Link): this
+    /// app copies or moves by itself after the user confirms, and a source must never act on a Move (delete, refresh)
+    /// for a drop the user may still cancel. A specific effect missing from the offer never refuses a valid drop.
+    /// Cmd is only a hint for the pre-selected action: on macOS a Cmd-drag offers no operation Avalonia maps (AppKit
+    /// filters the mask to "generic"), and the key may not reach this app while another one owns the drag.
+    /// </remarks>
+    private (IReadOnlyList<string> Paths, DropTarget Target, DragDropEffects Effect, bool PreferMove)? Evaluate(
+        DragEventArgs e)
     {
+        var offered = e.DragEffects & (DragDropEffects.Copy | DragDropEffects.Move | DragDropEffects.Link);
+        if (offered == DragDropEffects.None || IsDialogOpen()) return null;
         if (DataContext is not SideViewModel side || DraggedPaths(e.DataTransfer) is not { } paths) return null;
         var item = (e.Source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true);
         var index = item is null ? -1 : Rows.IndexFromContainer(item);
         if (side.DropTargetFor(paths, index) is not { } target) return null;
-        var wanted = e.KeyModifiers.HasFlag(KeyModifiers.Meta) ? DragDropEffects.Move : DragDropEffects.Copy;
-        return (e.DragEffects & wanted) == 0 ? null : (paths, target, wanted);
+        var effect = offered.HasFlag(DragDropEffects.Copy) ? DragDropEffects.Copy
+            : offered.HasFlag(DragDropEffects.Move) ? DragDropEffects.Move
+            : DragDropEffects.Link;
+        return (paths, target, effect, e.KeyModifiers.HasFlag(KeyModifiers.Meta));
     }
+
+    /// <summary>A dialog of the app (owned by its window; the progress window is not a dialog) is open.</summary>
+    private bool IsDialogOpen() =>
+        TopLevel.GetTopLevel(this) is Window window &&
+        window.OwnedWindows.Any(w => w.IsVisible && w is not Dialogs.ProgressWindow);
 
     private void OnDragOver(object? sender, DragEventArgs e)
     {
@@ -297,20 +318,18 @@ public partial class FileListView : UserControl
         e.Handled = true;
         if (drop is not { } accepted || DataContext is not SideViewModel side) return;
         // The dialog opens after the system's drop has returned, never inside it.
-        Dispatcher.UIThread.Post(() => _ = side.DropAsync(accepted.Paths, accepted.Target,
-            accepted.Effect == DragDropEffects.Move));
+        // The user chooses copy or move there; Cmd reported at the drop pre-selects Move.
+        Dispatcher.UIThread.Post(() => _ = side.DropAsync(accepted.Paths, accepted.Target, accepted.PreferMove));
     }
 
-    /// <summary>Highlights the target's folder row, or the whole list for the panel's own folder; null clears.</summary>
+    /// <summary>Highlights the target's folder row, or the whole list for the panel's own folder; null clears. Run
+    /// on every drag-over, so a highlight follows rows that moved under the pointer.</summary>
     private void Highlight(DropTarget? target)
     {
         var row = target?.RowIndex is { } index ? Rows.ContainerFromIndex(index) : null;
-        if (!ReferenceEquals(row, _highlightedRow))
-        {
-            _highlightedRow?.Classes.Remove(DropTargetClass);
-            row?.Classes.Add(DropTargetClass);
-            _highlightedRow = row;
-        }
+        foreach (var container in Rows.GetRealizedContainers())
+            if (!ReferenceEquals(container, row)) container.Classes.Remove(DropTargetClass);
+        row?.Classes.Add(DropTargetClass);
         Rows.Classes.Set(DropTargetClass, target is { RowIndex: null });
     }
 }

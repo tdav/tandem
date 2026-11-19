@@ -7,6 +7,9 @@ using Tandem.Core.Vfs;
 
 namespace Tandem.App.ViewModels;
 
+/// <summary>The applications that can open <paramref name="Entry"/>, as asked for it.</summary>
+public sealed record OpenWithApps(FileEntry Entry, IReadOnlyList<AppInfo> Apps);
+
 /// <summary>
 /// The commands that hand items to macOS: Quick Look (F3, Cmd+Y), the text editor (F4), the properties dialog
 /// (Cmd+I), Reveal in Finder, a terminal in the current folder, and "Open With" (menu only); Enter on a file opens it
@@ -80,16 +83,21 @@ public sealed class ShellCommands : IDisposable
     /// <see cref="GetOpenWithApps"/> at the cursor.</summary>
     public event EventHandler? OpenWithMenuRequested;
 
-    /// <summary>The applications that can open the item under the cursor of the active panel; empty when it is not a
-    /// local item. Asks the system each time, off the UI thread (the query reads the disk and LaunchServices). A
-    /// failing query is told to the user (<see cref="IOException"/>) or reported, and gives none; never throws.</summary>
-    public async Task<IReadOnlyList<AppInfo>> GetOpenWithAppsAsync()
+    /// <summary>
+    /// The applications that can open the item under the cursor of the active panel, with that item as it was when
+    /// the query started. Asks the system each time, off the UI thread (the query reads the disk and LaunchServices).
+    /// Null when the cursor is not on a local item, or when it moved to another item (or panel) while the query ran:
+    /// the answer would then belong to the wrong item. A failing query is told to the user
+    /// (<see cref="IOException"/>) or reported, and gives no applications; never throws.
+    /// </summary>
+    public async Task<OpenWithApps?> QueryOpenWithAsync()
     {
-        if (LocalCursorEntry() is not { } entry) return [];
+        if (Active is not { } panel || LocalCursorEntry() is not { } entry) return null;
         var (shell, path) = (_shell, entry.Path.Path);
+        IReadOnlyList<AppInfo> apps = [];
         try
         {
-            return await Task.Run(() => shell.GetAppsFor(path));
+            apps = await Task.Run(() => shell.GetAppsFor(path));
         }
         catch (IOException e)
         {
@@ -99,16 +107,17 @@ public sealed class ShellCommands : IDisposable
         {
             _reportFailure(e);
         }
-        return [];
+        return Active == panel && LocalCursorEntry()?.Path == entry.Path ? new OpenWithApps(entry, apps) : null;
     }
 
-    /// <summary>Opens the item under the cursor of the active panel with <paramref name="app"/>; a failure is told
-    /// to the user.</summary>
-    public void OpenWith(AppInfo app)
+    /// <summary>Opens <paramref name="entry"/> (the item the applications were asked for) with
+    /// <paramref name="app"/>; a failure is told to the user.</summary>
+    public void OpenWith(FileEntry entry, AppInfo app)
     {
+        ArgumentNullException.ThrowIfNull(entry);
         ArgumentNullException.ThrowIfNull(app);
-        if (LocalCursorEntry() is { } entry)
-            _ = RunAsync(() => _shell.OpenWith(entry.Path.Path, app), Loc.Format("Shell_OpenFailed", entry.Name));
+        if (entry.Path.ProviderId != VfsPath.LocalProviderId) return;
+        _ = RunAsync(() => _shell.OpenWith(entry.Path.Path, app), Loc.Format("Shell_OpenFailed", entry.Name));
     }
 
     /// <summary>The button of an access-denied panel: the system settings page for Full Disk Access.</summary>

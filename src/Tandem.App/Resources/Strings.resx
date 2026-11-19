@@ -524,6 +524,15 @@ Details were written to {1}.</value>
   <data name="CopyMove_MoveMany" xml:space="preserve">
     <value>Move {0} to:</value>
   </data>
+  <data name="CopyMove_DropTitle" xml:space="preserve">
+    <value>Copy or Move</value>
+  </data>
+  <data name="CopyMove_DropOne" xml:space="preserve">
+    <value>Copy or move “{0}” to:</value>
+  </data>
+  <data name="CopyMove_DropMany" xml:space="preserve">
+    <value>Copy or move {0} to:</value>
+  </data>
   <data name="CopyMove_Verify" xml:space="preserve">
     <value>Verify content after copying</value>
   </data>

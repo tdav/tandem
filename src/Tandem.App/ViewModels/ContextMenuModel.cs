@@ -74,7 +74,7 @@ public static class ContextMenuModel
                 () => side.OpenRowAsync(index)),
             new ContextMenuItem(CommandIds.ShellOpenWith, "Context_OpenWith", Loc.Get("Context_OpenWith"),
                 ChordOf(main, CommandIds.ShellOpenWith), main.Commands.CanExecute(CommandIds.ShellOpenWith), null,
-                () => OpenWithItemsAsync(main)),
+                async () => await OpenWithItemsAsync(main) ?? NoApps()),
             Command(main, CommandIds.ShellReveal, "Context_Reveal"),
             Command(main, CommandIds.FileQuickLook, "Context_QuickLook"),
             Command(main, CommandIds.FileCopy, "Context_Copy"),
@@ -98,19 +98,23 @@ public static class ContextMenuModel
     }
 
     /// <summary>The applications that can open the cursor item, asked for now (off the UI thread); one disabled "No
-    /// applications" item when there are none. A failing query is told or reported and shows as none.</summary>
-    public static async Task<IReadOnlyList<ContextMenuItem>> OpenWithItemsAsync(MainViewModel main)
+    /// applications" item when there are none. A failing query is told or reported and shows as none. Null when the
+    /// cursor moved to another item while the query ran (nothing to show). Each item opens the item the applications
+    /// were asked for, wherever the cursor is when it is chosen.</summary>
+    public static async Task<IReadOnlyList<ContextMenuItem>?> OpenWithItemsAsync(MainViewModel main)
     {
         ArgumentNullException.ThrowIfNull(main);
-        var apps = await main.Shell.GetOpenWithAppsAsync();
-        if (apps.Count == 0)
-            return [new ContextMenuItem(null, "Context_NoApps", Loc.Get("Context_NoApps"), null, false, null)];
-        return apps.Select(app => new ContextMenuItem(null, "Context_App", app.Name, null, true, () =>
+        if (await main.Shell.QueryOpenWithAsync() is not { } query) return null;
+        if (query.Apps.Count == 0) return NoApps();
+        return query.Apps.Select(app => new ContextMenuItem(null, "Context_App", app.Name, null, true, () =>
         {
-            main.Shell.OpenWith(app);
+            main.Shell.OpenWith(query.Entry, app);
             return Task.CompletedTask;
         }, isLiteralLabel: true)).ToArray();
     }
+
+    private static IReadOnlyList<ContextMenuItem> NoApps() =>
+        [new ContextMenuItem(null, "Context_NoApps", Loc.Get("Context_NoApps"), null, false, null)];
 
     private static ContextMenuItem Command(MainViewModel main, string id, string labelKey) =>
         new(id, labelKey, Loc.Get(labelKey), ChordOf(main, id), main.Commands.CanExecute(id),

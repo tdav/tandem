@@ -101,11 +101,31 @@ public class DragDropWindowTests : LanguageTestBase
         return effects;
     }
 
+    private const DragDropEffects All = DragDropEffects.Copy | DragDropEffects.Move | DragDropEffects.Link;
+
+    /// <summary>
+    /// The operations macOS offers a target, as far as Avalonia's effects go: AppKit filters the source's mask by the
+    /// modifier held, and Command filters it to "generic", which Avalonia maps to nothing; so with Cmd held nothing is
+    /// offered. Without a modifier, Finder and this app offer copy, move and link.
+    /// </summary>
+    private static DragDropEffects MacOffer(RawInputModifiers modifiers) =>
+        modifiers.HasFlag(RawInputModifiers.Meta) ? DragDropEffects.None : All;
+
     private static void Drag(TestApp app, Point point, RawDragEventType type, IDataTransfer data,
-        RawInputModifiers modifiers = RawInputModifiers.None)
+        RawInputModifiers modifiers = RawInputModifiers.None, DragDropEffects? offered = null)
     {
-        app.Window.DragDrop(point, type, data, DragDropEffects.Copy | DragDropEffects.Move | DragDropEffects.Link,
-            modifiers);
+        app.Window.DragDrop(point, type, data, offered ?? MacOffer(modifiers), modifiers);
+        app.Pump();
+    }
+
+    private static async Task WaitForRequest(TestApp app, int count = 1)
+    {
+        await TestApp.WaitUntil(() =>
+        {
+            app.Pump();
+            return app.Dialogs.CopyMoveRequests.Count == count;
+        });
+        await app.Main.Files.WhenIdleAsync();
         app.Pump();
     }
 
@@ -142,7 +162,8 @@ public class DragDropWindowTests : LanguageTestBase
         app.Pump();
 
         var request = app.Dialogs.CopyMoveRequests[0];
-        Assert.False(request.IsMove);
+        Assert.True(request.OffersBoth); // Copy, Move and Cancel
+        Assert.False(request.IsMove); // Copy pre-selected
         Assert.Equal("/dst/inside.txt", request.Destination);
         Assert.Equal("inside", app.Fs.ReadAllText("/dst/inside.txt"));
         Assert.True(app.Fs.Exists(outside.Root + "/inside.txt"));
@@ -154,7 +175,33 @@ public class DragDropWindowTests : LanguageTestBase
     }
 
     [AvaloniaFact]
-    public async Task Cmd_held_at_the_drop_moves_and_the_effect_follows_it_while_dragging()
+    public async Task With_cmd_held_macos_offers_nothing_so_nothing_is_accepted_or_asked()
+    {
+        await using var app = await StartAsync();
+        using var outside = new Outside(app);
+        var effects = RecordEffects(app);
+        var data = await outside.DragOf("inside.txt");
+        var point = BelowTheRows(app, PanelSide.Right);
+
+        Drag(app, point, RawDragEventType.DragEnter, data, RawInputModifiers.Meta);
+        Drag(app, point, RawDragEventType.DragOver, data, RawInputModifiers.Meta);
+        Drag(app, point, RawDragEventType.Drop, data, RawInputModifiers.Meta);
+        await Task.Delay(20);
+        app.Pump();
+
+        Assert.All(effects, e => Assert.Equal(DragDropEffects.None, e.Effects));
+        Assert.Empty(app.Dialogs.CopyMoveRequests);
+        Assert.True(app.Fs.Exists(outside.Root + "/inside.txt"));
+    }
+
+    [AvaloniaTheory]
+    [InlineData(DragDropEffects.Copy, DragDropEffects.Copy)]
+    [InlineData(DragDropEffects.Copy | DragDropEffects.Move | DragDropEffects.Link, DragDropEffects.Copy)]
+    [InlineData(DragDropEffects.Move, DragDropEffects.Move)]
+    [InlineData(DragDropEffects.Link | DragDropEffects.Move, DragDropEffects.Move)]
+    [InlineData(DragDropEffects.Link, DragDropEffects.Link)]
+    public async Task Any_offered_operation_is_accepted_and_copy_is_reported_whenever_offered(
+        DragDropEffects offered, DragDropEffects reported)
     {
         await using var app = await StartAsync();
         using var outside = new Outside(app);
@@ -163,22 +210,84 @@ public class DragDropWindowTests : LanguageTestBase
         var point = BelowTheRows(app, PanelSide.Right);
         app.Dialogs.AnswerCopyMove();
 
-        Drag(app, point, RawDragEventType.DragEnter, data);
-        Drag(app, point, RawDragEventType.DragOver, data);
-        Drag(app, point, RawDragEventType.DragOver, data, RawInputModifiers.Meta);
-        Drag(app, point, RawDragEventType.Drop, data, RawInputModifiers.Meta);
-        await TestApp.WaitUntil(() =>
-        {
-            app.Pump();
-            return app.Dialogs.CopyMoveRequests.Count == 1;
-        });
-        await app.Main.Files.WhenIdleAsync();
+        Drag(app, point, RawDragEventType.DragEnter, data, offered: offered);
+        Drag(app, point, RawDragEventType.DragOver, data, offered: offered);
+        Drag(app, point, RawDragEventType.Drop, data, offered: offered);
+        await WaitForRequest(app);
 
-        Assert.Equal(
-            [DragDropEffects.Copy, DragDropEffects.Move, DragDropEffects.Move], effects.Select(e => e.Effects));
+        Assert.Equal([reported, reported], effects.Select(e => e.Effects));
+        Assert.True(app.Dialogs.CopyMoveRequests[0].OffersBoth);
+        Assert.False(app.Dialogs.CopyMoveRequests[0].IsMove); // whatever was offered, Copy is pre-selected
+        Assert.True(app.Fs.Exists("/dst/inside.txt"));
+    }
+
+    [AvaloniaFact]
+    public async Task Cmd_reported_at_the_drop_only_preselects_move_and_copy_is_still_reported()
+    {
+        await using var app = await StartAsync();
+        using var outside = new Outside(app);
+        var effects = RecordEffects(app);
+        var data = await outside.DragOf("inside.txt");
+        var point = BelowTheRows(app, PanelSide.Right);
+        app.Dialogs.AnswerCopyMove(); // Enter: the pre-selected action
+
+        // A platform that still offers everything with Cmd held (not what macOS does, see MacOffer).
+        Drag(app, point, RawDragEventType.DragEnter, data, offered: All);
+        Drag(app, point, RawDragEventType.DragOver, data, RawInputModifiers.Meta, offered: All);
+        Drag(app, point, RawDragEventType.Drop, data, RawInputModifiers.Meta, offered: All);
+        await WaitForRequest(app);
+
+        Assert.Equal([DragDropEffects.Copy, DragDropEffects.Copy], effects.Select(e => e.Effects));
         Assert.True(app.Dialogs.CopyMoveRequests[0].IsMove);
         Assert.True(app.Fs.Exists("/dst/inside.txt"));
         Assert.False(app.Fs.Exists(outside.Root + "/inside.txt")); // moved on the in-memory disk only
+    }
+
+    [AvaloniaFact]
+    public async Task Nothing_is_accepted_while_a_dialog_of_the_app_is_open()
+    {
+        await using var app = await StartAsync();
+        using var outside = new Outside(app);
+        var effects = RecordEffects(app);
+        var data = await outside.DragOf("inside.txt");
+        var point = BelowTheRows(app, PanelSide.Right);
+        var message = MessageDialog.ShowAsync(app.Window, "Tandem", "busy");
+        app.Pump();
+
+        Drag(app, point, RawDragEventType.DragEnter, data);
+        Drag(app, point, RawDragEventType.DragOver, data);
+        Drag(app, point, RawDragEventType.Drop, data);
+        await Task.Delay(20);
+        app.Pump();
+        Assert.All(effects, e => Assert.Equal(DragDropEffects.None, e.Effects));
+        Assert.Empty(app.Dialogs.CopyMoveRequests);
+
+        foreach (var owned in app.Window.OwnedWindows.ToArray()) owned.Close();
+        await TestApp.WaitUntil(() => message.IsCompleted);
+        effects.Clear();
+        Drag(app, point, RawDragEventType.DragEnter, data);
+        Drag(app, point, RawDragEventType.DragOver, data);
+        Assert.Equal([DragDropEffects.Copy], effects.Select(e => e.Effects));
+        Drag(app, point, RawDragEventType.DragLeave, data);
+    }
+
+    [AvaloniaFact]
+    public async Task A_recycled_row_does_not_keep_the_highlight()
+    {
+        await using var app = await StartAsync();
+        using var outside = new Outside(app);
+        var data = await outside.DragOf("inside.txt");
+        var docs = Row(app, PanelSide.Left, "docs");
+        Drag(app, app.CenterOf(docs), RawDragEventType.DragEnter, data);
+        Drag(app, app.CenterOf(docs), RawDragEventType.DragOver, data);
+        Assert.Contains("dropTarget", docs.Classes);
+
+        // The rows change under the pointer (here: another folder; scrolling recycles rows the same way).
+        await app.Left.NavigateToAsync(VfsPath.Local("/other"));
+        app.Pump();
+
+        Assert.DoesNotContain(app.FileList(PanelSide.Left).GetRealizedContainers(), c => c.Classes.Contains("dropTarget"));
+        Assert.DoesNotContain("dropTarget", docs.Classes);
     }
 
     [AvaloniaFact]

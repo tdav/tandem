@@ -190,14 +190,14 @@ public sealed partial class SideViewModel : ObservableObject
             ? target
             : null;
 
-    /// <summary>Files dropped on this side into <paramref name="target"/>: the copy or move dialog, then the
-    /// operation; this side becomes active once the user accepts. An unexpected failure is reported, not
-    /// thrown.</summary>
-    public async Task DropAsync(IReadOnlyList<string> localPaths, DropTarget target, bool move)
+    /// <summary>Files dropped on this side into <paramref name="target"/>: the dialog offering copy and move (Move
+    /// pre-selected with <paramref name="preferMove"/>), then the operation chosen; this side becomes active once the
+    /// user accepts. An unexpected failure is reported, not thrown.</summary>
+    public async Task DropAsync(IReadOnlyList<string> localPaths, DropTarget target, bool preferMove)
     {
         try
         {
-            await _main.Drops.DropAsync(localPaths, Side, target.Directory, move);
+            await _main.Drops.DropAsync(localPaths, Side, target.Directory, preferMove);
         }
         catch (Exception e)
         {

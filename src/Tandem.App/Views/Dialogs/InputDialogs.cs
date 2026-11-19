@@ -25,23 +25,39 @@ public sealed class CopyMoveDialog : DialogWindow
             if (e.PropertyName == nameof(CopyMoveDialogViewModel.Error)) ShowError(error, vm.Error);
         };
 
-        var ok = MakeButton(vm.PrimaryButtonText, isDefault: true, name: "Ok");
-        ok.Click += async (_, _) =>
-        {
-            ok.IsEnabled = false;
-            try
-            {
-                if (await vm.AcceptAsync() is { } answer) Close(answer);
-            }
-            finally
-            {
-                ok.IsEnabled = true;
-            }
-        };
         var cancel = CancelButton();
         cancel.Click += (_, _) => Close(null);
         Opened += (_, _) => field.SelectAll();
-        SetContent(field, [Text(vm.Prompt), field, error, verify, now], ok, cancel);
+        // F5/F6: the one action. A drop: Copy and Move, the pre-selected one on Enter.
+        var actions = new List<Button>();
+        if (vm.OffersBoth)
+        {
+            actions.Add(Action(Loc.Get("Button_Copy"), "Copy", move: false, isDefault: !vm.MoveIsDefault));
+            actions.Add(Action(Loc.Get("Button_Move"), "Move", move: true, isDefault: vm.MoveIsDefault));
+        }
+        else
+        {
+            actions.Add(Action(vm.PrimaryButtonText, "Ok", move: null, isDefault: true));
+        }
+        SetContent(field, [Text(vm.Prompt), field, error, verify, now], [.. actions, cancel]);
+
+        Button Action(string text, string name, bool? move, bool isDefault)
+        {
+            var button = MakeButton(text, isDefault: isDefault, name: name);
+            button.Click += async (_, _) =>
+            {
+                foreach (var b in actions) b.IsEnabled = false;
+                try
+                {
+                    if (await vm.AcceptAsync(move) is { } answer) Close(answer);
+                }
+                finally
+                {
+                    foreach (var b in actions) b.IsEnabled = true;
+                }
+            };
+            return button;
+        }
     }
 }
 

@@ -16,6 +16,12 @@ internal class ScriptedDialogs : IDialogService
     private readonly Lock _lock = new();
 
     public Queue<CopyMoveAnswer?> CopyMoveAnswers { get; } = new();
+    /// <summary>For a dialog that offers both actions (a drop): which one each answer chose; null takes the
+    /// pre-selected one, as Enter does.</summary>
+    private readonly Queue<bool?> _copyMoveChoices = new();
+
+    /// <summary>When set, the copy/move dialog stays "open" until it completes.</summary>
+    public TaskCompletionSource? CopyMoveGate { get; set; }
     public Queue<string?> NameAnswers { get; } = new();
     public Queue<bool> DeleteAnswers { get; } = new();
     public Queue<string?> MaskAnswers { get; } = new();
@@ -49,20 +55,30 @@ internal class ScriptedDialogs : IDialogService
     public Exception? ThrowOnSummary { get; set; }
 
     /// <summary>Scripts the copy/move dialog's next answer.</summary>
+    /// <param name="move">For a dialog offering both actions: Move (true) or Copy (false) chosen; null takes the
+    /// pre-selected action. A keyboard dialog always answers its own action.</param>
     public ScriptedDialogs AnswerCopyMove(string destination = Proposed, bool verify = false,
-        bool runImmediately = true)
+        bool runImmediately = true, bool? move = null)
     {
-        lock (_lock) CopyMoveAnswers.Enqueue(new CopyMoveAnswer(destination, verify, runImmediately));
+        lock (_lock)
+        {
+            CopyMoveAnswers.Enqueue(new CopyMoveAnswer(destination, verify, runImmediately));
+            _copyMoveChoices.Enqueue(move);
+        }
         return this;
     }
 
     public virtual async Task<CopyMoveAnswer?> AskCopyMoveAsync(CopyMoveRequest request)
     {
         Record("copyMove", () => CopyMoveRequests.Add(request));
+        if (CopyMoveGate is { } gate) await gate.Task;
         while (true)
         {
+            bool? choice = null;
+            lock (_lock) _copyMoveChoices.TryDequeue(out choice);
             if (!TryTake(CopyMoveAnswers, "copyMove", out var answer) || answer is null) return null;
             if (answer.Destination == Proposed) answer = answer with { Destination = request.Destination };
+            answer = answer with { IsMove = request.OffersBoth ? choice ?? request.IsMove : request.IsMove };
             if (request.Validate is { } validate && await validate(answer.Destination) is { } error)
             {
                 lock (_lock) ValidationErrors.Add(error);

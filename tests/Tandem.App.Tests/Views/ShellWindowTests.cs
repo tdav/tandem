@@ -226,6 +226,25 @@ public class ShellWindowTests : LanguageTestBase
         menu.Close();
     }
 
+    [AvaloniaFact]
+    public async Task Open_with_from_the_main_menu_shows_nothing_when_the_cursor_moved_during_the_query()
+    {
+        await using var app = await TestApp.StartAsync();
+        app.Shell.Apps = [new AppInfo("Preview", "/System/Applications/Preview.app")];
+        app.Left.CursorIndex = IndexOf(app.Left, "report.pdf");
+        using var gate = new ManualResetEventSlim(false);
+        app.Shell.AppsGate = gate;
+
+        await app.Main.ExecuteCommandAsync(CommandIds.ShellOpenWith);
+        app.Left.CursorIndex = IndexOf(app.Left, "notes.txt");
+        gate.Set();
+        await TestApp.WaitUntil(() => app.Shell.AppQueries.Count == 1);
+        await Task.Delay(50);
+        app.Pump();
+
+        Assert.Null(ListView(app, PanelSide.Left).OpenMenu);
+    }
+
     // ---- The real properties dialog ----------------------------------------------------------------------
 
     private static async Task<(Window Owner, DialogService Service, PropertiesViewModel Vm, InMemoryFileSystem Fs)>
