@@ -90,6 +90,10 @@ if [[ -f "$PLIST" ]]; then
     check_plist CFBundleInfoDictionaryVersion 6.0
     check_plist CFBundleDevelopmentRegion en
     check_plist LSMinimumSystemVersion 14.0
+    # Version numbers must be strings: an <integer> or <real> CFBundleVersion is read wrongly by macOS.
+    check_plist_type CFBundleShortVersionString string
+    check_plist_type CFBundleVersion string
+    check_plist_type LSMinimumSystemVersion string
     check_plist NSHighResolutionCapable true
     check_plist_type NSHighResolutionCapable bool
     check_plist NSPrincipalClass NSApplication

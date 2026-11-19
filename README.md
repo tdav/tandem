@@ -2,7 +2,7 @@
 
 Tandem — двухпанельный файловый менеджер для macOS: две панели с вкладками, управление с клавиатуры, копирование
 и перенос через очередь операций с окном прогресса, корзина, Quick Look, перетаскивание из Finder и в Finder,
-права и теги, встроенная командная строка. Сейчас готов этап 1 (ядро, навигация, интеграция с macOS).
+права и теги, встроенная командная строка. Сейчас этап 1 (ядро, навигация, интеграция с macOS) — на приёмке.
 
 ## Требования
 
@@ -43,7 +43,7 @@ open dist/Tandem.app              # запуск
 
 ## English
 
-Tandem is a dual-pane file manager for macOS (C#, .NET 11, Avalonia). Stage 1 covers the core panels, tabs,
+Tandem is a dual-pane file manager for macOS (C#, .NET 11, Avalonia). Stage 1 is in acceptance testing; it covers the core panels, tabs,
 favourites and history, the operation queue (copy, move, delete to Trash), drag and drop with Finder, Quick Look,
 permissions and Finder tags, and a built-in command line. The UI is available in English and Russian.
 
