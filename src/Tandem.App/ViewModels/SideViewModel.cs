@@ -248,14 +248,23 @@ public sealed partial class SideViewModel : ObservableObject
         }
     }
 
+    /// <summary>A click on a column header, or its sort command: sorts this side's panel by the column, ascending;
+    /// by the column it is already sorted by, the other way round. Activates this side.</summary>
     [RelayCommand]
-    private void SortBy(SortColumn column)
+    public void SortBy(SortColumn column)
     {
         Activate();
         if (_panel is not { } panel) return;
         panel.Sort = panel.Sort.Column == column
             ? panel.Sort with { Descending = !panel.Sort.Descending }
             : new SortSpec(column);
+    }
+
+    /// <summary>Reverses the direction of this side's sort, keeping its column. Activates this side.</summary>
+    public void ReverseSort()
+    {
+        Activate();
+        if (_panel is { } panel) panel.Sort = panel.Sort with { Descending = !panel.Sort.Descending };
     }
 
     /// <summary>Opens the volume's root in this side's panel.</summary>

@@ -356,6 +356,21 @@
   <data name="Menu_view_toggleHidden" xml:space="preserve">
     <value>Скрытые файлы</value>
   </data>
+  <data name="Menu_sort_byName" xml:space="preserve">
+    <value>По имени</value>
+  </data>
+  <data name="Menu_sort_byExtension" xml:space="preserve">
+    <value>По расширению</value>
+  </data>
+  <data name="Menu_sort_bySize" xml:space="preserve">
+    <value>По размеру</value>
+  </data>
+  <data name="Menu_sort_byDate" xml:space="preserve">
+    <value>По дате</value>
+  </data>
+  <data name="Menu_sort_reverse" xml:space="preserve">
+    <value>В обратном порядке</value>
+  </data>
   <data name="Menu_shell_reveal" xml:space="preserve">
     <value>Показать в Finder</value>
   </data>
@@ -381,6 +396,9 @@
   </data>
   <data name="Menu_Language" xml:space="preserve">
     <value>Язык</value>
+  </data>
+  <data name="Menu_Sort" xml:space="preserve">
+    <value>Сортировка</value>
   </data>
   <data name="Menu_LanguageSystem" xml:space="preserve">
     <value>Как в системе</value>

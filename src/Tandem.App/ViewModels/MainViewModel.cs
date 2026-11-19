@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using Tandem.App.Commands;
 using Tandem.App.Resources;
 using Tandem.App.Services;
+using Tandem.Core.Listing;
 using Tandem.Core.Platform;
 using Tandem.Core.Vfs;
 
@@ -336,6 +337,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         On(CommandIds.TabPrev, () => ActiveTabs().Previous());
         On(CommandIds.FavoritesShow, () => FavoritesMenuRequested?.Invoke(this, EventArgs.Empty));
         On(CommandIds.ViewToggleHidden, () => Workspace.ShowHidden = !Workspace.ShowHidden);
+        On(CommandIds.SortByName, () => ActiveSide.SortBy(SortColumn.Name));
+        On(CommandIds.SortByExtension, () => ActiveSide.SortBy(SortColumn.Extension));
+        On(CommandIds.SortBySize, () => ActiveSide.SortBy(SortColumn.Size));
+        On(CommandIds.SortByDate, () => ActiveSide.SortBy(SortColumn.Modified));
+        On(CommandIds.SortReverse, () => ActiveSide.ReverseSort());
         Commands.RaiseCanExecuteChanged();
     }
 

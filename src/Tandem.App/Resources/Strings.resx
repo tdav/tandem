@@ -364,6 +364,21 @@
   <data name="Menu_view_toggleHidden" xml:space="preserve">
     <value>Hidden Files</value>
   </data>
+  <data name="Menu_sort_byName" xml:space="preserve">
+    <value>By Name</value>
+  </data>
+  <data name="Menu_sort_byExtension" xml:space="preserve">
+    <value>By Extension</value>
+  </data>
+  <data name="Menu_sort_bySize" xml:space="preserve">
+    <value>By Size</value>
+  </data>
+  <data name="Menu_sort_byDate" xml:space="preserve">
+    <value>By Date</value>
+  </data>
+  <data name="Menu_sort_reverse" xml:space="preserve">
+    <value>Reversed</value>
+  </data>
   <data name="Menu_shell_reveal" xml:space="preserve">
     <value>Show in Finder</value>
   </data>
@@ -389,6 +404,9 @@
   </data>
   <data name="Menu_Language" xml:space="preserve">
     <value>Language</value>
+  </data>
+  <data name="Menu_Sort" xml:space="preserve">
+    <value>Sort</value>
   </data>
   <data name="Menu_LanguageSystem" xml:space="preserve">
     <value>As in System</value>

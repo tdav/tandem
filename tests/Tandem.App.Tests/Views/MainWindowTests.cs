@@ -227,6 +227,20 @@ public class MainWindowTests : LanguageTestBase
     }
 
     [AvaloniaFact]
+    public async Task Ctrl_Cmd_3_sorts_by_size()
+    {
+        await using var app = await TestApp.StartAsync();
+
+        // Only the physical key says "3" (as with a layout whose digit row types other characters).
+        app.Press(Key.None, RawInputModifiers.Control | RawInputModifiers.Meta, PhysicalKey.Digit3);
+
+        Assert.Equal(new SortSpec(SortColumn.Size), app.Left.Sort);
+        Assert.Equal("▲", app.Main.Left.SizeSortMark);
+        Assert.Equal(new SortSpec(SortColumn.Name), app.Right.Sort);
+        Assert.Empty(app.Failures);
+    }
+
+    [AvaloniaFact]
     public async Task View_toggles_hide_and_show_parts()
     {
         await using var app = await TestApp.StartAsync();

@@ -55,6 +55,12 @@ public sealed class KeyMap
             (CommandIds.TabPrev, "Ctrl+Shift+Tab"),
             (CommandIds.FavoritesShow, "Cmd+D"),
             (CommandIds.ViewToggleHidden, "Cmd+Shift+OemPeriod"),
+            // Finder's "Sort By" chords. Not Ctrl+F3…F8: macOS keeps Ctrl with an F-key for keyboard focus moves.
+            (CommandIds.SortByName, "Ctrl+Cmd+1"),
+            (CommandIds.SortByExtension, "Ctrl+Cmd+2"),
+            (CommandIds.SortBySize, "Ctrl+Cmd+3"),
+            (CommandIds.SortByDate, "Ctrl+Cmd+4"),
+            (CommandIds.SortReverse, "Ctrl+Cmd+R"),
         }.Select(b => (b.Item1, KeyChord.Parse(b.Item2))));
 
     /// <summary>All bindings in order; for a key map editor and for showing shortcuts in menus.</summary>

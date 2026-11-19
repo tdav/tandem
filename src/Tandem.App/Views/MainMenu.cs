@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using Tandem.App.Commands;
 using Tandem.App.Resources;
 using Tandem.App.ViewModels;
+using Tandem.Core.Listing;
 
 namespace Tandem.App.Views;
 
@@ -118,8 +119,47 @@ public static class MainMenu
         [
             sidebar, volumeBars, commandLine, fkeyBar, new NativeMenuItemSeparator(), hidden,
             new NativeMenuItemSeparator(),
+            Submenu("Menu_Sort", SortItems(main)),
+            new NativeMenuItemSeparator(),
             new NativeMenuItem(Loc.Get("Menu_Language")) { Menu = languageMenu },
         ];
+    }
+
+    /// <summary>The sort commands of the active panel: its column checked, and "Reversed" checked while it sorts
+    /// the other way round.</summary>
+    private static IEnumerable<NativeMenuItemBase> SortItems(MainViewModel main)
+    {
+        (SortColumn Column, NativeMenuItem Item)[] columns =
+        [
+            (SortColumn.Name, CommandItem(main, CommandIds.SortByName)),
+            (SortColumn.Extension, CommandItem(main, CommandIds.SortByExtension)),
+            (SortColumn.Size, CommandItem(main, CommandIds.SortBySize)),
+            (SortColumn.Modified, CommandItem(main, CommandIds.SortByDate)),
+        ];
+        foreach (var (_, item) in columns) item.ToggleType = MenuItemToggleType.Radio;
+        var reverse = CommandItem(main, CommandIds.SortReverse);
+        reverse.ToggleType = MenuItemToggleType.CheckBox;
+
+        void Update()
+        {
+            var sort = main.ActiveSide.Panel?.Sort;
+            foreach (var (column, item) in columns) item.IsChecked = sort?.Column == column;
+            reverse.IsChecked = sort?.Descending == true;
+        }
+
+        Update();
+        main.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainViewModel.ActiveSide)) Update();
+        };
+        foreach (var side in new[] { main.Left, main.Right })
+            side.PropertyChanged += (_, e) =>
+            {
+                // A side raises its sort marks when its panel's sort changes or another tab's panel is shown.
+                if (e.PropertyName is nameof(SideViewModel.Panel) or nameof(SideViewModel.NameSortMark)) Update();
+            };
+
+        return [..columns.Select(c => c.Item), new NativeMenuItemSeparator(), reverse];
     }
 
     private static NativeMenuItem Toggle(string labelKey, Action toggle) => new(Loc.Get(labelKey))

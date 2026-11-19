@@ -53,6 +53,8 @@ public class KeyMapTests
             "select.byMask=Cmd+OemPlus", "unselect.byMask=Cmd+OemMinus", "select.invert=Cmd+Shift+A",
             "tab.new=Cmd+T", "tab.close=Cmd+W", "tab.next=Ctrl+Tab", "tab.prev=Ctrl+Shift+Tab",
             "favorites.show=Cmd+D", "view.toggleHidden=Cmd+Shift+OemPeriod",
+            "sort.byName=Ctrl+Cmd+1", "sort.byExtension=Ctrl+Cmd+2", "sort.bySize=Ctrl+Cmd+3", "sort.byDate=Ctrl+Cmd+4",
+            "sort.reverse=Ctrl+Cmd+R",
         ];
 
         var expectedBindings = expected.Select(e => e.Split('=')).Select(p => (p[0], KeyChord.Parse(p[1])));
@@ -87,6 +89,27 @@ public class KeyMapTests
         var commandsWithFKeys = KeyMap.Default.Bindings.Where(b => IsFKey(b.Chord)).Select(b => b.CommandId).Distinct();
 
         Assert.All(commandsWithFKeys, id => Assert.Contains(KeyMap.Default.ChordsFor(id), c => !IsFKey(c)));
+    }
+
+    [Theory]
+    [InlineData("Ctrl+Cmd+1", "sort.byName")]
+    [InlineData("Ctrl+Cmd+2", "sort.byExtension")]
+    [InlineData("Ctrl+Cmd+3", "sort.bySize")]
+    [InlineData("Ctrl+Cmd+4", "sort.byDate")]
+    [InlineData("Ctrl+Cmd+R", "sort.reverse")]
+    public void Default_sort_chords_resolve(string chord, string id)
+    {
+        Assert.Equal(id, KeyMap.Default.Find(KeyChord.Parse(chord)));
+        Assert.Equal(chord, KeyMap.Default.ChordsFor(id)[0].ToString()); // the canonical spelling, shown in menus
+    }
+
+    [Fact]
+    public void No_default_chord_uses_Ctrl_with_an_F_key()
+    {
+        // macOS keeps Ctrl+F1…F12 for moving the keyboard focus (menu bar, Dock, toolbars): the app never sees them.
+        Assert.DoesNotContain(KeyMap.Default.Bindings, b =>
+            b.Chord.Modifiers.HasFlag(Avalonia.Input.KeyModifiers.Control) &&
+            b.Chord.Key is >= Avalonia.Input.Key.F1 and <= Avalonia.Input.Key.F24);
     }
 
     [Fact]

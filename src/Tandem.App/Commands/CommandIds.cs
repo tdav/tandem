@@ -42,6 +42,12 @@ public static class CommandIds
     public const string TabNext = "tab.next";
     public const string TabPrev = "tab.prev";
 
+    public const string SortByName = "sort.byName";
+    public const string SortByExtension = "sort.byExtension";
+    public const string SortBySize = "sort.bySize";
+    public const string SortByDate = "sort.byDate";
+    public const string SortReverse = "sort.reverse";
+
     public const string FavoritesShow = "favorites.show";
     public const string ViewToggleHidden = "view.toggleHidden";
 
