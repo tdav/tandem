@@ -112,6 +112,8 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
 
     /// <summary>Exchanges the tabs of the two sides, each tab with its panel and history; the same side of the
     /// screen stays active.</summary>
+    /// <remarks>Atomic for observers: no notification is raised until both sides hold their final tabs, so
+    /// <see cref="ActivePanel"/> and <see cref="PassivePanel"/> are never seen as the same panel.</remarks>
     public Task SwapPanelsAsync()
     {
         PanelTabsViewModel.SwapContents(Left, Right);
@@ -217,16 +219,28 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
 
     private async Task AutosaveAsync(CancellationTokenSource cts)
     {
+        var waited = false;
+        var current = false;
         try
         {
             await _delay(AutosaveDelay, cts.Token);
+            waited = true;
         }
-        catch (OperationCanceledException)
+        catch (Exception)
         {
-            return;
+            // Cancelled, or the delay itself failed: this save is dropped, the next change schedules another.
         }
-        if (cts.IsCancellationRequested || _autosaveCts != cts) return;
-        Save();
+        finally
+        {
+            // Release the pending slot whatever happened, so a failed delay never stops later autosaves.
+            current = _autosaveCts == cts;
+            if (current)
+            {
+                _autosaveCts = null;
+                cts.Dispose();
+            }
+        }
+        if (waited && current) Save();
     }
 
     private void CancelAutosave()

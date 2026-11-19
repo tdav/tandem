@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Tandem.Core.Listing;
 using Tandem.Core.Settings;
@@ -15,7 +17,7 @@ namespace Tandem.App.ViewModels;
 public sealed partial class PanelTabsViewModel : ObservableObject, IDisposable
 {
     private readonly ProviderRegistry _providers;
-    private readonly ObservableCollection<TabViewModel> _tabs = [];
+    private readonly TabCollection _tabs = [];
     private TabViewModel? _active;
     private VfsPath _fallback;
     private bool _showHidden;
@@ -140,13 +142,16 @@ public sealed partial class PanelTabsViewModel : ObservableObject, IDisposable
         foreach (var tab in old) tab.Dispose();
     }
 
-    /// <summary>Exchanges all tabs, with their panels and history, and the active tab between two sides.</summary>
+    /// <summary>Exchanges all tabs, with their panels and history, and the active tab between two sides. Both sides
+    /// change silently first; only then are the notifications raised, so no listener sees a half-done swap.</summary>
     internal static void SwapContents(PanelTabsViewModel a, PanelTabsViewModel b)
     {
         var aTabs = a.TakeAll();
         var bTabs = b.TakeAll();
-        a.PutAll(bTabs.Tabs, bTabs.Active);
-        b.PutAll(aTabs.Tabs, aTabs.Active);
+        a.PutAllSilently(bTabs.Tabs, bTabs.Active);
+        b.PutAllSilently(aTabs.Tabs, aTabs.Active);
+        a.RaiseContentsReplaced();
+        b.RaiseContentsReplaced();
     }
 
     public void Dispose()
@@ -225,11 +230,36 @@ public sealed partial class PanelTabsViewModel : ObservableObject, IDisposable
         return (tabs, _active);
     }
 
-    private void PutAll(List<TabViewModel> tabs, TabViewModel? active)
+    private void PutAllSilently(List<TabViewModel> tabs, TabViewModel? active)
     {
-        _tabs.Clear();
-        foreach (var tab in tabs) Attach(tab, _tabs.Count);
-        SetActive(active);
+        _tabs.ReplaceSilently(tabs);
+        foreach (var tab in tabs) tab.StateChanged += OnTabStateChanged;
+        _active = active;
+    }
+
+    private void RaiseContentsReplaced()
+    {
+        _tabs.RaiseReset();
+        OnPropertyChanged(nameof(Active));
+        RaiseStateChanged();
+    }
+
+    /// <summary>The tabs, with a way to replace them all without notifying, for a swap that must look atomic.</summary>
+    private sealed class TabCollection : ObservableCollection<TabViewModel>
+    {
+        public void ReplaceSilently(IEnumerable<TabViewModel> tabs)
+        {
+            CheckReentrancy();
+            Items.Clear();
+            foreach (var tab in tabs) Items.Add(tab);
+        }
+
+        public void RaiseReset()
+        {
+            OnPropertyChanged(new PropertyChangedEventArgs(nameof(Count)));
+            OnPropertyChanged(new PropertyChangedEventArgs("Item[]"));
+            OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+        }
     }
 
     private void OnTabStateChanged(object? sender, EventArgs e) => RaiseStateChanged();

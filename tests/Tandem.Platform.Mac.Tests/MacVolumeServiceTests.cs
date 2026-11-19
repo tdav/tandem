@@ -106,28 +106,29 @@ public sealed class MacVolumeServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task Dispose_waits_for_a_Changed_being_raised()
+    public async Task Dispose_does_not_wait_for_a_Changed_being_raised()
     {
         var service = new MacVolumeService(_temp.Path, Debounce);
         using var entered = new ManualResetEventSlim();
         using var release = new ManualResetEventSlim();
-        var finished = false;
         service.Changed += (_, _) =>
         {
             entered.Set();
             release.Wait(Timeout);
-            Volatile.Write(ref finished, true);
         };
 
         Directory.CreateDirectory(_temp.Combine("busy"));
         Assert.True(entered.Wait(Timeout, TestContext.Current.CancellationToken));
-        var dispose = Task.Run(service.Dispose, TestContext.Current.CancellationToken);
-        await Task.Delay(Debounce, TestContext.Current.CancellationToken);
-        Assert.False(dispose.IsCompleted);
-
-        release.Set();
-        await dispose.WaitAsync(Timeout, TestContext.Current.CancellationToken);
-        Assert.True(Volatile.Read(ref finished));
+        try
+        {
+            // A handler that blocks (e.g. waiting for the UI thread that is disposing) must not hang Dispose.
+            var dispose = Task.Run(service.Dispose, TestContext.Current.CancellationToken);
+            await dispose.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        }
+        finally
+        {
+            release.Set();
+        }
     }
 
     [Fact]

@@ -306,6 +306,48 @@ public class WorkspaceTests : IDisposable
     }
 
     [AvaloniaFact]
+    public async Task A_failing_delay_does_not_disable_autosave()
+    {
+        var workspace = await LoadedAsync();
+        workspace.Favorites.Add("/x");
+        var broken = Assert.Single(_delay.Pending);
+
+        broken.Fail(new InvalidOperationException("timer broke"));
+        await WaitUntil(() => broken.Task.IsCompleted);
+        await Task.Yield();
+
+        workspace.Favorites.Add("/a");
+        var next = Assert.Single(_delay.Pending);
+        next.Complete();
+        await WaitUntil(() => SavedState() is not null);
+        Assert.Equal(["/x", "/a"], SavedState()!.Favorites);
+    }
+
+    [AvaloniaFact]
+    public async Task Swap_never_shows_the_same_panel_on_both_sides()
+    {
+        var workspace = await LoadedAsync();
+        await workspace.Left.Active.Panel.NavigateToAsync(Local("/a"));
+        await workspace.Left.NewTabAsync();
+        await workspace.Right.Active.Panel.NavigateToAsync(Local("/x"));
+        var seen = new List<(PanelViewModel Active, PanelViewModel Passive)>();
+        void Record() => seen.Add((workspace.ActivePanel, workspace.PassivePanel));
+        workspace.PropertyChanged += (_, _) => Record();
+        foreach (var side in new[] { workspace.Left, workspace.Right })
+        {
+            side.PropertyChanged += (_, _) => Record();
+            side.StateChanged += (_, _) => Record();
+            ((System.Collections.Specialized.INotifyCollectionChanged)side.Tabs).CollectionChanged += (_, _) => Record();
+        }
+
+        await workspace.SwapPanelsAsync();
+        await workspace.SwapPanelsAsync();
+
+        Assert.NotEmpty(seen);
+        Assert.All(seen, pair => Assert.NotSame(pair.Active, pair.Passive));
+    }
+
+    [AvaloniaFact]
     public async Task Restore_does_not_schedule_a_save()
     {
         Store().Save(AppState.Default(Home) with { Favorites = ["/x"] });
@@ -337,6 +379,7 @@ public class WorkspaceTests : IDisposable
             public Task Task => Source.Task;
             public bool Cancelled => Source.Task.IsCanceled;
             public void Complete() => Source.TrySetResult();
+            public void Fail(Exception error) => Source.TrySetException(error);
         }
     }
 }
