@@ -17,8 +17,9 @@ public sealed record OpenWithApps(FileEntry Entry, IReadOnlyList<AppInfo> Apps);
 /// </summary>
 /// <remarks>
 /// Created and used on the UI thread. Everything but the properties dialog works for the local provider only and is
-/// disabled elsewhere; Enter on a file elsewhere does nothing. A launch that fails (<see cref="IOException"/>) is told
-/// to the user in words; anything unexpected goes to the failure handler. While Quick Look is open, moving the cursor
+/// disabled elsewhere; Enter on a file elsewhere does nothing. A launch that fails (<see cref="IOException"/>), at once
+/// or when the launcher reports it a moment later (no application for the file, an item that is gone), is told to the
+/// user in words, once; anything unexpected goes to the failure handler. While Quick Look is open, moving the cursor
 /// shows the new item after a short pause (holding an arrow key starts one preview, not one per row); going to
 /// another folder, switching the active panel or closing the window closes it.
 /// <see cref="CommandRegistry.RaiseCanExecuteChanged"/> is raised only when one of these commands' availability flips.
@@ -257,15 +258,39 @@ public sealed class ShellCommands : IDisposable
 
     /// <summary>Runs a shell call: a launch failure is told to the user as <paramref name="failureText"/> with the
     /// system's words as detail; anything else goes to the failure handler. Never throws.</summary>
-    private async Task RunAsync(Action launch, string failureText)
+    private async Task RunAsync(Func<Task> launch, string failureText)
     {
+        Task verdict;
         try
         {
-            launch();
+            verdict = launch();
         }
         catch (IOException e)
         {
             await TellAsync(failureText, e);
+            return;
+        }
+        catch (Exception e)
+        {
+            _reportFailure(e);
+            return;
+        }
+        // The launcher's own verdict comes later: the command does not wait for it.
+        _ = ObserveAsync(verdict, failureText);
+    }
+
+    /// <summary>Waits (on the UI thread, without blocking it) for the launcher's verdict; a failure it reports
+    /// (<see cref="IOException"/>, its words as detail) is told to the user as <paramref name="failureText"/>, anything
+    /// else goes to the failure handler. Never throws.</summary>
+    private async Task ObserveAsync(Task verdict, string failureText)
+    {
+        try
+        {
+            await verdict;
+        }
+        catch (IOException e)
+        {
+            if (!_disposed) await TellAsync(failureText, e);
         }
         catch (Exception e)
         {

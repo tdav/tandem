@@ -6,7 +6,8 @@ namespace Tandem.Platform.Mac;
 
 /// <summary>
 /// Launches through <c>/usr/bin/open</c> (arguments passed as a list, never through a shell) and lists applications
-/// with <c>-[NSWorkspace URLsForApplicationsToOpenURL:]</c>.
+/// with <c>-[NSWorkspace URLsForApplicationsToOpenURL:]</c>. A launch's task faults when <c>open</c> exits with a
+/// failure, with what it wrote as the message.
 /// </summary>
 [SupportedOSPlatform("macos")]
 public sealed class MacShellIntegration(IProcessRunner runner) : IShellIntegration
@@ -16,39 +17,39 @@ public sealed class MacShellIntegration(IProcessRunner runner) : IShellIntegrati
 
     private readonly IProcessRunner _runner = runner ?? throw new ArgumentNullException(nameof(runner));
 
-    public void OpenDefault(string path)
+    public Task OpenDefault(string path)
     {
         ProcessLaunch.RequireAbsolute(path, nameof(path));
-        Open(path);
+        return Open(path);
     }
 
-    public void OpenInTextEditor(string path)
+    public Task OpenInTextEditor(string path)
     {
         ProcessLaunch.RequireAbsolute(path, nameof(path));
-        Open("-t", path);
+        return Open("-t", path);
     }
 
-    public void OpenWith(string path, AppInfo app)
+    public Task OpenWith(string path, AppInfo app)
     {
         ProcessLaunch.RequireAbsolute(path, nameof(path));
         ArgumentNullException.ThrowIfNull(app);
         ProcessLaunch.RequireAbsolute(app.BundlePath, nameof(app));
-        Open("-a", app.BundlePath, path);
+        return Open("-a", app.BundlePath, path);
     }
 
-    public void RevealInFinder(string path)
+    public Task RevealInFinder(string path)
     {
         ProcessLaunch.RequireAbsolute(path, nameof(path));
-        Open("-R", path);
+        return Open("-R", path);
     }
 
-    public void OpenTerminal(string directory)
+    public Task OpenTerminal(string directory)
     {
         ProcessLaunch.RequireAbsolute(directory, nameof(directory));
-        Open("-a", "Terminal", directory);
+        return Open("-a", "Terminal", directory);
     }
 
-    public void OpenFullDiskAccessSettings() => Open(FullDiskAccessPane);
+    public Task OpenFullDiskAccessSettings() => Open(FullDiskAccessPane);
 
     public IReadOnlyList<AppInfo> GetAppsFor(string path)
     {
@@ -83,6 +84,9 @@ public sealed class MacShellIntegration(IProcessRunner runner) : IShellIntegrati
         return name.EndsWith(".app", StringComparison.OrdinalIgnoreCase) ? name[..^".app".Length] : name;
     }
 
-    private void Open(params string[] arguments) =>
-        ProcessLaunch.ReleaseWhenExited(ProcessLaunch.Start(_runner, new ProcessSpec(OpenTool, arguments)));
+    /// <summary>Starts <c>open</c> (an <see cref="IOException"/> at once if it cannot start) and returns its verdict:
+    /// it exits with a failure and a line on standard error when there is no application for the item, the item is
+    /// gone, or the application is broken.</summary>
+    private Task Open(params string[] arguments) =>
+        ProcessLaunch.ExitedAsync(ProcessLaunch.Start(_runner, new ProcessSpec(OpenTool, arguments)), OpenTool);
 }

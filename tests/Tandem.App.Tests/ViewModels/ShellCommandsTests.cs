@@ -1,4 +1,5 @@
 using Avalonia.Headless.XUnit;
+using Avalonia.Threading;
 using Tandem.App.Commands;
 using Tandem.App.Resources;
 using Tandem.App.Tests.Views;
@@ -99,6 +100,65 @@ public class ShellCommandsTests : LanguageTestBase
             (Loc.Format("Shell_OpenFailed", "notes.txt"), "open exited with 1"),
             (Loc.Format("Shell_RevealFailed", "notes.txt"), "open exited with 1"),
         ], app.Dialogs.MessagesWithDetail);
+        Assert.Empty(app.Failures);
+    }
+
+    [AvaloniaFact]
+    public async Task A_launcher_that_reports_failure_later_is_shown_once_with_its_words()
+    {
+        await using var app = await StartAsync();
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        app.Shell.ExitGate = gate;
+        app.Shell.ExitFailure = new IOException("No application knows how to open this file.");
+        Cursor(app.Left, "notes.txt");
+
+        await app.Left.ActivateAsync(); // Enter: returns at once, the launcher still runs
+        Assert.Empty(app.Dialogs.MessagesWithDetail);
+
+        gate.SetResult();
+        await TestApp.WaitUntil(() => { Dispatcher.UIThread.RunJobs(); return app.Dialogs.Messages.Count > 0; });
+        await Task.Delay(50);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal([(Loc.Format("Shell_OpenFailed", "notes.txt"), "No application knows how to open this file.")],
+            app.Dialogs.MessagesWithDetail);
+        Assert.Empty(app.Failures);
+    }
+
+    [AvaloniaFact]
+    public async Task Failed_reveal_and_open_with_are_shown_too()
+    {
+        await using var app = await StartAsync();
+        app.Shell.ExitFailure = new IOException("The file does not exist.");
+        app.Shell.Apps = [new AppInfo("Broken", "/Applications/Broken.app")];
+        Cursor(app.Left, "notes.txt");
+
+        Assert.True(await app.Main.Commands.ExecuteAsync(CommandIds.ShellReveal));
+        var apps = await app.Main.Shell.QueryOpenWithAsync();
+        app.Main.Shell.OpenWith(apps!.Entry, apps.Apps[0]);
+        await TestApp.WaitUntil(() => { Dispatcher.UIThread.RunJobs(); return app.Dialogs.Messages.Count == 2; });
+
+        Assert.Equal(
+        [
+            (Loc.Format("Shell_RevealFailed", "notes.txt"), "The file does not exist."),
+            (Loc.Format("Shell_OpenFailed", "notes.txt"), "The file does not exist."),
+        ], app.Dialogs.MessagesWithDetail);
+    }
+
+    [AvaloniaFact]
+    public async Task A_launcher_that_succeeds_shows_nothing()
+    {
+        await using var app = await StartAsync();
+        Cursor(app.Left, "notes.txt");
+
+        await app.Left.ActivateAsync();
+        Assert.True(await app.Main.Commands.ExecuteAsync(CommandIds.ShellReveal));
+        await Task.Delay(50);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal([("open", app.Left.CursorRow!.Entry!.Path.Path), ("reveal", app.Left.CursorRow.Entry.Path.Path)],
+            app.Shell.Calls);
+        Assert.Empty(app.Dialogs.Messages);
         Assert.Empty(app.Failures);
     }
 

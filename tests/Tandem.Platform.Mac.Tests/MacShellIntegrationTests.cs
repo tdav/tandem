@@ -106,11 +106,50 @@ public sealed class MacShellIntegrationTests : IDisposable
     }
 
     [Fact]
+    public async Task A_launcher_that_succeeds_completes_its_task()
+    {
+        var launched = _shell.OpenDefault("/tmp/x.txt");
+        Assert.False(launched.IsCompleted); // returned at once, without waiting
+
+        Assert.Single(_runner.Started).Exit(0);
+
+        await launched.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task A_launcher_that_fails_faults_its_task_with_what_it_wrote()
+    {
+        var launched = _shell.RevealInFinder("/tmp/gone.txt");
+
+        var process = Assert.Single(_runner.Started);
+        process.Exit(1, "The file /tmp/gone.txt does not exist.");
+
+        var error = await Assert.ThrowsAsync<IOException>(() =>
+            launched.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+        Assert.Equal("The file /tmp/gone.txt does not exist.", error.Message);
+        Assert.True(SpinWait.SpinUntil(() => process.Disposals == 1, TimeSpan.FromSeconds(5)));
+    }
+
+    [Fact]
+    public async Task A_launcher_that_fails_silently_names_its_exit_code()
+    {
+        var launched = _shell.OpenWith("/tmp/x.txt", new AppInfo("Broken", "/Applications/Broken.app"));
+
+        Assert.Single(_runner.Started).Exit(1);
+
+        var error = await Assert.ThrowsAsync<IOException>(() =>
+            launched.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+        Assert.Contains("1", error.Message);
+        Assert.Contains("/usr/bin/open", error.Message);
+    }
+
+    [Fact]
     public void Launch_failure_is_an_IOException()
     {
         _runner.StartFailure = new System.ComponentModel.Win32Exception(2, "No such file or directory");
 
-        var error = Assert.Throws<IOException>(() => _shell.OpenDefault("/tmp/x.txt"));
+        // Thrown at once, not through the task: nothing was started.
+        var error = Assert.Throws<IOException>(() => { _ = _shell.OpenDefault("/tmp/x.txt"); });
         Assert.IsType<System.ComponentModel.Win32Exception>(error.InnerException);
     }
 

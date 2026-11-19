@@ -5,7 +5,10 @@ public sealed record AppInfo(string Name, string BundlePath);
 
 /// <summary>
 /// Hands items to the rest of the system: the default application, a chosen one, the file browser, the terminal.
-/// Methods that launch something return once it is launched and never wait for the launched program.
+/// Methods that launch something return once the launcher is started and never wait for the launched program. The
+/// task they return is the launcher's verdict, which comes a moment later: it completes when the launcher has handed
+/// the item on, and faults with an <see cref="IOException"/> (its message the launcher's own words) when the launcher
+/// reports failure — no application for the item, an item that is gone, a broken application.
 /// <para>Every path (items, directories, application bundles) must be absolute; implementations throw
 /// <see cref="ArgumentException"/> for a relative path.</para>
 /// </summary>
@@ -13,11 +16,11 @@ public interface IShellIntegration
 {
     /// <summary>Opens the item with its default application.</summary>
     /// <exception cref="IOException">The launcher could not be started.</exception>
-    void OpenDefault(string path);
+    Task OpenDefault(string path);
 
     /// <summary>Opens the file in the default text editor.</summary>
     /// <exception cref="IOException">The launcher could not be started.</exception>
-    void OpenInTextEditor(string path);
+    Task OpenInTextEditor(string path);
 
     /// <summary>The applications that can open the item, de-duplicated and sorted by name; empty when there are none
     /// or the item does not exist.</summary>
@@ -25,17 +28,17 @@ public interface IShellIntegration
 
     /// <summary>Opens the item with <paramref name="app"/>.</summary>
     /// <exception cref="IOException">The launcher could not be started.</exception>
-    void OpenWith(string path, AppInfo app);
+    Task OpenWith(string path, AppInfo app);
 
     /// <summary>Shows the item selected in the system file browser.</summary>
     /// <exception cref="IOException">The launcher could not be started.</exception>
-    void RevealInFinder(string path);
+    Task RevealInFinder(string path);
 
     /// <summary>Opens a terminal window in <paramref name="directory"/>.</summary>
     /// <exception cref="IOException">The launcher could not be started.</exception>
-    void OpenTerminal(string directory);
+    Task OpenTerminal(string directory);
 
     /// <summary>Opens the system settings page where the user grants Full Disk Access.</summary>
     /// <exception cref="IOException">The launcher could not be started.</exception>
-    void OpenFullDiskAccessSettings();
+    Task OpenFullDiskAccessSettings();
 }

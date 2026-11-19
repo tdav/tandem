@@ -324,15 +324,28 @@ internal sealed class RecordingShell : IShellIntegration
     /// <summary>When set, <see cref="GetAppsFor"/> waits for it before answering.</summary>
     public ManualResetEventSlim? AppsGate { get; set; }
 
-    private void Record(string call, string path)
+    /// <summary>The launcher's verdict for every later launch: completed (null) or faulted with this, as when
+    /// <c>open</c> exits with a failure.</summary>
+    public Exception? ExitFailure { get; set; }
+    /// <summary>When set, every later launch's verdict waits for it (the launcher is still running).</summary>
+    public TaskCompletionSource? ExitGate { get; set; }
+
+    private Task Record(string call, string path)
     {
         if (!path.StartsWith('/') && call != "settings") throw new ArgumentException("Relative path.", nameof(path));
         if (Failure is { } failure) throw failure;
         Calls.Add((call, path));
+        return VerdictAsync(ExitGate?.Task, ExitFailure);
     }
 
-    public void OpenDefault(string path) => Record("open", path);
-    public void OpenInTextEditor(string path) => Record("edit", path);
+    private static async Task VerdictAsync(Task? gate, Exception? failure)
+    {
+        if (gate is not null) await gate;
+        if (failure is not null) throw failure;
+    }
+
+    public Task OpenDefault(string path) => Record("open", path);
+    public Task OpenInTextEditor(string path) => Record("edit", path);
     public IReadOnlyList<AppInfo> GetAppsFor(string path)
     {
         lock (AppQueries)
@@ -344,14 +357,15 @@ internal sealed class RecordingShell : IShellIntegration
         if (AppsFailure is { } failure) throw failure;
         return Apps;
     }
-    public void OpenWith(string path, AppInfo app)
+    public Task OpenWith(string path, AppInfo app)
     {
-        Record("openWith", path);
+        var verdict = Record("openWith", path);
         OpenedWith.Add((path, app));
+        return verdict;
     }
-    public void RevealInFinder(string path) => Record("reveal", path);
-    public void OpenTerminal(string directory) => Record("terminal", directory);
-    public void OpenFullDiskAccessSettings() => Record("settings", "");
+    public Task RevealInFinder(string path) => Record("reveal", path);
+    public Task OpenTerminal(string directory) => Record("terminal", directory);
+    public Task OpenFullDiskAccessSettings() => Record("settings", "");
 }
 
 /// <summary>Records Quick Look calls: <see cref="Toggles"/> holds the paths of each toggle, <see cref="Closes"/> counts
@@ -419,13 +433,13 @@ internal sealed class FakePlatform : IShellIntegration, IQuickLook, IFileMetadat
 {
     private static NotSupportedException NotHere() => new("Not used by the main window tests.");
 
-    public void OpenDefault(string path) => throw NotHere();
-    public void OpenInTextEditor(string path) => throw NotHere();
+    public Task OpenDefault(string path) => throw NotHere();
+    public Task OpenInTextEditor(string path) => throw NotHere();
     public IReadOnlyList<AppInfo> GetAppsFor(string path) => throw NotHere();
-    public void OpenWith(string path, AppInfo app) => throw NotHere();
-    public void RevealInFinder(string path) => throw NotHere();
-    public void OpenTerminal(string directory) => throw NotHere();
-    public void OpenFullDiskAccessSettings() => throw NotHere();
+    public Task OpenWith(string path, AppInfo app) => throw NotHere();
+    public Task RevealInFinder(string path) => throw NotHere();
+    public Task OpenTerminal(string directory) => throw NotHere();
+    public Task OpenFullDiskAccessSettings() => throw NotHere();
     public bool IsOpen => false;
     public void Toggle(IReadOnlyList<string> paths) => throw NotHere();
     public void Close() { }

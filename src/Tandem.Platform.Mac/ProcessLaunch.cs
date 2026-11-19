@@ -18,6 +18,40 @@ internal static class ProcessLaunch
         }
     }
 
+    /// <summary>The most lines of a helper's output kept for an error message.</summary>
+    private const int MaxOutputLines = 20;
+
+    /// <summary>In the background: drains the process's output (keeping its last lines), waits for it to exit and
+    /// disposes it. The task completes when it exited with 0, and faults with an <see cref="IOException"/> otherwise:
+    /// its message is what the process wrote or, when it wrote nothing, its exit code.</summary>
+    public static async Task ExitedAsync(IRunningProcess process, string fileName)
+    {
+        var lines = new Queue<string>();
+        int exitCode;
+        try
+        {
+            await foreach (var line in process.OutputLines.ConfigureAwait(false))
+            {
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                lines.Enqueue(line.Trim());
+                if (lines.Count > MaxOutputLines) lines.Dequeue();
+            }
+            exitCode = await process.ExitCode.ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not IOException)
+        {
+            throw new IOException($"The helper did not finish: {ex.Message}", ex);
+        }
+        finally
+        {
+            await process.DisposeAsync().ConfigureAwait(false);
+        }
+        if (exitCode != 0)
+            throw new IOException(lines.Count > 0
+                ? string.Join("\n", lines)
+                : $"'{fileName}' exited with code {exitCode}.");
+    }
+
     /// <summary>In the background: drains the process's output, waits for it to exit, runs
     /// <paramref name="onExited"/>, and disposes it.</summary>
     public static void ReleaseWhenExited(IRunningProcess process, Action? onExited = null) =>

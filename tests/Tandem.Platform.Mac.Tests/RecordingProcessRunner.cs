@@ -30,6 +30,7 @@ public sealed class RecordingProcessRunner : IProcessRunner
     public sealed class FakeProcess(ProcessSpec spec) : IRunningProcess
     {
         private readonly TaskCompletionSource<int> _exit = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private string[] _output = [];
         private int _kills;
         private int _disposals;
 
@@ -45,8 +46,12 @@ public sealed class RecordingProcessRunner : IProcessRunner
 
         public Task<int> ExitCode => _exit.Task;
 
-        /// <summary>Ends the process as if it exited by itself.</summary>
-        public void Exit(int code = 0) => _exit.TrySetResult(code);
+        /// <summary>Ends the process as if it exited by itself, having written <paramref name="output"/>.</summary>
+        public void Exit(int code = 0, params string[] output)
+        {
+            _output = output;
+            _exit.TrySetResult(code);
+        }
 
         public void Kill()
         {
@@ -64,7 +69,7 @@ public sealed class RecordingProcessRunner : IProcessRunner
         private async IAsyncEnumerable<string> Lines()
         {
             await _exit.Task;
-            yield break;
+            foreach (var line in _output) yield return line;
         }
     }
 }
