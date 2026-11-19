@@ -21,6 +21,7 @@ public sealed partial class EntryRowViewModel : ObservableObject
     private string? _modeText;
     private string? _foldedName;
     private bool _isSelected;
+    private InlineRenameViewModel? _rename;
 
     public EntryRowViewModel(FileEntry entry)
     {
@@ -73,6 +74,18 @@ public sealed partial class EntryRowViewModel : ObservableObject
             if (SetSelectedSilently(value)) SelectionChanged?.Invoke(this);
         }
     }
+
+    /// <summary>The inline name editor open on this row (Shift+F6); null when the row shows its name.</summary>
+    public InlineRenameViewModel? Rename
+    {
+        get => _rename;
+        internal set
+        {
+            if (SetProperty(ref _rename, value)) OnPropertyChanged(nameof(IsRenaming));
+        }
+    }
+
+    public bool IsRenaming => _rename is not null;
 
     /// <summary>The panel whose rows include this one hears every change made through <see cref="IsSelected"/>;
     /// null while the row is not shown. UI thread only.</summary>

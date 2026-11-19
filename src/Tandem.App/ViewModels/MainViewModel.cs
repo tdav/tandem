@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Tandem.App.Commands;
 using Tandem.App.Resources;
+using Tandem.App.Services;
 using Tandem.Core.Platform;
 using Tandem.Core.Vfs;
 
@@ -33,7 +34,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private int _pageSize = DefaultPageSize;
     private volatile bool _disposed;
 
-    public MainViewModel(WorkspaceViewModel workspace, AppServices services, KeyMap keyMap)
+    /// <param name="progressWindowDelay">Waits before the progress window may appear; the real delay when null.</param>
+    public MainViewModel(WorkspaceViewModel workspace, AppServices services, KeyMap keyMap,
+        Func<TimeSpan, CancellationToken, Task>? progressWindowDelay = null)
     {
         ArgumentNullException.ThrowIfNull(workspace);
         ArgumentNullException.ThrowIfNull(services);
@@ -56,7 +59,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             new("F8", Loc.Get("FKey_Delete"), CommandIds.FileDelete),
         ];
 
+        Interaction = new DialogOperationInteraction(services.Dialogs, e => services.Log.Write(e, "dialog"));
+        Operations = new OperationsViewModel(services.Operations, progressWindowDelay);
         RegisterCommands();
+        Files = new FileCommands(workspace, services.Providers, services.Operations, services.Dialogs, services.Trash,
+            services.NativeCopy, Commands, Operations, Interaction, ReportFailure);
+        Commands.RaiseCanExecuteChanged();
         workspace.PropertyChanged += OnWorkspacePropertyChanged;
         _volumeService = services.Volumes;
         _volumeService.Changed += OnVolumesChanged;
@@ -70,6 +78,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public CommandRegistry Commands { get; } = new();
 
     public KeyMap KeyMap { get; }
+
+    /// <summary>The running and waiting file operations, for the progress window and the status indicator.</summary>
+    public OperationsViewModel Operations { get; }
+
+    /// <summary>Copy, move, new folder, delete, rename and marking by mask.</summary>
+    public FileCommands Files { get; }
+
+    /// <summary>Puts the operations' questions to the user, one at a time.</summary>
+    public DialogOperationInteraction Interaction { get; }
 
     /// <summary>Runs the command whose id is the parameter; disabled while that command cannot run (including one not
     /// registered yet). For menus and buttons.</summary>
@@ -210,8 +227,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _disposed = true;
         _volumeService.Changed -= OnVolumesChanged;
         Workspace.PropertyChanged -= OnWorkspacePropertyChanged;
+        Interaction.Close();
+        Files.Dispose();
+        Operations.Dispose();
         Workspace.Dispose();
     }
+
+    /// <summary>The main window is closing: questions of running operations are answered as cancelled, so no
+    /// operation waits for a dialog that will never be shown.</summary>
+    public void OnWindowClosing() => Interaction.Close();
 
     internal void ReportFailure(Exception error) => CommandFailed?.Invoke(this, error);
 

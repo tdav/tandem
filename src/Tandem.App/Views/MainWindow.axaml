@@ -10,6 +10,14 @@
     <DockPanel>
         <v:FKeyBar x:Name="FKeyBar" DockPanel.Dock="Bottom" IsVisible="{Binding Workspace.View.FKeyBar}" />
 
+        <!-- Operations still running or waiting: a click shows the progress window again. -->
+        <Border x:Name="OperationsBar" DockPanel.Dock="Bottom" IsVisible="{Binding Operations.HasOperations}"
+                Background="{DynamicResource Tandem.BarBackground}" BorderBrush="{DynamicResource Tandem.DividerBrush}"
+                BorderThickness="0,1,0,0" Padding="6,1">
+            <Button x:Name="OperationsIndicator" Classes="flat" HorizontalAlignment="Right"
+                    Content="{Binding Operations.IndicatorText}" Command="{Binding Operations.ShowWindowCommand}" />
+        </Border>
+
         <!-- The command line: only the field for now; running commands comes with Task 24. -->
         <Border x:Name="CommandLine" DockPanel.Dock="Bottom" IsVisible="{Binding Workspace.View.CommandLine}"
                 Background="{DynamicResource Tandem.BarBackground}" BorderBrush="{DynamicResource Tandem.DividerBrush}"

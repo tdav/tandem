@@ -64,6 +64,8 @@ public partial class FileListView : UserControl
     private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (DataContext is not SideViewModel side) return;
+        // Clicks inside the rename editor belong to it (caret, selection).
+        if ((e.Source as Visual)?.FindAncestorOfType<TextBox>(includeSelf: true) is not null) return;
         var point = e.GetCurrentPoint(Rows);
         var item = (e.Source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true);
         var index = item is null ? -1 : Rows.IndexFromContainer(item);

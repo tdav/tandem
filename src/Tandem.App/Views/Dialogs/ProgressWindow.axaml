@@ -1,0 +1,45 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Tandem.App.ViewModels"
+        xmlns:loc="using:Tandem.App.Resources"
+        x:Class="Tandem.App.Views.Dialogs.ProgressWindow"
+        x:DataType="vm:OperationsViewModel"
+        Title="{loc:Tr Key=Progress_Title}"
+        Width="540" SizeToContent="Height" MaxHeight="600"
+        CanMinimize="False" CanMaximize="False" ShowInTaskbar="False"
+        WindowStartupLocation="CenterOwner">
+    <!-- Running and waiting operations. "Background" and closing the window hide it; nothing is cancelled. -->
+    <DockPanel Margin="16">
+        <Button x:Name="SendToBackground" DockPanel.Dock="Bottom" HorizontalAlignment="Right" Margin="0,8,0,0"
+                MinWidth="90" HorizontalContentAlignment="Center" IsDefault="True" IsCancel="True"
+                Content="{loc:Tr Key=Button_Background}" Command="{Binding SendToBackgroundCommand}" />
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+            <ItemsControl x:Name="Items" ItemsSource="{Binding Items}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:OperationItemViewModel">
+                        <StackPanel Spacing="4" Margin="0,0,0,14">
+                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Classes="secondary" Text="{Binding CurrentItem}"
+                                       TextTrimming="LeadingCharacterEllipsis" />
+                            <ProgressBar Minimum="0" Maximum="100" Value="{Binding Percent}" />
+                            <DockPanel>
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="6">
+                                    <Button Content="{loc:Tr Key=Button_Pause}" Command="{Binding PauseCommand}"
+                                            IsVisible="{Binding !CanResume}" />
+                                    <Button Content="{loc:Tr Key=Button_Resume}" Command="{Binding ResumeCommand}"
+                                            IsVisible="{Binding CanResume}" />
+                                    <Button Content="{loc:Tr Key=Button_Cancel}" Command="{Binding CancelCommand}" />
+                                </StackPanel>
+                                <StackPanel Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Classes="secondary" Text="{Binding StateText}" />
+                                    <TextBlock Classes="secondary" Text="{Binding DetailText}"
+                                               TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </DockPanel>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

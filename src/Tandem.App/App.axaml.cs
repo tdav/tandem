@@ -54,6 +54,7 @@ public partial class App : Application
             _main = await Composition.StartAsync(_services, stateDirectory, home);
             _main.CommandFailed += (_, e) => ReportUnexpected(e, "command");
             _window = new MainWindow(_main);
+            if (_services.Dialogs is DialogService dialogs) dialogs.Owner = _window;
             desktop.MainWindow = _window;
             _window.Show();
         }

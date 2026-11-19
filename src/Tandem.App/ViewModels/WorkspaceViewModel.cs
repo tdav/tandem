@@ -55,6 +55,9 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         Favorites.Changed += (_, _) => ScheduleSave();
     }
 
+    /// <summary>Whether <see cref="LoadAsync()"/> has completed: only then do the sides have panels.</summary>
+    public bool IsLoaded => _loaded;
+
     /// <summary>The user's home folder, where tabs fall back to and where "~" points.</summary>
     public string HomeDirectory => _homeDirectory;
 

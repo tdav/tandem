@@ -381,8 +381,9 @@ public class MainWindowTests : LanguageTestBase
         await using var app = await TestApp.StartAsync();
         var f5 = app.Find<FKeyBar>("FKeyBar").GetVisualDescendants().OfType<Button>()
             .Single(b => b.Tag as string == CommandIds.FileCopy);
-        Assert.False(f5.IsEffectivelyEnabled); // registered by a later task
+        Assert.False(f5.IsEffectivelyEnabled); // the cursor is on "..": nothing to copy
         app.Click(f5); // clicking a disabled command does nothing and throws nothing
+        Assert.Empty(app.Dialogs.Log);
 
         var copies = 0;
         app.Main.Commands.Register(CommandIds.FileCopy, () =>
@@ -427,7 +428,8 @@ public class MainWindowTests : LanguageTestBase
         copy.Command.Execute(copy.CommandParameter); // does nothing, throws nothing
         Assert.Equal(new KeyGesture(Key.F5), copy.Gesture);
 
-        foreach (var id in new[] { CommandIds.SelectByMask, CommandIds.UnselectByMask, CommandIds.ShellReveal })
+        // Copy is off with the cursor on ".."; commands of later tasks are off.
+        foreach (var id in new[] { CommandIds.FileView, CommandIds.FileQuickLook, CommandIds.ShellReveal })
             Assert.False(items.Single(i => i.CommandParameter as string == id).Command!.CanExecute(id));
 
         var refresh = items.Single(i => i.CommandParameter as string == CommandIds.PanelRefresh);

@@ -29,6 +29,9 @@
             <Setter Property="Foreground" Value="{DynamicResource Tandem.MarkedForeground}" />
             <Setter Property="FontWeight" Value="SemiBold" />
         </Style>
+        <Style Selector="TextBox.error">
+            <Setter Property="BorderBrush" Value="{DynamicResource Tandem.ErrorForeground}" />
+        </Style>
         <Style Selector="Grid.folder TextBlock.name">
             <Setter Property="FontWeight" Value="SemiBold" />
         </Style>
@@ -59,7 +62,18 @@
                         <ColumnDefinition Width="{x:Static v:FileListColumns.Date}" />
                         <ColumnDefinition Width="{x:Static v:FileListColumns.Mode}" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock Classes="name" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                    <Panel>
+                        <TextBlock Classes="name" Text="{Binding Name}" TextTrimming="CharacterEllipsis"
+                                   IsVisible="{Binding !IsRenaming}" />
+                        <!-- The inline rename editor, created only while the row is being renamed. -->
+                        <ContentControl Content="{Binding Rename}" IsVisible="{Binding IsRenaming}">
+                            <ContentControl.ContentTemplate>
+                                <DataTemplate x:DataType="vm:InlineRenameViewModel">
+                                    <v:InlineRenameEditor />
+                                </DataTemplate>
+                            </ContentControl.ContentTemplate>
+                        </ContentControl>
+                    </Panel>
                     <TextBlock Grid.Column="1" Text="{Binding Extension}" TextTrimming="CharacterEllipsis" Margin="6,0,0,0" />
                     <TextBlock Grid.Column="2" Text="{Binding SizeText}" TextAlignment="Right" Margin="0,0,8,0" />
                     <TextBlock Grid.Column="3" Text="{Binding DateText}" TextTrimming="CharacterEllipsis" />

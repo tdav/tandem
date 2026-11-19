@@ -26,7 +26,8 @@ public sealed record AppServices(
     IProcessRunner Processes,
     OperationQueue Operations,
     IFileAccessBroker AccessBroker,
-    ErrorLog Log) : IDisposable
+    ErrorLog Log,
+    IDialogService Dialogs) : IDisposable
 {
     /// <summary>Disposes the services that hold resources (the volume watch).</summary>
     public void Dispose()
@@ -48,7 +49,7 @@ public static class Composition
         var processes = new ProcessRunner();
         return new AppServices(providers, new MacVolumeService(), new MacShellIntegration(processes),
             new MacQuickLook(processes), new MacFileMetadataService(broker), new MacTrash(broker),
-            new MacNativeCopy(broker), processes, new OperationQueue(), broker, log);
+            new MacNativeCopy(broker), processes, new OperationQueue(), broker, log, new DialogService());
     }
 
     /// <summary>The main view model on the real services, its state kept in <paramref name="stateDirectory"/>. Not
@@ -64,12 +65,15 @@ public static class Composition
         Path.Combine(homeDirectory, "Library", "Logs", "Tandem", "tandem.log");
 
     /// <summary>The main view model on <paramref name="services"/>; not loaded yet.</summary>
+    /// <param name="progressWindowDelay">How long an operation runs before the progress window appears; see
+    /// <see cref="OperationsViewModel"/>.</param>
     public static MainViewModel Build(AppServices services, JsonStateStore store, string homeDirectory,
-        Func<TimeSpan, CancellationToken, Task>? autosaveDelay = null)
+        Func<TimeSpan, CancellationToken, Task>? autosaveDelay = null,
+        Func<TimeSpan, CancellationToken, Task>? progressWindowDelay = null)
     {
         ArgumentNullException.ThrowIfNull(services);
         var workspace = new WorkspaceViewModel(services.Providers, store, homeDirectory, autosaveDelay);
-        return new MainViewModel(workspace, services, KeyMap.Default);
+        return new MainViewModel(workspace, services, KeyMap.Default, progressWindowDelay);
     }
 
     /// <summary>
@@ -78,13 +82,14 @@ public static class Composition
     /// shown. One <see cref="JsonStateStore"/> serves the whole session.
     /// </summary>
     public static async Task<MainViewModel> StartAsync(AppServices services, string stateDirectory,
-        string homeDirectory, Func<TimeSpan, CancellationToken, Task>? autosaveDelay = null)
+        string homeDirectory, Func<TimeSpan, CancellationToken, Task>? autosaveDelay = null,
+        Func<TimeSpan, CancellationToken, Task>? progressWindowDelay = null)
     {
         ArgumentNullException.ThrowIfNull(services);
         var store = new JsonStateStore(stateDirectory);
         var state = await Task.Run(() => store.Load(homeDirectory));
         Loc.SetLanguage(state.Language);
-        var main = Build(services, store, homeDirectory, autosaveDelay);
+        var main = Build(services, store, homeDirectory, autosaveDelay, progressWindowDelay);
         try
         {
             await main.Workspace.LoadAsync(state);

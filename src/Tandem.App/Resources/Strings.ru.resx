@@ -648,7 +648,4 @@
   <data name="Progress_Remaining" xml:space="preserve">
     <value>Осталось около {0}</value>
   </data>
-  <data name="Progress_Indicator" xml:space="preserve">
-    <value>{0} — показать</value>
-  </data>
 </root>

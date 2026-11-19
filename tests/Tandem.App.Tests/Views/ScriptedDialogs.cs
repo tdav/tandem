@@ -36,8 +36,19 @@ internal class ScriptedDialogs : IDialogService
     /// "summary", "message").</summary>
     public List<string> Log { get; } = [];
 
-    public CopyMoveAnswer? Copy(string destination, bool verify = false, bool runImmediately = true) =>
-        new(destination, verify, runImmediately);
+    /// <summary>As a scripted destination: accept the text the dialog proposed.</summary>
+    public const string Proposed = "\0proposed";
+
+    /// <summary>When set, <see cref="ShowSummaryAsync"/> throws it.</summary>
+    public Exception? ThrowOnSummary { get; set; }
+
+    /// <summary>Scripts the copy/move dialog's next answer.</summary>
+    public ScriptedDialogs AnswerCopyMove(string destination = Proposed, bool verify = false,
+        bool runImmediately = true)
+    {
+        lock (_lock) CopyMoveAnswers.Enqueue(new CopyMoveAnswer(destination, verify, runImmediately));
+        return this;
+    }
 
     public virtual async Task<CopyMoveAnswer?> AskCopyMoveAsync(CopyMoveRequest request)
     {
@@ -45,6 +56,7 @@ internal class ScriptedDialogs : IDialogService
         while (true)
         {
             if (!TryTake(CopyMoveAnswers, "copyMove", out var answer) || answer is null) return null;
+            if (answer.Destination == Proposed) answer = answer with { Destination = request.Destination };
             if (request.Validate is { } validate && await validate(answer.Destination) is { } error)
             {
                 lock (_lock) ValidationErrors.Add(error);
@@ -98,7 +110,7 @@ internal class ScriptedDialogs : IDialogService
     public virtual Task ShowSummaryAsync(IReadOnlyList<SkippedItem> skipped)
     {
         Record("summary", () => Summaries.Add(skipped));
-        return Task.CompletedTask;
+        return ThrowOnSummary is { } error ? Task.FromException(error) : Task.CompletedTask;
     }
 
     public virtual Task ShowMessageAsync(string text)

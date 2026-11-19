@@ -6,6 +6,7 @@ using Avalonia.Interactivity;
 using Tandem.App.Input;
 using Tandem.App.Resources;
 using Tandem.App.ViewModels;
+using Tandem.App.Views.Dialogs;
 using AppWindowState = Tandem.Core.Settings.WindowState;
 
 namespace Tandem.App.Views;
@@ -23,6 +24,7 @@ public partial class MainWindow : Window
     private KeyModifiers _modifiers;
     private (PixelPoint Position, double Width, double Height)? _normalBounds;
     private bool _placementApplied;
+    private ProgressWindow? _progress;
 
     /// <summary>For the designer only.</summary>
     public MainWindow()
@@ -53,6 +55,7 @@ public partial class MainWindow : Window
         main.CommandLineFocusRequested += OnCommandLineFocusRequested;
         main.FavoritesMenuRequested += OnFavoritesMenuRequested;
         main.NoticeRequested += OnNoticeRequested;
+        main.Operations.PropertyChanged += OnOperationsPropertyChanged;
         PositionChanged += (_, _) => RecordPlacement();
         SizeChanged += (_, _) => RecordPlacement();
         Splitter.DragCompleted += (_, _) => RecordPlacement();
@@ -65,6 +68,7 @@ public partial class MainWindow : Window
         {
             RecordPlacement();
             main.Workspace.Save();
+            main.OnWindowClosing();
         };
         Closed += (_, _) => Detach();
     }
@@ -174,6 +178,32 @@ public partial class MainWindow : Window
         flyout.ShowAt((main.Workspace.ActiveSide == PanelSide.Left ? LeftPanel : RightPanel).PathRowControl);
     }
 
+    /// <summary>The progress window: shown while the operations model says so, modeless and owned by this window.
+    /// The user closing it only hides it; the operations go on.</summary>
+    private void OnOperationsPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(OperationsViewModel.IsWindowVisible) || _main is not { } main) return;
+        if (main.Operations.IsWindowVisible && _progress is null && IsVisible)
+        {
+            var progress = new ProgressWindow { DataContext = main.Operations };
+            progress.Closed += (_, _) =>
+            {
+                if (_progress == progress) _progress = null;
+                main.Operations.IsWindowVisible = false;
+            };
+            _progress = progress;
+            progress.Show(this);
+        }
+        else if (!main.Operations.IsWindowVisible && _progress is { } shown)
+        {
+            _progress = null;
+            shown.Close();
+        }
+    }
+
+    /// <summary>The progress window while it is shown; for tests.</summary>
+    public ProgressWindow? Progress => _progress;
+
     private void OnNoticeRequested(object? sender, string text) =>
         _ = MessageDialog.ShowAsync(this, Title ?? "", text);
 
@@ -184,5 +214,6 @@ public partial class MainWindow : Window
         main.CommandLineFocusRequested -= OnCommandLineFocusRequested;
         main.FavoritesMenuRequested -= OnFavoritesMenuRequested;
         main.NoticeRequested -= OnNoticeRequested;
+        main.Operations.PropertyChanged -= OnOperationsPropertyChanged;
     }
 }

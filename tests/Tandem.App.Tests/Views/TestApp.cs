@@ -30,9 +30,16 @@ internal sealed class TestApp : IAsyncDisposable
         Fs = fs;
         Volumes = volumes;
         StateDirectory = stateDirectory;
+        Trash = new InMemoryTrash(fs);
     }
 
     public InMemoryFileSystem Fs { get; }
+
+    /// <summary>Answers every dialog; a dialog without a scripted answer is cancelled.</summary>
+    public ScriptedDialogs Dialogs { get; } = new();
+
+    /// <summary>The Trash: items "moved" there are removed from <see cref="Fs"/> and listed.</summary>
+    public InMemoryTrash Trash { get; }
     public FakeVolumeService Volumes { get; }
     public string StateDirectory { get; }
     public MainViewModel Main { get; private set; } = null!;
@@ -58,25 +65,32 @@ internal sealed class TestApp : IAsyncDisposable
     /// <summary>The error log of this app, in its temporary state folder.</summary>
     public string LogFile => Path.Combine(StateDirectory, "logs", "tandem.log");
 
-    public static AppServices Services(InMemoryFileSystem fs, FakeVolumeService volumes, string logFile)
+    /// <param name="trashCapable">Whether the in-memory "local disk" says it has a Trash (the real one does).</param>
+    public static AppServices Services(InMemoryFileSystem fs, FakeVolumeService volumes, string logFile,
+        IDialogService? dialogs = null, ITrash? trash = null, bool trashCapable = false)
     {
         var providers = new ProviderRegistry();
-        providers.Register(fs);
+        providers.Register(trashCapable ? new CapabilityProvider(fs, ProviderCapabilities.Trash) : fs);
         var platform = new FakePlatform();
-        return new AppServices(providers, volumes, platform, platform, platform, platform, platform, platform,
-            new OperationQueue(), new UnrestrictedAccessBroker(), new ErrorLog(logFile));
+        return new AppServices(providers, volumes, platform, platform, platform, trash ?? platform,
+            new InMemoryNativeCopy(fs), platform, new OperationQueue(), new UnrestrictedAccessBroker(),
+            new ErrorLog(logFile), dialogs ?? new ScriptedDialogs());
     }
 
+    /// <param name="progressWindowDelay">How long before the progress window appears; never, when null.</param>
     public static async Task<TestApp> StartAsync(InMemoryFileSystem? fs = null, AppState? state = null,
-        bool show = true)
+        bool show = true, bool trashCapable = false,
+        Func<TimeSpan, CancellationToken, Task>? progressWindowDelay = null)
     {
         fs ??= DefaultFileSystem();
         var stateDirectory = Path.Combine(Path.GetTempPath(), "tandem-window-tests-" + Guid.NewGuid().ToString("N"));
         new JsonStateStore(stateDirectory).Save(state ?? AppState.Default(Home) with { Language = "en" });
 
         var app = new TestApp(fs, new FakeVolumeService(), stateDirectory);
-        app.Main = await Composition.StartAsync(Services(fs, app.Volumes, app.LogFile), stateDirectory, Home,
-            autosaveDelay: (_, ct) => Task.Delay(Timeout.Infinite, ct));
+        app.Main = await Composition.StartAsync(
+            Services(fs, app.Volumes, app.LogFile, app.Dialogs, app.Trash, trashCapable), stateDirectory, Home,
+            autosaveDelay: (_, ct) => Task.Delay(Timeout.Infinite, ct),
+            progressWindowDelay: progressWindowDelay ?? ((_, ct) => Task.Delay(Timeout.Infinite, ct)));
         app.Main.CommandFailed += (_, e) => app.Failures.Add(e);
         if (show) app.ShowWindow();
         return app;
@@ -196,6 +210,68 @@ internal sealed class FakeVolumeService : IVolumeService
     }
 
     public int HandlerCount => Changed?.GetInvocationList().Length ?? 0;
+}
+
+/// <summary>The Trash over the in-memory "local disk": an item moved there is deleted and remembered.</summary>
+internal sealed class InMemoryTrash(InMemoryFileSystem fs) : ITrash
+{
+    private readonly Lock _lock = new();
+    private readonly List<string> _items = [];
+
+    public IReadOnlyList<string> Items
+    {
+        get { lock (_lock) return _items.ToArray(); }
+    }
+
+    public async Task MoveToTrashAsync(string localPath, CancellationToken ct)
+    {
+        await fs.DeleteAsync(VfsPath.Local(localPath), recursive: true, ct);
+        lock (_lock) _items.Add(localPath);
+    }
+}
+
+/// <summary>The platform copy over the in-memory "local disk" (its provider id is "local", so the engine uses it).</summary>
+internal sealed class InMemoryNativeCopy(InMemoryFileSystem fs) : INativeCopy
+{
+    public async Task CopyFileAsync(string sourcePath, string destinationPath, IProgress<long> bytesCopied,
+        CancellationToken ct)
+    {
+        await using var source = await fs.OpenReadAsync(VfsPath.Local(sourcePath), ct);
+        await using var destination = await fs.OpenWriteAsync(VfsPath.Local(destinationPath), ct);
+        var buffer = new byte[64 * 1024];
+        long total = 0;
+        int read;
+        while ((read = await source.ReadAsync(buffer, ct)) > 0)
+        {
+            await destination.WriteAsync(buffer.AsMemory(0, read), ct);
+            bytesCopied.Report(total += read);
+        }
+    }
+}
+
+/// <summary>A provider with capabilities added to another's, e.g. the Trash for the in-memory "local disk".</summary>
+internal sealed class CapabilityProvider(IFileSystemProvider inner, ProviderCapabilities extra) : IFileSystemProvider
+{
+    public string Id => inner.Id;
+    public ProviderCapabilities Capabilities => inner.Capabilities | extra;
+    public IAsyncEnumerable<FileEntry> EnumerateAsync(VfsPath directory, CancellationToken ct) =>
+        inner.EnumerateAsync(directory, ct);
+    public Task<FileEntry?> GetEntryAsync(VfsPath path, CancellationToken ct) => inner.GetEntryAsync(path, ct);
+    public Task<Stream> OpenReadAsync(VfsPath path, CancellationToken ct) => inner.OpenReadAsync(path, ct);
+    public Task<Stream> OpenWriteAsync(VfsPath path, CancellationToken ct) => inner.OpenWriteAsync(path, ct);
+    public Task CreateDirectoryAsync(VfsPath path, CancellationToken ct) => inner.CreateDirectoryAsync(path, ct);
+    public Task DeleteAsync(VfsPath path, bool recursive, CancellationToken ct) =>
+        inner.DeleteAsync(path, recursive, ct);
+    public Task MoveAsync(VfsPath source, VfsPath destination, CancellationToken ct) =>
+        inner.MoveAsync(source, destination, ct);
+    public Task CreateSymlinkAsync(VfsPath path, string target, CancellationToken ct) =>
+        inner.CreateSymlinkAsync(path, target, ct);
+    public Task SetModifiedAsync(VfsPath path, DateTimeOffset modified, CancellationToken ct) =>
+        inner.SetModifiedAsync(path, modified, ct);
+    public Task SetModeAsync(VfsPath path, UnixFileMode mode, CancellationToken ct) => inner.SetModeAsync(path, mode, ct);
+    public Task<bool> IsSameEntryAsync(VfsPath a, VfsPath b, CancellationToken ct) => inner.IsSameEntryAsync(a, b, ct);
+    public Task<string> GetVolumeKeyAsync(VfsPath path, CancellationToken ct) => inner.GetVolumeKeyAsync(path, ct);
+    public IDisposable? Watch(VfsPath directory, Action changed) => inner.Watch(directory, changed);
 }
 
 /// <summary>Platform services this task does not use; each call fails loudly.</summary>

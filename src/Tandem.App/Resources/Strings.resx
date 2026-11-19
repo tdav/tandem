@@ -656,7 +656,4 @@ Details were written to {1}.</value>
   <data name="Progress_Remaining" xml:space="preserve">
     <value>About {0} left</value>
   </data>
-  <data name="Progress_Indicator" xml:space="preserve">
-    <value>{0} — show</value>
-  </data>
 </root>
