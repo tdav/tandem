@@ -6,6 +6,8 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Tandem.Platform.Mac.Tests" />
+    <!-- SystemErrors: the App's tests check that its texts select the right words for these errors. -->
+    <InternalsVisibleTo Include="Tandem.App.Tests" />
   </ItemGroup>
 
   <ItemGroup>

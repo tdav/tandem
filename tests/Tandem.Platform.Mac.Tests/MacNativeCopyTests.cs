@@ -59,14 +59,28 @@ public sealed class MacNativeCopyTests : IDisposable
     }
 
     [Fact]
-    public async Task Copy_to_missing_directory_throws_IOException()
+    public async Task Copy_to_missing_directory_throws_FileNotFound()
     {
         var source = _temp.Combine("source.txt");
         await File.WriteAllTextAsync(source, "data", TestContext.Current.CancellationToken);
 
-        var error = await Assert.ThrowsAsync<IOException>(() => _copy.CopyFileAsync(source,
+        var error = await Assert.ThrowsAsync<FileNotFoundException>(() => _copy.CopyFileAsync(source,
             _temp.Combine("missing/.source.txt.tandem-part"), new Recorder(), NoPause, TestContext.Current.CancellationToken));
         Assert.Equal("No such file or directory", error.Message);
+    }
+
+    [Fact]
+    public async Task Copy_into_a_read_only_directory_throws_UnauthorizedAccess()
+    {
+        var source = _temp.Combine("source.txt");
+        await File.WriteAllTextAsync(source, "data", TestContext.Current.CancellationToken);
+        var readOnly = Directory.CreateDirectory(_temp.Combine("read-only")).FullName;
+        File.SetUnixFileMode(readOnly, UnixFileMode.UserRead | UnixFileMode.UserExecute); // restored by TempDir
+
+        var error = await Assert.ThrowsAsync<UnauthorizedAccessException>(() => _copy.CopyFileAsync(source,
+            Path.Combine(readOnly, ".source.txt.tandem-part"), new Recorder(), NoPause,
+            TestContext.Current.CancellationToken));
+        Assert.Equal("Permission denied", error.Message);
     }
 
     [Fact]
@@ -328,7 +342,7 @@ public sealed class MacNativeCopyTests : IDisposable
     }
 
     [Fact]
-    public async Task Copy_onto_a_full_volume_throws_IOException_with_the_system_message()
+    public async Task Copy_onto_a_full_volume_throws_IOException_with_the_disk_full_HResult()
     {
         using var volume = TinyVolume.Create(_temp.Combine("tiny.dmg"), _temp.Combine("mnt"));
         var source = _temp.Combine("big.bin");
@@ -342,6 +356,7 @@ public sealed class MacNativeCopyTests : IDisposable
         Assert.Same(copy, finished); // an error stage answered with "continue" would retry the write forever
         var error = await Assert.ThrowsAsync<IOException>(() => copy);
         Assert.Equal("No space left on device", error.Message);
+        Assert.Equal(28, error.HResult); // ENOSPC, as .NET's own file APIs report it
     }
 
     private static readonly Func<CancellationToken, ValueTask> NoPause = _ => ValueTask.CompletedTask;

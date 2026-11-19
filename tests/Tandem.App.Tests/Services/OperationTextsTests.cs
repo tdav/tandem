@@ -1,0 +1,44 @@
+using System.Runtime.Versioning;
+using Tandem.App.Resources;
+using Tandem.App.Services;
+using Tandem.Core.Vfs;
+using Tandem.Platform.Mac;
+
+namespace Tandem.App.Tests.Services;
+
+/// <summary>The words chosen for the errors the platform's file copy raises.</summary>
+[Collection(LanguageCollection.Name)]
+[SupportedOSPlatform("macos")]
+public class OperationTextsTests : LanguageTestBase
+{
+    private static readonly VfsPath Item = VfsPath.Local("/dst/a.txt");
+
+    [Theory]
+    [InlineData(SystemErrors.ENOSPC, "DiskFull")]
+    [InlineData(SystemErrors.EACCES, "AccessDenied")]
+    [InlineData(SystemErrors.EPERM, "AccessDenied")]
+    [InlineData(SystemErrors.ENOENT, "NotFound")]
+    [InlineData(SystemErrors.EEXIST, "AlreadyExists")]
+    [InlineData(5 /* EIO */, "IO")]
+    public void Native_copy_errors_get_their_own_words(int errno, string kind)
+    {
+        var error = SystemErrors.FromErrno(errno);
+
+        Assert.Equal(Loc.Format("OperationError_" + kind, Item.Path), OperationTexts.ForError(Item, error));
+        Assert.Equal(Loc.Get("OperationFailed_" + kind), OperationTexts.ForFailure(error));
+    }
+
+    [Fact]
+    public void Disk_full_and_access_denied_read_as_such_in_both_languages()
+    {
+        Assert.Equal("There is not enough space on the disk for /dst/a.txt.",
+            OperationTexts.ForError(Item, SystemErrors.FromErrno(SystemErrors.ENOSPC)));
+        Assert.Equal("Access to /dst/a.txt was denied.",
+            OperationTexts.ForError(Item, SystemErrors.FromErrno(SystemErrors.EACCES)));
+        Loc.SetLanguage("ru");
+        Assert.Equal(Loc.Format("OperationError_DiskFull", Item.Path),
+            OperationTexts.ForError(Item, SystemErrors.FromErrno(SystemErrors.ENOSPC)));
+        Assert.NotEqual(Loc.Format("OperationError_IO", Item.Path),
+            OperationTexts.ForError(Item, SystemErrors.FromErrno(SystemErrors.EACCES)));
+    }
+}

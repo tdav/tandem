@@ -16,8 +16,10 @@ namespace Tandem.Platform.Mac;
 /// <para>The Finder lock and append-only flags are taken off the copy (and off a leftover it replaces), since the
 /// caller still has to time, rename and possibly delete it; <see cref="CopyFlagsAsync"/> puts them back once the copy
 /// is in place.</para>
-/// <para>Any error copyfile reports to the status callback stops the copy (nothing is retried or ignored) and
-/// surfaces as an <see cref="IOException"/>.</para>
+/// <para>Any error copyfile reports to the status callback stops the copy (nothing is retried or ignored). Errors
+/// are typed by errno (<see cref="SystemErrors"/>): a full disk is an <see cref="IOException"/> with HResult 28,
+/// EACCES/EPERM an <see cref="UnauthorizedAccessException"/>, ENOENT a <see cref="FileNotFoundException"/>, anything
+/// else an <see cref="IOException"/>; the message is <c>strerror(errno)</c>.</para>
 /// <para>Progress comes from copyfile's status callback, which a clone never invokes, so the final size is
 /// always reported once the copy is done. Cancellation stops the copy at the next write. The pause checkpoint is
 /// awaited in the same callback after each reported block: while it waits, copyfile waits (the thread is blocked,
@@ -43,7 +45,9 @@ public sealed class MacNativeCopy : INativeCopy
         _flags = flags;
     }
 
-    /// <exception cref="IOException">The copy failed; the message is <c>strerror(errno)</c>.</exception>
+    /// <exception cref="IOException">The copy failed (typed by errno, see the class); the message is
+    /// <c>strerror(errno)</c>.</exception>
+    /// <exception cref="UnauthorizedAccessException">Access was denied (EACCES, EPERM).</exception>
     /// <exception cref="OperationCanceledException"><paramref name="ct"/> was cancelled.</exception>
     public Task CopyFileAsync(string sourcePath, string destinationPath, IProgress<long> bytesCopied,
         Func<CancellationToken, ValueTask> pauseCheckpoint, CancellationToken ct)
@@ -72,7 +76,7 @@ public sealed class MacNativeCopy : INativeCopy
                 {
                     ClearBlockingFlags(destinationPath); // so that the caller can remove what is left
                 }
-                catch (IOException)
+                catch (Exception)
                 {
                     // The original failure is the one to report.
                 }
@@ -128,17 +132,15 @@ public sealed class MacNativeCopy : INativeCopy
         if (LibC.lstat(path, out var stat) != 0)
         {
             var errno = Marshal.GetLastPInvokeError();
-            if (errno == ENOENT) return;
+            if (errno == SystemErrors.ENOENT) return;
             throw Error(errno);
         }
         if ((stat.Flags & BlockingFlags) != 0 && LibC.lchflags(path, stat.Flags & ~BlockingFlags) != 0)
             throw Error(Marshal.GetLastPInvokeError());
     }
 
-    private const int ENOENT = 2;
-
-    /// <summary>The exception for a failed system call.</summary>
-    private static IOException Error(int errno) => new(LibC.StrError(errno));
+    /// <summary>The exception for a failed system call, typed by its errno.</summary>
+    private static Exception Error(int errno) => SystemErrors.FromErrno(errno);
 
     private static unsafe void Copy(string sourcePath, string destinationPath, uint flags, IProgress<long> bytesCopied,
         Func<CancellationToken, ValueTask> pauseCheckpoint, CancellationToken ct)
