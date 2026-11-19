@@ -23,8 +23,7 @@ public static class ContextMenuView
     {
         var menuItem = new MenuItem
         {
-            // A string header goes through AccessText, which takes "_x" as an access key (and "__" as the key "_").
-            Header = item.IsLiteralLabel ? new TextBlock { Text = item.Label } : item.Label,
+            Header = item.IsLiteralLabel ? LiteralLabel.For(item.Label) : item.Label,
             IsEnabled = item.IsEnabled,
             Tag = item.CommandId,
         };

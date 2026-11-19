@@ -133,7 +133,7 @@ public partial class PanelView : UserControl
         foreach (var path in side.HistoryEntries)
             flyout.Items.Add(new MenuItem
             {
-                Header = path.Path,
+                Header = LiteralLabel.For(path.Path),
                 Command = side.OpenHistoryEntryCommand,
                 CommandParameter = path,
             });

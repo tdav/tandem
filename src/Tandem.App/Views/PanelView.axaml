@@ -51,9 +51,12 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="platform:VolumeInfo">
-                            <Button Classes="flat" Content="{Binding Name}" ToolTip.Tip="{Binding MountPoint}"
+                            <!-- A text block, not string content: a "_" in a volume name is no access key. -->
+                            <Button Classes="flat" ToolTip.Tip="{Binding MountPoint}"
                                     Command="{Binding $parent[v:PanelView].((vm:SideViewModel)DataContext).OpenVolumeCommand}"
-                                    CommandParameter="{Binding}" />
+                                    CommandParameter="{Binding}">
+                                <TextBlock Text="{Binding Name}" />
+                            </Button>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>

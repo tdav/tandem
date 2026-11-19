@@ -225,7 +225,10 @@ public partial class MainWindow : Window
         if (_main is not { } main) return;
         var flyout = new MenuFlyout();
         foreach (var path in main.Workspace.Favorites.Items)
-            flyout.Items.Add(new MenuItem { Header = path, Command = main.OpenFavoriteCommand, CommandParameter = path });
+            flyout.Items.Add(new MenuItem
+            {
+                Header = LiteralLabel.For(path), Command = main.OpenFavoriteCommand, CommandParameter = path,
+            });
         if (flyout.Items.Count == 0)
             flyout.Items.Add(new MenuItem { Header = Loc.Get("Menu_FavoritesEmpty"), IsEnabled = false });
         flyout.Items.Add(new Separator());
@@ -235,6 +238,7 @@ public partial class MainWindow : Window
         remove.Click += (_, _) => main.RemoveCurrentFromFavorites();
         flyout.Items.Add(add);
         flyout.Items.Add(remove);
+        FavoritesMenu = flyout;
         flyout.ShowAt((main.Workspace.ActiveSide == PanelSide.Left ? LeftPanel : RightPanel).PathRowControl);
     }
 
@@ -277,6 +281,9 @@ public partial class MainWindow : Window
             shown.Close();
         }
     }
+
+    /// <summary>The favourites menu last opened; for tests.</summary>
+    public MenuFlyout? FavoritesMenu { get; private set; }
 
     /// <summary>The progress window while it is shown; for tests.</summary>
     public ProgressWindow? Progress => _progress;

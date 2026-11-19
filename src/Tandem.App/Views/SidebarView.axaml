@@ -14,9 +14,12 @@
                 <ItemsControl x:Name="FavoriteItems" ItemsSource="{Binding Workspace.Favorites.Items}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="x:String">
-                            <Button Classes="flat" HorizontalAlignment="Stretch" Content="{Binding}" ToolTip.Tip="{Binding}"
+                            <!-- Text blocks, not string content: a "_" in a path is no access key. -->
+                            <Button Classes="flat" HorizontalAlignment="Stretch" ToolTip.Tip="{Binding}"
                                     Command="{Binding $parent[v:SidebarView].((vm:MainViewModel)DataContext).OpenFavoriteCommand}"
-                                    CommandParameter="{Binding}" />
+                                    CommandParameter="{Binding}">
+                                <TextBlock Text="{Binding}" />
+                            </Button>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
@@ -25,10 +28,11 @@
                 <ItemsControl x:Name="VolumeItems" ItemsSource="{Binding Volumes}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="platform:VolumeInfo">
-                            <Button Classes="flat" HorizontalAlignment="Stretch" Content="{Binding Name}"
-                                    ToolTip.Tip="{Binding MountPoint}"
+                            <Button Classes="flat" HorizontalAlignment="Stretch" ToolTip.Tip="{Binding MountPoint}"
                                     Command="{Binding $parent[v:SidebarView].((vm:MainViewModel)DataContext).OpenVolumeCommand}"
-                                    CommandParameter="{Binding}" />
+                                    CommandParameter="{Binding}">
+                                <TextBlock Text="{Binding Name}" />
+                            </Button>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
