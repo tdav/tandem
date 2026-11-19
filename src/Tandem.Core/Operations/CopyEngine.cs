@@ -432,11 +432,22 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
         }
     }
 
-    /// <summary>Gives a directory created by <see cref="CopyItemAsync"/> the source's time and mode.</summary>
-    public async Task ApplyDirectoryMetadataAsync(CopyItem item)
+    /// <summary>Gives a directory created by <see cref="CopyItemAsync"/> the source's time and mode and, local to
+    /// local with the platform's copy, the rest of its metadata (extended attributes such as Finder tags, ACL,
+    /// flags). A failure is an item error, asked about like any other; true when the metadata was applied, false when
+    /// the user skipped the directory (recorded).</summary>
+    public Task<bool> ApplyDirectoryMetadataAsync(CopyItem item, CancellationToken ct)
     {
         var target = providers.For(item.Destination);
-        await ApplyMetadataAsync(item.Source, item.Destination, target, CancellationToken.None).ConfigureAwait(false);
+        return Errors.RunAsync(item.Source.Path, async () =>
+        {
+            await ApplyMetadataAsync(item.Source, item.Destination, target, CancellationToken.None)
+                .ConfigureAwait(false);
+            // Last: the flags it copies (a locked folder) would stop the time and mode from being set.
+            if (UsesNativeCopy(item.Source.Path, item.Destination))
+                await nativeCopy!.CopyDirectoryMetadataAsync(item.Source.Path.Path, item.Destination.Path,
+                    CancellationToken.None).ConfigureAwait(false);
+        }, ct);
     }
 
     /// <summary>Writes <paramref name="source"/> to <paramref name="destination"/> through a part file. With
@@ -455,16 +466,17 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
             operation.AddBytesDone(bytes);
         }
 
+        var native = UsesNativeCopy(source.Path, destination);
         try
         {
             await ReplaceWithPartAsync(destination, target, replace, async part =>
             {
-                if (nativeCopy is not null && IsLocal(source.Path) && IsLocal(destination))
+                if (native)
                 {
                     // The platform copies the whole file in one call; cancellation reaches it through ct and a
                     // pause through the checkpoint it passes between blocks.
                     var progress = new RunningTotal(Count);
-                    await nativeCopy.CopyFileAsync(source.Path.Path, part.Path, progress,
+                    await nativeCopy!.CopyFileAsync(source.Path.Path, part.Path, progress,
                         operation.WaitWhilePausedAsync, ct).ConfigureAwait(false);
                 }
                 else
@@ -482,6 +494,11 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
 
                 await ApplyMetadataAsync(source, part, target, CancellationToken.None).ConfigureAwait(false);
             }).ConfigureAwait(false);
+            // The platform copy left the Finder lock (and the like) off the part file so that it could be finished;
+            // the file in place gets it now.
+            if (native)
+                await nativeCopy!.CopyFlagsAsync(source.Path.Path, destination.Path, CancellationToken.None)
+                    .ConfigureAwait(false);
         }
         catch
         {
@@ -667,6 +684,9 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
             target.Capabilities.HasFlag(ProviderCapabilities.UnixPermissions))
             await target.SetModeAsync(destination, mode, ct).ConfigureAwait(false);
     }
+
+    private bool UsesNativeCopy(VfsPath source, VfsPath destination) =>
+        nativeCopy is not null && IsLocal(source) && IsLocal(destination);
 
     private static bool IsLocal(VfsPath path) =>
         string.Equals(path.ProviderId, VfsPath.LocalProviderId, StringComparison.Ordinal);

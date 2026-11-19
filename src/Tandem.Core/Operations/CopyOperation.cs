@@ -61,6 +61,6 @@ public sealed class CopyOperation(ProviderRegistry providers, IReadOnlyList<VfsP
         // Children before parents, so writing a child does not bump its parent's time again.
         for (var i = items.Count - 1; i >= 0; i--)
             if (outcomes[i] == CopyOutcome.DirectoryCreated)
-                await engine.ApplyDirectoryMetadataAsync(items[i]).ConfigureAwait(false);
+                await engine.ApplyDirectoryMetadataAsync(items[i], ct).ConfigureAwait(false);
     }
 }

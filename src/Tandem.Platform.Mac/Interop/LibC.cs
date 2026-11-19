@@ -15,6 +15,7 @@ internal static unsafe partial class LibC
     public const uint COPYFILE_XATTR = 1 << 2;
     public const uint COPYFILE_DATA = 1 << 3;
     public const uint COPYFILE_ALL = COPYFILE_STAT | COPYFILE_ACL | COPYFILE_XATTR | COPYFILE_DATA;
+    public const uint COPYFILE_METADATA = COPYFILE_STAT | COPYFILE_ACL | COPYFILE_XATTR;
     public const uint COPYFILE_NOFOLLOW_SRC = 1 << 18;
     public const uint COPYFILE_NOFOLLOW_DST = 1 << 19;
     public const uint COPYFILE_NOFOLLOW = COPYFILE_NOFOLLOW_SRC | COPYFILE_NOFOLLOW_DST;
@@ -52,6 +53,27 @@ internal static unsafe partial class LibC
     /// <summary><c>int copyfile_state_set(copyfile_state_t s, uint32_t flag, const void *src)</c></summary>
     [LibraryImport(LibSystem, SetLastError = true)]
     public static partial int copyfile_state_set(IntPtr state, uint flag, void* src);
+
+    // sys/stat.h: st_flags settable by the owner
+    public const uint UF_IMMUTABLE = 0x00000002;
+    public const uint UF_APPEND = 0x00000004;
+
+    /// <summary><c>struct stat</c> of arm64 macOS (64-bit inodes); only the fields used here are named.</summary>
+    [StructLayout(LayoutKind.Explicit, Size = 144)]
+    public struct Stat
+    {
+        [FieldOffset(4)] public ushort Mode;
+        [FieldOffset(116)] public uint Flags;
+    }
+
+    /// <summary><c>int lstat(const char *path, struct stat *buf)</c></summary>
+    [LibraryImport(LibSystem, StringMarshalling = StringMarshalling.Utf8, SetLastError = true)]
+    public static partial int lstat(string path, out Stat buffer);
+
+    /// <summary><c>int lchflags(const char *path, unsigned int flags)</c>: the flags of the link itself, not of its
+    /// target.</summary>
+    [LibraryImport(LibSystem, StringMarshalling = StringMarshalling.Utf8, SetLastError = true)]
+    public static partial int lchflags(string path, uint flags);
 
     /// <summary><c>int strerror_r(int errnum, char *strerrbuf, size_t buflen)</c> (string.h)</summary>
     [LibraryImport(LibSystem)]

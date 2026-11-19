@@ -10,7 +10,20 @@ public interface INativeCopy
     /// <para><paramref name="pauseCheckpoint"/> is awaited between the blocks of the copy (when the platform copies
     /// in blocks at all; an instant clone has none): while the caller's operation is paused it does not complete, so
     /// the copy stands still with its files open; it throws <see cref="OperationCanceledException"/> when the
-    /// operation is cancelled, which stops the copy.</para></summary>
+    /// operation is cancelled, which stops the copy.</para>
+    /// <para>The copy carries the source's metadata, except the flags that would stop the caller from finishing
+    /// it (the Finder lock, append-only): those are left off until <see cref="CopyFlagsAsync"/>. A leftover at the
+    /// destination that has them is replaced all the same.</para></summary>
     Task CopyFileAsync(string sourcePath, string destinationPath, IProgress<long> bytesCopied,
         Func<CancellationToken, ValueTask> pauseCheckpoint, CancellationToken ct);
+
+    /// <summary>Gives <paramref name="destinationPath"/> — a copy made by <see cref="CopyFileAsync"/>, now in place
+    /// under its real name — the flags <see cref="CopyFileAsync"/> left off (such as the Finder lock) when
+    /// <paramref name="sourcePath"/> has them. Links are not followed.</summary>
+    Task CopyFlagsAsync(string sourcePath, string destinationPath, CancellationToken ct);
+
+    /// <summary>Gives the directory <paramref name="destinationPath"/> the metadata of the directory
+    /// <paramref name="sourcePath"/> — extended attributes (Finder tags among them), ACL, mode, times and flags —
+    /// without copying anything inside it. Links are not followed.</summary>
+    Task CopyDirectoryMetadataAsync(string sourcePath, string destinationPath, CancellationToken ct);
 }

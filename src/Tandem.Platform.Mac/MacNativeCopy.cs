@@ -13,6 +13,9 @@ namespace Tandem.Platform.Mac;
 /// clone when the volume allows it. A symbolic link source is copied as the link itself; a leftover at the
 /// destination (a stale <c>.tandem-part</c>, even a symbolic link) is unlinked first, never written through —
 /// so the destination must be a private temporary path of the caller's, never a real file of the user's.
+/// <para>The Finder lock and append-only flags are taken off the copy (and off a leftover it replaces), since the
+/// caller still has to time, rename and possibly delete it; <see cref="CopyFlagsAsync"/> puts them back once the copy
+/// is in place.</para>
 /// <para>Any error copyfile reports to the status callback stops the copy (nothing is retried or ignored) and
 /// surfaces as an <see cref="IOException"/>.</para>
 /// <para>Progress comes from copyfile's status callback, which a clone never invokes, so the final size is
@@ -55,9 +58,87 @@ public sealed class MacNativeCopy : INativeCopy
         {
             using var sourceAccess = _broker.Access(sourcePath);
             using var destinationAccess = _broker.Access(destinationPath);
-            Copy(sourcePath, destinationPath, _flags, bytesCopied, pauseCheckpoint, ct);
+            // A locked leftover (from a version that did not unlock its part files) cannot be unlinked by copyfile.
+            ClearBlockingFlags(destinationPath);
+            try
+            {
+                Copy(sourcePath, destinationPath, _flags, bytesCopied, pauseCheckpoint, ct);
+                // copyfile gave the copy the source's flags; a locked part could not be timed, renamed or removed.
+                ClearBlockingFlags(destinationPath);
+            }
+            catch
+            {
+                try
+                {
+                    ClearBlockingFlags(destinationPath); // so that the caller can remove what is left
+                }
+                catch (IOException)
+                {
+                    // The original failure is the one to report.
+                }
+                throw;
+            }
         }, ct);
     }
+
+    /// <exception cref="IOException">Reading or setting the flags failed.</exception>
+    public Task CopyFlagsAsync(string sourcePath, string destinationPath, CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(sourcePath);
+        ArgumentException.ThrowIfNullOrEmpty(destinationPath);
+        return Task.Run(() =>
+        {
+            using var sourceAccess = _broker.Access(sourcePath);
+            using var destinationAccess = _broker.Access(destinationPath);
+            var wanted = FlagsOf(sourcePath) & BlockingFlags;
+            if (wanted == 0) return;
+            var current = FlagsOf(destinationPath);
+            if ((current & wanted) != wanted && LibC.lchflags(destinationPath, current | wanted) != 0)
+                throw Error(Marshal.GetLastPInvokeError());
+        }, ct);
+    }
+
+    /// <exception cref="IOException">copyfile failed (e.g. the destination volume cannot store an attribute or
+    /// ACL).</exception>
+    public Task CopyDirectoryMetadataAsync(string sourcePath, string destinationPath, CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(sourcePath);
+        ArgumentException.ThrowIfNullOrEmpty(destinationPath);
+        return Task.Run(() =>
+        {
+            using var sourceAccess = _broker.Access(sourcePath);
+            using var destinationAccess = _broker.Access(destinationPath);
+            // No COPYFILE_RECURSIVE and no data: only the directory's own metadata.
+            if (LibC.copyfile(sourcePath, destinationPath, IntPtr.Zero, LibC.COPYFILE_METADATA | LibC.COPYFILE_NOFOLLOW)
+                < 0)
+                throw Error(Marshal.GetLastPInvokeError());
+        }, ct);
+    }
+
+    /// <summary>The flags a copy must not carry while the caller still writes, times and renames it.</summary>
+    private const uint BlockingFlags = LibC.UF_IMMUTABLE | LibC.UF_APPEND;
+
+    private static uint FlagsOf(string path) =>
+        LibC.lstat(path, out var stat) == 0 ? stat.Flags : throw Error(Marshal.GetLastPInvokeError());
+
+    /// <summary>Takes the lock and append-only flags off <paramref name="path"/> (the link itself, if it is one);
+    /// nothing when it does not exist.</summary>
+    private static void ClearBlockingFlags(string path)
+    {
+        if (LibC.lstat(path, out var stat) != 0)
+        {
+            var errno = Marshal.GetLastPInvokeError();
+            if (errno == ENOENT) return;
+            throw Error(errno);
+        }
+        if ((stat.Flags & BlockingFlags) != 0 && LibC.lchflags(path, stat.Flags & ~BlockingFlags) != 0)
+            throw Error(Marshal.GetLastPInvokeError());
+    }
+
+    private const int ENOENT = 2;
+
+    /// <summary>The exception for a failed system call.</summary>
+    private static IOException Error(int errno) => new(LibC.StrError(errno));
 
     private static unsafe void Copy(string sourcePath, string destinationPath, uint flags, IProgress<long> bytesCopied,
         Func<CancellationToken, ValueTask> pauseCheckpoint, CancellationToken ct)
@@ -71,7 +152,7 @@ public sealed class MacNativeCopy : INativeCopy
             delegate* unmanaged[Cdecl]<int, int, IntPtr, byte*, byte*, IntPtr, int> callback = &OnStatus;
             if (LibC.copyfile_state_set(state, LibC.COPYFILE_STATE_STATUS_CB, callback) != 0 ||
                 LibC.copyfile_state_set(state, LibC.COPYFILE_STATE_STATUS_CTX, (void*)GCHandle.ToIntPtr(handle)) != 0)
-                throw new IOException(LibC.StrError(Marshal.GetLastPInvokeError()));
+                throw Error(Marshal.GetLastPInvokeError());
 
             var result = LibC.copyfile(sourcePath, destinationPath, state, flags);
             var errno = Marshal.GetLastPInvokeError();
@@ -82,7 +163,7 @@ public sealed class MacNativeCopy : INativeCopy
                 // After COPYFILE_QUIT copyfile returns -1 and leaves errno as it was, so the callback's own record
                 // says why: a cancellation, or the error it was told about (errno as it was at that moment).
                 if (context.QuitForCancellation) throw new OperationCanceledException(ct);
-                throw new IOException(LibC.StrError(context.ErrorErrno is int seen and not 0 ? seen : errno));
+                throw Error(context.ErrorErrno is int seen and not 0 ? seen : errno);
             }
 
             bytesCopied.Report(new FileInfo(destinationPath).Length);

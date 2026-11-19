@@ -206,6 +206,115 @@ public sealed class MacNativeCopyTests : IDisposable
     }
 
     [Fact]
+    public void Flags_are_read_from_lstat_as_chflags_sets_them()
+    {
+        var path = _temp.Combine("flagged.txt");
+        File.WriteAllText(path, "x");
+        RunChflags("uchg", path);
+
+        Assert.Equal(FileFlags.Locked, FileFlags.Get(path) & (FileFlags.Locked | FileFlags.AppendOnly));
+        Assert.Equal(0u, FileFlags.Get(_temp.Path) & FileFlags.Locked);
+        // the mode field sits where the struct says, too
+        Assert.True(Interop.LibC.lstat(path, out var stat) == 0);
+        Assert.Equal((int)File.GetUnixFileMode(path), stat.Mode & 0xFFF);
+    }
+
+    [Fact]
+    public async Task Copy_of_a_locked_file_leaves_the_part_file_unlocked_and_finishable()
+    {
+        var source = _temp.Combine("locked.txt");
+        await File.WriteAllTextAsync(source, "locked content", TestContext.Current.CancellationToken);
+        File.SetLastWriteTimeUtc(source, new DateTime(2021, 2, 3, 4, 5, 6, DateTimeKind.Utc));
+        FileFlags.Add(source, FileFlags.Locked);
+        var destination = _temp.Combine(".locked.txt.tandem-part");
+
+        await _copy.CopyFileAsync(source, destination, new Recorder(), NoPause, TestContext.Current.CancellationToken);
+
+        Assert.Equal(0u, FileFlags.Get(destination) & (FileFlags.Locked | FileFlags.AppendOnly));
+        Assert.Equal("locked content", await File.ReadAllTextAsync(destination, TestContext.Current.CancellationToken));
+        // What the engine does next works: set the time, rename into place.
+        File.SetLastWriteTimeUtc(destination, new DateTime(2021, 2, 3, 4, 5, 6, DateTimeKind.Utc));
+        File.Move(destination, _temp.Combine("locked copy.txt"));
+        Assert.NotEqual(0u, FileFlags.Get(source) & FileFlags.Locked); // the source is untouched
+    }
+
+    [Fact]
+    public async Task Copy_replaces_a_stale_locked_part_file()
+    {
+        var source = _temp.Combine("source.txt");
+        await File.WriteAllTextAsync(source, "fresh", TestContext.Current.CancellationToken);
+        var destination = _temp.Combine(".source.txt.tandem-part");
+        await File.WriteAllTextAsync(destination, "stale leftover", TestContext.Current.CancellationToken);
+        FileFlags.Add(destination, FileFlags.Locked | FileFlags.AppendOnly); // left by an older version
+
+        await _copy.CopyFileAsync(source, destination, new Recorder(), NoPause, TestContext.Current.CancellationToken);
+
+        Assert.Equal("fresh", await File.ReadAllTextAsync(destination, TestContext.Current.CancellationToken));
+        Assert.Equal(0u, FileFlags.Get(destination) & (FileFlags.Locked | FileFlags.AppendOnly));
+    }
+
+    [Fact]
+    public async Task CopyFlags_gives_the_placed_copy_the_sources_lock()
+    {
+        var source = _temp.Combine("locked.txt");
+        await File.WriteAllTextAsync(source, "x", TestContext.Current.CancellationToken);
+        FileFlags.Add(source, FileFlags.Locked);
+        var destination = _temp.Combine("copy.txt");
+        await File.WriteAllTextAsync(destination, "x", TestContext.Current.CancellationToken);
+        FileFlags.Add(destination, 0x8000); // UF_HIDDEN, copied earlier with the rest of the metadata
+        var plain = _temp.Combine("plain.txt");
+        await File.WriteAllTextAsync(plain, "x", TestContext.Current.CancellationToken);
+        var plainCopy = _temp.Combine("plain copy.txt");
+        await File.WriteAllTextAsync(plainCopy, "x", TestContext.Current.CancellationToken);
+
+        await _copy.CopyFlagsAsync(source, destination, TestContext.Current.CancellationToken);
+        await _copy.CopyFlagsAsync(plain, plainCopy, TestContext.Current.CancellationToken);
+
+        Assert.Equal(FileFlags.Locked | 0x8000u, FileFlags.Get(destination));
+        Assert.Equal(0u, FileFlags.Get(plainCopy));
+    }
+
+    [Fact]
+    public async Task CopyFlags_of_a_vanished_destination_throws_FileNotFound()
+    {
+        var source = _temp.Combine("a.txt");
+        await File.WriteAllTextAsync(source, "x", TestContext.Current.CancellationToken);
+        FileFlags.Add(source, FileFlags.Locked);
+
+        await Assert.ThrowsAnyAsync<IOException>(() =>
+            _copy.CopyFlagsAsync(source, _temp.Combine("gone.txt"), TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Directory_metadata_is_copied_without_the_contents()
+    {
+        var source = Directory.CreateDirectory(_temp.Combine("tagged")).FullName;
+        File.WriteAllText(Path.Combine(source, "inside.txt"), "x");
+        XAttr.Set(source, "user.tandem.test", "folder attribute");
+        var metadata = new MacFileMetadataService(new UnrestrictedAccessBroker());
+        metadata.SetTags(source, ["Blue", "Работа"]);
+        File.SetUnixFileMode(source, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+            UnixFileMode.GroupRead | UnixFileMode.GroupExecute);
+        var destination = Directory.CreateDirectory(_temp.Combine("copy")).FullName;
+
+        await _copy.CopyDirectoryMetadataAsync(source, destination, TestContext.Current.CancellationToken);
+
+        Assert.Equal("folder attribute", XAttr.Get(destination, "user.tandem.test"));
+        Assert.Equal(["Blue", "Работа"], metadata.GetTags(destination).Order(StringComparer.Ordinal));
+        Assert.Equal(File.GetUnixFileMode(source), File.GetUnixFileMode(destination));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(destination));
+    }
+
+    [Fact]
+    public async Task Directory_metadata_onto_a_missing_directory_throws_IOException()
+    {
+        var source = Directory.CreateDirectory(_temp.Combine("folder")).FullName;
+
+        await Assert.ThrowsAnyAsync<IOException>(() => _copy.CopyDirectoryMetadataAsync(source,
+            _temp.Combine("missing/inner"), TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task Copy_surfaces_an_exception_thrown_by_progress()
     {
         var source = _temp.Combine("big.bin");
@@ -236,6 +345,13 @@ public sealed class MacNativeCopyTests : IDisposable
     }
 
     private static readonly Func<CancellationToken, ValueTask> NoPause = _ => ValueTask.CompletedTask;
+
+    private static void RunChflags(string flags, string path)
+    {
+        using var process = System.Diagnostics.Process.Start("/usr/bin/chflags", [flags, path]);
+        process.WaitForExit();
+        Assert.Equal(0, process.ExitCode);
+    }
 
     private static MacNativeCopy WithoutClone() =>
         new(new UnrestrictedAccessBroker(), MacNativeCopy.DefaultFlags & ~Interop.LibC.COPYFILE_CLONE);

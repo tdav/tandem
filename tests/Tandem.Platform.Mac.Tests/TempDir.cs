@@ -3,7 +3,8 @@ using Tandem.Core.Vfs;
 
 namespace Tandem.Platform.Mac.Tests;
 
-/// <summary>A fresh directory under the system temp path, deleted (after restoring permissions) on dispose.</summary>
+/// <summary>A fresh directory under the system temp path, deleted (after unlocking every entry and restoring
+/// permissions) on dispose.</summary>
 [SupportedOSPlatform("macos")]
 public sealed class TempDir : IDisposable
 {
@@ -24,8 +25,20 @@ public sealed class TempDir : IDisposable
     public void Dispose()
     {
         if (!Directory.Exists(Path)) return;
+        Unlock(Path);
         RestorePermissions(Path);
         Directory.Delete(Path, recursive: true);
+    }
+
+    /// <summary>Clears the Finder lock and append-only flags of <paramref name="path"/> and, for a real directory,
+    /// of everything inside it (links themselves, never their targets), so the tree can be deleted.</summary>
+    private static void Unlock(string path)
+    {
+        FileFlags.Unlock(path);
+        if (new FileInfo(path).Attributes.HasFlag(FileAttributes.ReparsePoint) || !Directory.Exists(path)) return;
+        File.SetUnixFileMode(path, File.GetUnixFileMode(path) | OwnerAll); // to list it
+        foreach (var child in Directory.EnumerateFileSystemEntries(path))
+            Unlock(child);
     }
 
     /// <summary>Gives the owner full access to every directory in the tree so it can be deleted.</summary>

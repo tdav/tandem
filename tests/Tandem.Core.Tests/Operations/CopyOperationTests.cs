@@ -522,6 +522,11 @@ public sealed class CopyOperationTests
             bytesCopied.Report(new FileInfo(destinationPath).Length);
             return Task.CompletedTask;
         }
+
+            public Task CopyFlagsAsync(string sourcePath, string destinationPath, CancellationToken ct) => Task.CompletedTask;
+
+        public Task CopyDirectoryMetadataAsync(string sourcePath, string destinationPath, CancellationToken ct) =>
+            Task.CompletedTask;
     }
 
     [Fact]

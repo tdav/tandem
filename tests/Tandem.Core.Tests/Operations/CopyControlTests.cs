@@ -435,6 +435,163 @@ public sealed class CopyControlTests
         Assert.Equal("content", File.ReadAllText(temp.Combine("a.txt")));
     }
 
+    [Fact]
+    public async Task Native_copy_gives_the_flags_to_the_file_once_it_is_in_place()
+    {
+        using var temp = new TempDir();
+        _providers.Register(new LocalFileSystemProvider(new UnrestrictedAccessBroker()));
+        File.WriteAllText(temp.Combine("a.txt"), "content");
+        Directory.CreateDirectory(temp.Combine("dst"));
+        var native = new RecordingNativeCopy();
+        var op = new CopyOperation(_providers, [VfsPath.Local(temp.Combine("a.txt"))],
+            VfsPath.Local(temp.Combine("dst")), new CopyOptions(), _interaction, native);
+
+        var result = await op.RunAsync().WaitAsync(Timeout, Ct);
+
+        Assert.Equal(OperationState.Completed, result.State);
+        var (source, destination, inPlace) = Assert.Single(native.FlagCalls);
+        Assert.Equal(temp.Combine("a.txt"), source);
+        Assert.Equal(temp.Combine("dst/a.txt"), destination);
+        Assert.True(inPlace);
+    }
+
+    [Fact]
+    public async Task Native_copy_gives_created_directories_their_metadata_after_their_contents()
+    {
+        using var temp = new TempDir();
+        _providers.Register(new LocalFileSystemProvider(new UnrestrictedAccessBroker()));
+        Directory.CreateDirectory(temp.Combine("tree/sub"));
+        File.WriteAllText(temp.Combine("tree/sub/a.txt"), "a");
+        Directory.CreateDirectory(temp.Combine("dst"));
+        var native = new RecordingNativeCopy();
+        var op = new CopyOperation(_providers, [VfsPath.Local(temp.Combine("tree"))],
+            VfsPath.Local(temp.Combine("dst")), new CopyOptions(), _interaction, native);
+
+        await op.RunAsync().WaitAsync(Timeout, Ct);
+
+        Assert.Equal([(temp.Combine("tree/sub"), temp.Combine("dst/tree/sub")),
+            (temp.Combine("tree"), temp.Combine("dst/tree"))], native.DirectoryCalls);
+    }
+
+    [Fact]
+    public async Task Failing_directory_metadata_is_an_item_error_and_can_be_retried()
+    {
+        using var temp = new TempDir();
+        _providers.Register(new LocalFileSystemProvider(new UnrestrictedAccessBroker()));
+        Directory.CreateDirectory(temp.Combine("tree"));
+        Directory.CreateDirectory(temp.Combine("dst"));
+        var native = new RecordingNativeCopy { DirectoryFailures = 1 };
+        _interaction.OnError(ErrorAction.Retry);
+        var op = new CopyOperation(_providers, [VfsPath.Local(temp.Combine("tree"))],
+            VfsPath.Local(temp.Combine("dst")), new CopyOptions(), _interaction, native);
+
+        var result = await op.RunAsync().WaitAsync(Timeout, Ct);
+
+        Assert.Equal(OperationState.Completed, result.State);
+        var (item, error) = Assert.Single(_interaction.Errors);
+        Assert.Equal(VfsPath.Local(temp.Combine("tree")), item);
+        Assert.Equal("metadata refused", error.Message);
+        Assert.Empty(result.Skipped);
+        Assert.Equal(2, native.DirectoryCalls.Count);
+    }
+
+    [Fact]
+    public async Task A_moved_directory_whose_metadata_was_skipped_stays_at_the_source()
+    {
+        using var temp = new TempDir();
+        var local = new LocalFileSystemProvider(new UnrestrictedAccessBroker());
+        // Another volume for the destination, so the move copies.
+        _providers.Register(new OtherVolume(local, temp.Combine("dst")));
+        Directory.CreateDirectory(temp.Combine("tree"));
+        File.WriteAllText(temp.Combine("tree/a.txt"), "a");
+        Directory.CreateDirectory(temp.Combine("dst"));
+        var native = new RecordingNativeCopy { DirectoryFailures = 1 };
+        _interaction.OnError(ErrorAction.Skip);
+        var op = new MoveOperation(_providers, [VfsPath.Local(temp.Combine("tree"))],
+            VfsPath.Local(temp.Combine("dst")), new CopyOptions(), _interaction, native);
+
+        var result = await op.RunAsync().WaitAsync(Timeout, Ct);
+
+        Assert.Equal(OperationState.Completed, result.State);
+        Assert.Equal(new SkippedItem(VfsPath.Local(temp.Combine("tree")), SkipReason.Error, "metadata refused"),
+            Assert.Single(result.Skipped));
+        Assert.True(Directory.Exists(temp.Combine("tree"))); // kept, though emptied: its metadata exists only here
+        Assert.False(File.Exists(temp.Combine("tree/a.txt")));
+        Assert.Equal("a", File.ReadAllText(temp.Combine("dst/tree/a.txt")));
+    }
+
+    /// <summary>The local provider, with paths under <c>root</c> on a volume of their own.</summary>
+    private sealed class OtherVolume(LocalFileSystemProvider inner, string root) : IFileSystemProvider
+    {
+        public string Id => inner.Id;
+        public ProviderCapabilities Capabilities => inner.Capabilities;
+        public IAsyncEnumerable<FileEntry> EnumerateAsync(VfsPath directory, CancellationToken ct) =>
+            inner.EnumerateAsync(directory, ct);
+        public Task<FileEntry?> GetEntryAsync(VfsPath path, CancellationToken ct) => inner.GetEntryAsync(path, ct);
+        public Task<Stream> OpenReadAsync(VfsPath path, CancellationToken ct) => inner.OpenReadAsync(path, ct);
+        public Task<Stream> OpenWriteAsync(VfsPath path, CancellationToken ct) => inner.OpenWriteAsync(path, ct);
+        public Task CreateDirectoryAsync(VfsPath path, CancellationToken ct) => inner.CreateDirectoryAsync(path, ct);
+        public Task DeleteAsync(VfsPath path, bool recursive, CancellationToken ct) =>
+            inner.DeleteAsync(path, recursive, ct);
+        public Task MoveAsync(VfsPath source, VfsPath destination, CancellationToken ct) =>
+            inner.MoveAsync(source, destination, ct);
+        public Task CreateSymlinkAsync(VfsPath path, string target, CancellationToken ct) =>
+            inner.CreateSymlinkAsync(path, target, ct);
+        public Task SetModifiedAsync(VfsPath path, DateTimeOffset modified, CancellationToken ct) =>
+            inner.SetModifiedAsync(path, modified, ct);
+        public Task SetModeAsync(VfsPath path, UnixFileMode mode, CancellationToken ct) =>
+            inner.SetModeAsync(path, mode, ct);
+        public Task<string> GetVolumeKeyAsync(VfsPath path, CancellationToken ct) =>
+            Task.FromResult(path.IsSameOrDescendantOf(VfsPath.Local(root)) ? "other" : "main");
+        public Task<bool> IsSameEntryAsync(VfsPath a, VfsPath b, CancellationToken ct) => inner.IsSameEntryAsync(a, b, ct);
+        public IDisposable? Watch(VfsPath directory, Action changed) => inner.Watch(directory, changed);
+    }
+
+    /// <summary>Copies with <see cref="File.Copy(string, string)"/> and records the flag and directory calls;
+    /// the first <see cref="DirectoryFailures"/> directory calls fail.</summary>
+    private sealed class RecordingNativeCopy : INativeCopy
+    {
+        private readonly Lock _lock = new();
+        private readonly List<(string, string, bool)> _flagCalls = [];
+        private readonly List<(string, string)> _directoryCalls = [];
+
+        public int DirectoryFailures { get; init; }
+
+        public IReadOnlyList<(string Source, string Destination, bool InPlace)> FlagCalls
+        {
+            get { lock (_lock) return [.. _flagCalls]; }
+        }
+
+        public IReadOnlyList<(string Source, string Destination)> DirectoryCalls
+        {
+            get { lock (_lock) return [.. _directoryCalls]; }
+        }
+
+        public Task CopyFileAsync(string sourcePath, string destinationPath, IProgress<long> bytesCopied,
+            Func<CancellationToken, ValueTask> pauseCheckpoint, CancellationToken ct)
+        {
+            File.Copy(sourcePath, destinationPath, overwrite: true);
+            bytesCopied.Report(new FileInfo(destinationPath).Length);
+            return Task.CompletedTask;
+        }
+
+        public Task CopyFlagsAsync(string sourcePath, string destinationPath, CancellationToken ct)
+        {
+            lock (_lock) _flagCalls.Add((sourcePath, destinationPath, File.Exists(destinationPath)));
+            return Task.CompletedTask;
+        }
+
+        public Task CopyDirectoryMetadataAsync(string sourcePath, string destinationPath, CancellationToken ct)
+        {
+            lock (_lock)
+            {
+                _directoryCalls.Add((sourcePath, destinationPath));
+                if (_directoryCalls.Count <= DirectoryFailures) throw new IOException("metadata refused");
+            }
+            return Task.CompletedTask;
+        }
+    }
+
     /// <summary>Writes part of the file, waits for <see cref="Continue"/>, passes the pause checkpoint, then writes
     /// the rest.</summary>
     private sealed class CheckpointNativeCopy : INativeCopy
@@ -462,6 +619,11 @@ public sealed class CopyControlTests
             bytesCopied.Report(content.Length);
             _finished = true;
         }
+
+            public Task CopyFlagsAsync(string sourcePath, string destinationPath, CancellationToken ct) => Task.CompletedTask;
+
+        public Task CopyDirectoryMetadataAsync(string sourcePath, string destinationPath, CancellationToken ct) =>
+            Task.CompletedTask;
     }
 
     /// <summary>Writes the part with one byte changed, as a faulty platform copy might.</summary>
@@ -480,6 +642,11 @@ public sealed class CopyControlTests
             await File.WriteAllBytesAsync(destinationPath, content, ct);
             bytesCopied.Report(content.Length);
         }
+
+            public Task CopyFlagsAsync(string sourcePath, string destinationPath, CancellationToken ct) => Task.CompletedTask;
+
+        public Task CopyDirectoryMetadataAsync(string sourcePath, string destinationPath, CancellationToken ct) =>
+            Task.CompletedTask;
     }
 
     /// <summary>Writes part of the file, then waits until cancelled.</summary>
@@ -497,5 +664,10 @@ public sealed class CopyControlTests
             _started.TrySetResult();
             await Task.Delay(System.Threading.Timeout.Infinite, ct);
         }
+
+            public Task CopyFlagsAsync(string sourcePath, string destinationPath, CancellationToken ct) => Task.CompletedTask;
+
+        public Task CopyDirectoryMetadataAsync(string sourcePath, string destinationPath, CancellationToken ct) =>
+            Task.CompletedTask;
     }
 }

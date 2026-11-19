@@ -71,12 +71,16 @@ public sealed class MoveOperation(ProviderRegistry providers, IReadOnlyList<VfsP
             _ => Task.CompletedTask,
         }).ConfigureAwait(false);
 
-        // Children before parents, as in a copy; then the emptied source directories, deepest first.
+        // Children before parents, as in a copy; then the emptied source directories, deepest first. A directory
+        // whose metadata could not be copied (and was skipped) stays at the source: removing it would lose its tags.
+        var metadataSkipped = new HashSet<VfsPath>();
         for (var i = items.Count - 1; i >= 0; i--)
-            if (outcomes[i] == CopyOutcome.DirectoryCreated)
-                await engine.ApplyDirectoryMetadataAsync(items[i]).ConfigureAwait(false);
+            if (outcomes[i] == CopyOutcome.DirectoryCreated &&
+                !await engine.ApplyDirectoryMetadataAsync(items[i], ct).ConfigureAwait(false))
+                metadataSkipped.Add(items[i].Source.Path);
         for (var i = directories.Count - 1; i >= 0; i--)
-            await RemoveIfEmptyAsync(engine, directories[i].Source.Path, ct).ConfigureAwait(false);
+            if (!metadataSkipped.Contains(directories[i].Source.Path))
+                await RemoveIfEmptyAsync(engine, directories[i].Source.Path, ct).ConfigureAwait(false);
     }
 
     /// <summary>Splits the targets into single renames (same volume as the destination) and copies, before
