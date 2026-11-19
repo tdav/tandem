@@ -45,6 +45,7 @@ public sealed class ShellCommands : IDisposable
     private bool[] _available = [];
     private IReadOnlyList<string> _previewed = [];
     private CancellationTokenSource? _follow;
+    private bool _propertiesOpen;
     private bool _disposed;
 
     /// <param name="quickLookDelay">Waits <see cref="QuickLookFollowDelay"/> before an open preview follows the
@@ -80,9 +81,26 @@ public sealed class ShellCommands : IDisposable
     public event EventHandler? OpenWithMenuRequested;
 
     /// <summary>The applications that can open the item under the cursor of the active panel; empty when it is not a
-    /// local item. Asks the system each time.</summary>
-    public IReadOnlyList<AppInfo> GetOpenWithApps() =>
-        LocalCursorEntry() is { } entry ? _shell.GetAppsFor(entry.Path.Path) : [];
+    /// local item. Asks the system each time, off the UI thread (the query reads the disk and LaunchServices). A
+    /// failing query is told to the user (<see cref="IOException"/>) or reported, and gives none; never throws.</summary>
+    public async Task<IReadOnlyList<AppInfo>> GetOpenWithAppsAsync()
+    {
+        if (LocalCursorEntry() is not { } entry) return [];
+        var (shell, path) = (_shell, entry.Path.Path);
+        try
+        {
+            return await Task.Run(() => shell.GetAppsFor(path));
+        }
+        catch (IOException e)
+        {
+            await TellAsync(Loc.Format("Shell_AppsFailed", entry.Name), e);
+        }
+        catch (Exception e)
+        {
+            _reportFailure(e);
+        }
+        return [];
+    }
 
     /// <summary>Opens the item under the cursor of the active panel with <paramref name="app"/>; a failure is told
     /// to the user.</summary>
@@ -344,14 +362,25 @@ public sealed class ShellCommands : IDisposable
 
     // ---- Properties --------------------------------------------------------------------------------------
 
+    /// <summary>Loads the item's details, shows the dialog, and refreshes the panel when anything was applied, however
+    /// the dialog was closed. The task spans the whole flow, so the registry refuses a second Cmd+I until it ends;
+    /// the flag also keeps a direct second call from stacking another dialog.</summary>
     private async Task ShowPropertiesAsync()
     {
-        if (Active is not { } panel || CursorEntry() is not { } entry) return;
-        var folder = panel.CurrentPath;
-        var properties = new PropertiesViewModel(entry, _providers.For(entry.Path), _metadata);
-        await properties.LoadAsync();
-        if (!await _dialogs.ShowPropertiesAsync(properties)) return;
-        // Applied: show the new mode; the refresh keeps the cursor on the same name.
-        if (panel.CurrentPath == folder) await panel.RefreshAsync();
+        if (_propertiesOpen || Active is not { } panel || CursorEntry() is not { } entry) return;
+        _propertiesOpen = true;
+        try
+        {
+            var folder = panel.CurrentPath;
+            var properties = new PropertiesViewModel(entry, _providers.For(entry.Path), _metadata, _reportFailure);
+            await properties.LoadAsync();
+            await _dialogs.ShowPropertiesAsync(properties);
+            // Show the new mode; the refresh keeps the cursor on the same name.
+            if (properties.HasApplied && panel.CurrentPath == folder) await panel.RefreshAsync();
+        }
+        finally
+        {
+            _propertiesOpen = false;
+        }
     }
 }

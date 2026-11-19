@@ -308,8 +308,14 @@ internal sealed class RecordingShell : IShellIntegration
     public List<(string Call, string Path)> Calls { get; } = [];
     public List<(string Path, AppInfo App)> OpenedWith { get; } = [];
     public List<string> AppQueries { get; } = [];
+    /// <summary>For each app query, whether it ran on the UI thread.</summary>
+    public List<bool> AppQueriesOnUiThread { get; } = [];
     public IReadOnlyList<AppInfo> Apps { get; set; } = [];
     public Exception? Failure { get; set; }
+    /// <summary>When set, <see cref="GetAppsFor"/> throws it.</summary>
+    public Exception? AppsFailure { get; set; }
+    /// <summary>When set, <see cref="GetAppsFor"/> waits for it before answering.</summary>
+    public ManualResetEventSlim? AppsGate { get; set; }
 
     private void Record(string call, string path)
     {
@@ -322,7 +328,13 @@ internal sealed class RecordingShell : IShellIntegration
     public void OpenInTextEditor(string path) => Record("edit", path);
     public IReadOnlyList<AppInfo> GetAppsFor(string path)
     {
-        AppQueries.Add(path);
+        lock (AppQueries)
+        {
+            AppQueries.Add(path);
+            AppQueriesOnUiThread.Add(Dispatcher.UIThread.CheckAccess());
+        }
+        AppsGate?.Wait(TimeSpan.FromSeconds(10));
+        if (AppsFailure is { } failure) throw failure;
         return Apps;
     }
     public void OpenWith(string path, AppInfo app)
@@ -369,6 +381,8 @@ internal sealed class FakeMetadata : IFileMetadataService
     public List<string> OwnerQueries { get; } = [];
     public Exception? Failure { get; set; }
     public Exception? SetFailure { get; set; }
+    /// <summary>When set, <see cref="GetOwner"/> waits for it before answering.</summary>
+    public ManualResetEventSlim? OwnerGate { get; set; }
 
     public IReadOnlyList<string> GetTags(string path)
     {
@@ -385,6 +399,7 @@ internal sealed class FakeMetadata : IFileMetadataService
 
     public OwnerInfo GetOwner(string path)
     {
+        OwnerGate?.Wait(TimeSpan.FromSeconds(10));
         if (Failure is { } failure) throw failure;
         OwnerQueries.Add(path);
         return Owner;

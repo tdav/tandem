@@ -24,6 +24,7 @@ public sealed partial class PropertiesViewModel : ObservableObject
     private readonly FileEntry _entry;
     private readonly IFileSystemProvider _provider;
     private readonly IFileMetadataService? _metadata;
+    private readonly Action<Exception>? _reportFailure;
     private UnixFileMode _appliedMode;
     private int _bits; // the nine rwx bits the flags show
     private IReadOnlyList<string> _appliedTags = [];
@@ -31,12 +32,16 @@ public sealed partial class PropertiesViewModel : ObservableObject
     private string _tagsText = "";
     private bool _canEditTags;
 
-    public PropertiesViewModel(FileEntry entry, IFileSystemProvider provider, IFileMetadataService? metadata)
+    /// <param name="reportFailure">Where an unexpected failure of <see cref="ApplyAsync"/> (not a file-system one) is
+    /// logged and reported, besides the message in the dialog.</param>
+    public PropertiesViewModel(FileEntry entry, IFileSystemProvider provider, IFileMetadataService? metadata,
+        Action<Exception>? reportFailure = null)
     {
         ArgumentNullException.ThrowIfNull(entry);
         ArgumentNullException.ThrowIfNull(provider);
         _entry = entry;
         _provider = provider;
+        _reportFailure = reportFailure;
         _metadata = entry.Path.ProviderId == VfsPath.LocalProviderId ? metadata : null;
 
         Name = entry.Name;
@@ -75,6 +80,14 @@ public sealed partial class PropertiesViewModel : ObservableObject
         get => _canEditTags;
         private set => SetProperty(ref _canEditTags, value);
     }
+
+    /// <summary>Whether an <see cref="ApplyAsync"/> is running; the dialog cannot be closed meanwhile.</summary>
+    [ObservableProperty]
+    public partial bool IsApplying { get; private set; }
+
+    /// <summary>Whether anything (the mode or the tags) was changed on disk, by any apply so far, even one that failed
+    /// later or a dialog closed with Cancel afterwards: the panel must then show the item again.</summary>
+    public bool HasApplied { get; private set; }
 
     /// <summary>Why the last <see cref="ApplyAsync"/> failed, in the user's language; null otherwise.</summary>
     [ObservableProperty]
@@ -143,15 +156,18 @@ public sealed partial class PropertiesViewModel : ObservableObject
 
     /// <summary>Applies the permissions if they changed (special bits beyond rwx kept as they were) and the tags if
     /// they changed. False with <see cref="Error"/> set when the octal text is invalid or a change failed; what was
-    /// applied before the failure stays applied.</summary>
+    /// applied before the failure stays applied (<see cref="HasApplied"/>). A file-system failure is only shown; any
+    /// other failure is also reported. A second call while one runs returns false and does nothing.</summary>
     public async Task<bool> ApplyAsync()
     {
+        if (IsApplying) return false;
         Error = null;
         if (CanEditMode && ParseOctal(_octal) is null)
         {
             Error = Loc.Get("Properties_InvalidOctal");
             return false;
         }
+        IsApplying = true;
         try
         {
             var mode = (UnixFileMode)(((int)_appliedMode & ~PermissionBits) | _bits);
@@ -160,6 +176,7 @@ public sealed partial class PropertiesViewModel : ObservableObject
                 var (provider, path) = (_provider, _entry.Path);
                 await Task.Run(() => provider.SetModeAsync(path, mode, CancellationToken.None));
                 _appliedMode = mode;
+                HasApplied = true;
             }
 
             if (CanEditTags && _metadata is { } metadata)
@@ -170,14 +187,25 @@ public sealed partial class PropertiesViewModel : ObservableObject
                     var path = _entry.Path.Path;
                     await Task.Run(() => metadata.SetTags(path, tags));
                     _appliedTags = tags;
+                    HasApplied = true;
                 }
             }
             return true;
         }
-        catch (Exception e)
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) // VfsException is an IOException
         {
             Error = Loc.Format("Properties_ApplyFailed", OperationTexts.ForFailure(e));
             return false;
+        }
+        catch (Exception e)
+        {
+            Error = Loc.Format("Properties_ApplyFailed", OperationTexts.ForFailure(e));
+            _reportFailure?.Invoke(e);
+            return false;
+        }
+        finally
+        {
+            IsApplying = false;
         }
     }
 

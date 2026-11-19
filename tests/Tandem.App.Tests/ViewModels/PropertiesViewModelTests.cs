@@ -250,6 +250,56 @@ public class PropertiesViewModelTests : LanguageTestBase
     }
 
     [Fact]
+    public async Task Has_applied_tells_a_change_made_before_a_later_failure()
+    {
+        var fs = FileSystem();
+        var metadata = new FakeMetadata();
+        var vm = await CreateAsync(await EntryAsync(fs, "/home/notes.txt"), fs, metadata);
+        Assert.False(vm.HasApplied);
+        metadata.SetFailure = new IOException("xattr failed");
+        vm.Octal = "600";
+        vm.TagsText = "Red";
+
+        Assert.False(await vm.ApplyAsync()); // the mode went through, the tags did not
+
+        Assert.True(vm.HasApplied);
+        Assert.False(vm.IsApplying);
+    }
+
+    [Fact]
+    public async Task Has_applied_stays_false_when_nothing_changed_or_the_only_change_failed()
+    {
+        var fs = new RecordingProvider(FileSystem()) { SetModeFailure = new VfsAccessDeniedException("denied") };
+        var vm = await CreateAsync(await EntryAsync(fs, "/home/notes.txt"), fs, new FakeMetadata());
+
+        Assert.True(await vm.ApplyAsync());
+        Assert.False(vm.HasApplied);
+        vm.Octal = "700";
+        Assert.False(await vm.ApplyAsync());
+        Assert.False(vm.HasApplied);
+    }
+
+    [Fact]
+    public async Task A_file_system_failure_is_shown_only_and_an_unexpected_one_is_reported_too()
+    {
+        var reported = new List<Exception>();
+        var fs = new RecordingProvider(FileSystem()) { SetModeFailure = new VfsAccessDeniedException("denied") };
+        var entry = await EntryAsync(fs, "/home/notes.txt");
+        var vm = new PropertiesViewModel(entry, fs, new FakeMetadata(), reported.Add);
+        await vm.LoadAsync();
+        vm.Octal = "700";
+
+        Assert.False(await vm.ApplyAsync());
+        Assert.Empty(reported);
+
+        var bug = new InvalidOperationException("bug");
+        fs.SetModeFailure = bug;
+        Assert.False(await vm.ApplyAsync());
+        Assert.Equal([bug], reported);
+        Assert.Equal(Loc.Format("Properties_ApplyFailed", Loc.Get("OperationFailed_Other")), vm.Error);
+    }
+
+    [Fact]
     public async Task A_tags_failure_sets_error_and_returns_false()
     {
         var fs = FileSystem();

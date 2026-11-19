@@ -1,23 +1,23 @@
 using Tandem.App.Commands;
 using Tandem.App.Resources;
-using Tandem.Core.Platform;
 
 namespace Tandem.App.ViewModels;
 
 /// <summary>
 /// One item of a panel's context menu, as the view renders it: its label, the shortcut the key map gives its command,
 /// whether it can run now, and either something to run or a submenu. A submenu's items are made only when it is first
-/// asked for (<see cref="GetChildren"/>), when the submenu opens.
+/// asked for (<see cref="GetChildrenAsync"/>), when the submenu opens.
 /// </summary>
 public sealed class ContextMenuItem
 {
     private readonly Func<Task>? _execute;
-    private readonly Func<IReadOnlyList<ContextMenuItem>>? _children;
-    private IReadOnlyList<ContextMenuItem>? _loaded;
+    private readonly Func<Task<IReadOnlyList<ContextMenuItem>>>? _children;
+    private Task<IReadOnlyList<ContextMenuItem>>? _loaded;
 
     public ContextMenuItem(string? commandId, string labelKey, string label, KeyChord? chord, bool isEnabled,
-        Func<Task>? execute, Func<IReadOnlyList<ContextMenuItem>>? children = null)
+        Func<Task>? execute, Func<Task<IReadOnlyList<ContextMenuItem>>>? children = null, bool isLiteralLabel = false)
     {
+        IsLiteralLabel = isLiteralLabel;
         CommandId = commandId;
         LabelKey = labelKey;
         Label = label;
@@ -35,6 +35,10 @@ public sealed class ContextMenuItem
 
     public string Label { get; }
 
+    /// <summary>The label is a name to show exactly as it is (an application's), not menu text that may mark an
+    /// access key.</summary>
+    public bool IsLiteralLabel { get; }
+
     /// <summary>The first chord the key map binds to the command; null when it has none.</summary>
     public KeyChord? Chord { get; }
 
@@ -42,8 +46,10 @@ public sealed class ContextMenuItem
 
     public bool HasChildren => _children is not null;
 
-    /// <summary>The submenu's items, made on the first call; empty for an item without a submenu.</summary>
-    public IReadOnlyList<ContextMenuItem> GetChildren() => _loaded ??= _children?.Invoke() ?? [];
+    /// <summary>The submenu's items, asked for on the first call only (later calls share that answer); empty for an
+    /// item without a submenu.</summary>
+    public Task<IReadOnlyList<ContextMenuItem>> GetChildrenAsync() =>
+        _loaded ??= _children?.Invoke() ?? Task.FromResult<IReadOnlyList<ContextMenuItem>>([]);
 
     /// <summary>Runs the item; never throws (failures are reported by what it runs).</summary>
     public Task ExecuteAsync() => IsEnabled && _execute is not null ? _execute() : Task.CompletedTask;
@@ -68,7 +74,7 @@ public static class ContextMenuModel
                 () => side.OpenRowAsync(index)),
             new ContextMenuItem(CommandIds.ShellOpenWith, "Context_OpenWith", Loc.Get("Context_OpenWith"),
                 ChordOf(main, CommandIds.ShellOpenWith), main.Commands.CanExecute(CommandIds.ShellOpenWith), null,
-                () => OpenWithItems(main)),
+                () => OpenWithItemsAsync(main)),
             Command(main, CommandIds.ShellReveal, "Context_Reveal"),
             Command(main, CommandIds.FileQuickLook, "Context_QuickLook"),
             Command(main, CommandIds.FileCopy, "Context_Copy"),
@@ -91,28 +97,19 @@ public static class ContextMenuModel
         ];
     }
 
-    /// <summary>The applications that can open the cursor item, asked for now; one disabled "No applications" item
-    /// when there are none. A failing query is reported and shows as none.</summary>
-    public static IReadOnlyList<ContextMenuItem> OpenWithItems(MainViewModel main)
+    /// <summary>The applications that can open the cursor item, asked for now (off the UI thread); one disabled "No
+    /// applications" item when there are none. A failing query is told or reported and shows as none.</summary>
+    public static async Task<IReadOnlyList<ContextMenuItem>> OpenWithItemsAsync(MainViewModel main)
     {
         ArgumentNullException.ThrowIfNull(main);
-        IReadOnlyList<AppInfo> apps;
-        try
-        {
-            apps = main.Shell.GetOpenWithApps();
-        }
-        catch (Exception e)
-        {
-            main.ReportFailure(e);
-            apps = [];
-        }
+        var apps = await main.Shell.GetOpenWithAppsAsync();
         if (apps.Count == 0)
             return [new ContextMenuItem(null, "Context_NoApps", Loc.Get("Context_NoApps"), null, false, null)];
         return apps.Select(app => new ContextMenuItem(null, "Context_App", app.Name, null, true, () =>
         {
             main.Shell.OpenWith(app);
             return Task.CompletedTask;
-        })).ToArray();
+        }, isLiteralLabel: true)).ToArray();
     }
 
     private static ContextMenuItem Command(MainViewModel main, string id, string labelKey) =>

@@ -687,6 +687,9 @@ Details were written to {1}.</value>
   <data name="Context_NoApps" xml:space="preserve">
     <value>No applications</value>
   </data>
+  <data name="Context_Loading" xml:space="preserve">
+    <value>Loading…</value>
+  </data>
   <data name="Context_Reveal" xml:space="preserve">
     <value>Show in Finder</value>
   </data>
@@ -783,6 +786,9 @@ Details were written to {1}.</value>
   <!-- Handing items to macOS (ShellCommands); {0} is the item's name or the folder's path -->
   <data name="Shell_OpenFailed" xml:space="preserve">
     <value>Could not open “{0}”.</value>
+  </data>
+  <data name="Shell_AppsFailed" xml:space="preserve">
+    <value>Could not list the applications that open “{0}”.</value>
   </data>
   <data name="Shell_RevealFailed" xml:space="preserve">
     <value>Could not show “{0}” in Finder.</value>

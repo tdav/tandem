@@ -41,8 +41,9 @@ public class ShellWindowTests : LanguageTestBase
         return app.CenterOf(row);
     }
 
-    private static string[] Headers(ContextMenu menu) =>
-        menu.Items.OfType<MenuItem>().Select(i => i.Header as string ?? "").ToArray();
+    private static string HeaderText(MenuItem item) => item.Header as string ?? (item.Header as TextBlock)?.Text ?? "";
+
+    private static string[] Headers(ContextMenu menu) => menu.Items.OfType<MenuItem>().Select(HeaderText).ToArray();
 
     [AvaloniaFact]
     public async Task Enter_on_a_file_opens_it_with_its_default_app()
@@ -143,12 +144,47 @@ public class ShellWindowTests : LanguageTestBase
 
         openWith.IsSubMenuOpen = true;
         app.Pump();
+        await TestApp.WaitUntil(() =>
+        {
+            app.Pump();
+            return openWith.Items.OfType<MenuItem>().Any(i => HeaderText(i) == "TextEdit");
+        });
         openWith.IsSubMenuOpen = false;
         openWith.IsSubMenuOpen = true;
         app.Pump();
 
         Assert.Equal(["/home/notes.txt"], app.Shell.AppQueries);
-        Assert.Equal(["TextEdit"], openWith.Items.OfType<MenuItem>().Select(i => i.Header as string ?? ""));
+        Assert.Equal(["TextEdit"], openWith.Items.OfType<MenuItem>().Select(HeaderText));
+        menu.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task The_open_with_submenu_shows_a_placeholder_until_the_apps_arrive_and_names_stay_literal()
+    {
+        await using var app = await TestApp.StartAsync();
+        using var gate = new ManualResetEventSlim(false);
+        app.Shell.AppsGate = gate;
+        app.Shell.Apps = [new AppInfo("My_App", "/Applications/My_App.app")];
+        RightClick(app, RowCenter(app, PanelSide.Left, "notes.txt"));
+        var menu = ListView(app, PanelSide.Left).OpenMenu!;
+        var openWith = menu.Items.OfType<MenuItem>().Single(i => i.Tag as string == CommandIds.ShellOpenWith);
+
+        openWith.IsSubMenuOpen = true;
+        app.Pump();
+        var placeholder = Assert.Single(openWith.Items.OfType<MenuItem>());
+        Assert.Equal(Tandem.App.Resources.Loc.Get("Context_Loading"), placeholder.Header);
+        Assert.False(placeholder.IsEnabled);
+
+        gate.Set();
+        await TestApp.WaitUntil(() =>
+        {
+            app.Pump();
+            return openWith.Items.OfType<MenuItem>().Any(i => i.IsEnabled);
+        });
+        var item = Assert.Single(openWith.Items.OfType<MenuItem>());
+        // Shown as plain text: no AccessText, so no "_A" access key.
+        Assert.Equal("My_App", Assert.IsType<TextBlock>(item.Header).Text);
+        Assert.Equal([false], app.Shell.AppQueriesOnUiThread);
         menu.Close();
     }
 
@@ -178,7 +214,11 @@ public class ShellWindowTests : LanguageTestBase
         app.Left.CursorIndex = IndexOf(app.Left, "report.pdf");
 
         await app.Main.ExecuteCommandAsync(CommandIds.ShellOpenWith);
-        app.Pump();
+        await TestApp.WaitUntil(() =>
+        {
+            app.Pump();
+            return ListView(app, PanelSide.Left).OpenMenu is not null;
+        });
 
         var menu = ListView(app, PanelSide.Left).OpenMenu;
         Assert.NotNull(menu);
@@ -251,6 +291,48 @@ public class ShellWindowTests : LanguageTestBase
         await TestApp.WaitUntil(() => showing.IsCompleted);
 
         Assert.False(await showing);
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task The_properties_dialog_cannot_be_closed_while_an_apply_runs()
+    {
+        using var gate = new ManualResetEventSlim(false);
+        var fs = new InMemoryFileSystem(VfsPath.LocalProviderId);
+        fs.AddFile("/home/notes.txt", "notes");
+        fs.FailOn((op, _) =>
+        {
+            if (op == "SetMode") gate.Wait(TimeSpan.FromSeconds(10));
+            return false;
+        }, () => new IOException());
+        var entry = (await fs.GetEntryAsync(VfsPath.Local("/home/notes.txt"), CancellationToken.None))!;
+        var vm = new PropertiesViewModel(entry, fs, new FakeMetadata());
+        await vm.LoadAsync();
+        var owner = new Window { Width = 800, Height = 600 };
+        owner.Show();
+        var showing = new DialogService { Owner = owner }.ShowPropertiesAsync(vm);
+        var dialog = DialogOf(owner);
+
+        Box(dialog, "Octal").Text = "600";
+        dialog.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(vm.IsApplying);
+        var cancel = dialog.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "Cancel");
+        Assert.False(cancel.IsEnabled);
+        dialog.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        dialog.Close();
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(dialog.IsVisible);
+        Assert.False(showing.IsCompleted);
+
+        gate.Set();
+        await TestApp.WaitUntil(() =>
+        {
+            Dispatcher.UIThread.RunJobs();
+            return showing.IsCompleted;
+        });
+        Assert.True(await showing);
+        Assert.True(vm.HasApplied);
         owner.Close();
     }
 }

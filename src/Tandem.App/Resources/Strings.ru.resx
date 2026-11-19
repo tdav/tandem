@@ -679,6 +679,9 @@
   <data name="Context_NoApps" xml:space="preserve">
     <value>Нет программ</value>
   </data>
+  <data name="Context_Loading" xml:space="preserve">
+    <value>Загрузка…</value>
+  </data>
   <data name="Context_Reveal" xml:space="preserve">
     <value>Показать в Finder</value>
   </data>
@@ -775,6 +778,9 @@
   <!-- Handing items to macOS (ShellCommands); {0} is the item's name or the folder's path -->
   <data name="Shell_OpenFailed" xml:space="preserve">
     <value>Не удалось открыть «{0}».</value>
+  </data>
+  <data name="Shell_AppsFailed" xml:space="preserve">
+    <value>Не удалось получить список программ для «{0}».</value>
   </data>
   <data name="Shell_RevealFailed" xml:space="preserve">
     <value>Не удалось показать «{0}» в Finder.</value>

@@ -306,13 +306,13 @@ public class ShellCommandsTests : LanguageTestBase
         app.Shell.Apps = [TextEdit, Xcode];
         Cursor(app.Left, "notes.txt");
 
-        Assert.Equal([TextEdit, Xcode], app.Main.Shell.GetOpenWithApps());
+        Assert.Equal([TextEdit, Xcode], await app.Main.Shell.GetOpenWithAppsAsync());
         app.Main.Shell.OpenWith(Xcode);
 
         Assert.Equal(["/home/notes.txt"], app.Shell.AppQueries);
         Assert.Equal([("/home/notes.txt", Xcode)], app.Shell.OpenedWith);
         Cursor(app.Left, "..");
-        Assert.Empty(app.Main.Shell.GetOpenWithApps());
+        Assert.Empty(await app.Main.Shell.GetOpenWithAppsAsync());
     }
 
     // ---- Context menu ------------------------------------------------------------------------------------
@@ -367,8 +367,8 @@ public class ShellCommandsTests : LanguageTestBase
         var openWith = menu.Single(i => i.LabelKey == "Context_OpenWith");
         Assert.Empty(app.Shell.AppQueries);
 
-        var apps = openWith.GetChildren();
-        _ = openWith.GetChildren(); // asked once per menu
+        var apps = await openWith.GetChildrenAsync();
+        _ = await openWith.GetChildrenAsync(); // asked once per menu
 
         Assert.Equal(["/home/notes.txt"], app.Shell.AppQueries);
         var item = Assert.Single(apps);
@@ -384,10 +384,51 @@ public class ShellCommandsTests : LanguageTestBase
         await using var app = await StartAsync();
         var menu = app.Main.Left.ContextMenuForRow(IndexOf(app.Left, "notes.txt"));
 
-        var item = Assert.Single(menu.Single(i => i.LabelKey == "Context_OpenWith").GetChildren());
+        var item = Assert.Single(await menu.Single(i => i.LabelKey == "Context_OpenWith").GetChildrenAsync());
 
         Assert.Equal("Context_NoApps", item.LabelKey);
         Assert.False(item.IsEnabled);
+    }
+
+    [AvaloniaFact]
+    public async Task Open_with_apps_are_queried_off_the_ui_thread()
+    {
+        await using var app = await StartAsync();
+        app.Shell.Apps = [TextEdit];
+        Cursor(app.Left, "notes.txt");
+
+        Assert.Equal([TextEdit], await app.Main.Shell.GetOpenWithAppsAsync());
+
+        Assert.Equal([false], app.Shell.AppQueriesOnUiThread);
+    }
+
+    [AvaloniaFact]
+    public async Task A_failing_app_query_is_told_in_words_and_shows_no_apps()
+    {
+        await using var app = await StartAsync();
+        app.Shell.AppsFailure = new IOException("LaunchServices failed");
+        var menu = app.Main.Left.ContextMenuForRow(IndexOf(app.Left, "notes.txt"));
+
+        var item = Assert.Single(await menu.Single(i => i.LabelKey == "Context_OpenWith").GetChildrenAsync());
+
+        Assert.Equal("Context_NoApps", item.LabelKey);
+        Assert.Equal([(Loc.Format("Shell_AppsFailed", "notes.txt"), "LaunchServices failed")],
+            app.Dialogs.MessagesWithDetail);
+        Assert.Empty(app.Failures);
+    }
+
+    [AvaloniaFact]
+    public async Task An_unexpected_app_query_failure_is_reported_and_shows_no_apps()
+    {
+        await using var app = await StartAsync();
+        var failure = new InvalidOperationException("bug");
+        app.Shell.AppsFailure = failure;
+        Cursor(app.Left, "notes.txt");
+
+        Assert.Empty(await app.Main.Shell.GetOpenWithAppsAsync());
+
+        Assert.Equal([failure], app.Failures);
+        Assert.Empty(app.Dialogs.Messages);
     }
 
     [AvaloniaFact]
@@ -508,5 +549,60 @@ public class ShellCommandsTests : LanguageTestBase
         Cursor(app.Left, "..");
 
         Assert.False(app.Main.Commands.CanExecute(CommandIds.FileProperties));
+    }
+
+    [AvaloniaFact]
+    public async Task Properties_refreshes_when_something_was_applied_even_if_the_dialog_is_then_cancelled()
+    {
+        await using var app = await StartAsync();
+        Cursor(app.Left, "notes.txt");
+        app.Dialogs.OnProperties = async vm =>
+        {
+            vm.Octal = "600";
+            Assert.True(await vm.ApplyAsync());
+            return false; // then closed with Cancel
+        };
+
+        await app.Main.Commands.ExecuteAsync(CommandIds.FileProperties);
+
+        Assert.Equal("rw-------", app.Left.CursorRow?.ModeText);
+    }
+
+    [AvaloniaFact]
+    public async Task Properties_refreshes_when_a_later_apply_failed_after_an_earlier_one_changed_the_mode()
+    {
+        await using var app = await StartAsync();
+        Cursor(app.Left, "notes.txt");
+        app.Dialogs.OnProperties = async vm =>
+        {
+            vm.Octal = "600";
+            Assert.True(await vm.ApplyAsync());
+            app.Metadata.SetFailure = new IOException("xattr failed");
+            vm.TagsText = "Red";
+            Assert.False(await vm.ApplyAsync());
+            return false;
+        };
+
+        await app.Main.Commands.ExecuteAsync(CommandIds.FileProperties);
+
+        Assert.Equal("rw-------", app.Left.CursorRow?.ModeText);
+    }
+
+    [AvaloniaFact]
+    public async Task A_second_properties_command_while_the_first_is_loading_opens_no_second_dialog()
+    {
+        await using var app = await StartAsync();
+        Cursor(app.Left, "notes.txt");
+        using var gate = new ManualResetEventSlim(false);
+        app.Metadata.OwnerGate = gate;
+
+        var first = app.Main.Commands.ExecuteAsync(CommandIds.FileProperties);
+        Assert.False(first.IsCompleted); // still loading the owner
+        Assert.False(await app.Main.Commands.ExecuteAsync(CommandIds.FileProperties));
+        Assert.False(await app.Main.HandleKeyAsync(KeyChord.Parse("Cmd+I")));
+        gate.Set();
+        Assert.True(await first);
+
+        Assert.Single(app.Dialogs.PropertiesRequests);
     }
 }

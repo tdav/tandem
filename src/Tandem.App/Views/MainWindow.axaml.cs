@@ -179,12 +179,21 @@ public partial class MainWindow : Window
         flyout.ShowAt((main.Workspace.ActiveSide == PanelSide.Left ? LeftPanel : RightPanel).PathRowControl);
     }
 
-    /// <summary>"Open With" from the main menu: the applications for the cursor item, at its row.</summary>
-    private void OnOpenWithMenuRequested(object? sender, EventArgs e)
+    /// <summary>"Open With" from the main menu: the applications for the cursor item, at its row, once the query
+    /// (off the UI thread) has answered.</summary>
+    private async void OnOpenWithMenuRequested(object? sender, EventArgs e)
     {
         if (_main is not { } main) return;
-        (main.Workspace.ActiveSide == PanelSide.Left ? LeftPanel : RightPanel).List
-            .ShowMenuAtCursor(ContextMenuModel.OpenWithItems(main));
+        try
+        {
+            var items = await ContextMenuModel.OpenWithItemsAsync(main);
+            if (!IsVisible) return;
+            (main.Workspace.ActiveSide == PanelSide.Left ? LeftPanel : RightPanel).List.ShowMenuAtCursor(items);
+        }
+        catch (Exception failure)
+        {
+            main.ReportFailure(failure);
+        }
     }
 
     /// <summary>The progress window: shown while the operations model says so, modeless and owned by this window.
