@@ -67,10 +67,14 @@ internal sealed class TestApp : IAsyncDisposable
 
     /// <param name="trashCapable">Whether the in-memory "local disk" says it has a Trash (the real one does).</param>
     public static AppServices Services(InMemoryFileSystem fs, FakeVolumeService volumes, string logFile,
-        IDialogService? dialogs = null, ITrash? trash = null, bool trashCapable = false)
+        IDialogService? dialogs = null, ITrash? trash = null, bool trashCapable = false,
+        ProviderCapabilities removedCapabilities = ProviderCapabilities.None)
     {
         var providers = new ProviderRegistry();
-        providers.Register(trashCapable ? new CapabilityProvider(fs, ProviderCapabilities.Trash) : fs);
+        var added = trashCapable ? ProviderCapabilities.Trash : ProviderCapabilities.None;
+        providers.Register(added == ProviderCapabilities.None && removedCapabilities == ProviderCapabilities.None
+            ? fs
+            : new CapabilityProvider(fs, added, removedCapabilities));
         var platform = new FakePlatform();
         return new AppServices(providers, volumes, platform, platform, platform, trash ?? platform,
             new InMemoryNativeCopy(fs), platform, new OperationQueue(), new UnrestrictedAccessBroker(),
@@ -80,7 +84,8 @@ internal sealed class TestApp : IAsyncDisposable
     /// <param name="progressWindowDelay">How long before the progress window appears; never, when null.</param>
     public static async Task<TestApp> StartAsync(InMemoryFileSystem? fs = null, AppState? state = null,
         bool show = true, bool trashCapable = false,
-        Func<TimeSpan, CancellationToken, Task>? progressWindowDelay = null)
+        Func<TimeSpan, CancellationToken, Task>? progressWindowDelay = null,
+        ProviderCapabilities removedCapabilities = ProviderCapabilities.None)
     {
         fs ??= DefaultFileSystem();
         var stateDirectory = Path.Combine(Path.GetTempPath(), "tandem-window-tests-" + Guid.NewGuid().ToString("N"));
@@ -88,7 +93,8 @@ internal sealed class TestApp : IAsyncDisposable
 
         var app = new TestApp(fs, new FakeVolumeService(), stateDirectory);
         app.Main = await Composition.StartAsync(
-            Services(fs, app.Volumes, app.LogFile, app.Dialogs, app.Trash, trashCapable), stateDirectory, Home,
+            Services(fs, app.Volumes, app.LogFile, app.Dialogs, app.Trash, trashCapable, removedCapabilities),
+            stateDirectory, Home,
             autosaveDelay: (_, ct) => Task.Delay(Timeout.Infinite, ct),
             progressWindowDelay: progressWindowDelay ?? ((_, ct) => Task.Delay(Timeout.Infinite, ct)));
         app.Main.CommandFailed += (_, e) => app.Failures.Add(e);
@@ -249,11 +255,13 @@ internal sealed class InMemoryNativeCopy(InMemoryFileSystem fs) : INativeCopy
     }
 }
 
-/// <summary>A provider with capabilities added to another's, e.g. the Trash for the in-memory "local disk".</summary>
-internal sealed class CapabilityProvider(IFileSystemProvider inner, ProviderCapabilities extra) : IFileSystemProvider
+/// <summary>A provider with capabilities added to or taken from another's, e.g. the Trash for the in-memory "local
+/// disk", or no writing for a read-only source.</summary>
+internal sealed class CapabilityProvider(IFileSystemProvider inner, ProviderCapabilities extra,
+    ProviderCapabilities removed = ProviderCapabilities.None) : IFileSystemProvider
 {
     public string Id => inner.Id;
-    public ProviderCapabilities Capabilities => inner.Capabilities | extra;
+    public ProviderCapabilities Capabilities => (inner.Capabilities | extra) & ~removed;
     public IAsyncEnumerable<FileEntry> EnumerateAsync(VfsPath directory, CancellationToken ct) =>
         inner.EnumerateAsync(directory, ct);
     public Task<FileEntry?> GetEntryAsync(VfsPath path, CancellationToken ct) => inner.GetEntryAsync(path, ct);

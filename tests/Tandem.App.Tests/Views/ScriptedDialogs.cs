@@ -22,13 +22,14 @@ internal class ScriptedDialogs : IDialogService
     public Queue<ErrorAction> ErrorAnswers { get; } = new();
 
     public List<CopyMoveRequest> CopyMoveRequests { get; } = [];
-    public List<(string TitleKey, string Initial)> NameRequests { get; } = [];
+    public List<string> NameRequests { get; } = [];
     public List<(int Count, string? SingleName, bool Permanent)> DeleteRequests { get; } = [];
     public List<(bool Select, string Initial)> MaskRequests { get; } = [];
     public List<(FileEntry Source, FileEntry Existing)> ConflictRequests { get; } = [];
     public List<(VfsPath Item, string Message, string? Detail)> ErrorRequests { get; } = [];
     public List<IReadOnlyList<SkippedItem>> Summaries { get; } = [];
     public List<string> Messages { get; } = [];
+    public List<(string Text, string? Detail)> MessagesWithDetail { get; } = [];
     public List<string> ValidationErrors { get; } = [];
     public List<string> Unscripted { get; } = [];
 
@@ -66,9 +67,9 @@ internal class ScriptedDialogs : IDialogService
         }
     }
 
-    public virtual async Task<string?> AskNameAsync(string titleKey, string initial, TextValidator? validate = null)
+    public virtual async Task<string?> AskNewFolderNameAsync(string initial, TextValidator? validate = null)
     {
-        Record("name", () => NameRequests.Add((titleKey, initial)));
+        Record("name", () => NameRequests.Add(initial));
         while (true)
         {
             if (!TryTake(NameAnswers, "name", out var answer) || answer is null) return null;
@@ -113,9 +114,13 @@ internal class ScriptedDialogs : IDialogService
         return ThrowOnSummary is { } error ? Task.FromException(error) : Task.CompletedTask;
     }
 
-    public virtual Task ShowMessageAsync(string text)
+    public virtual Task ShowMessageAsync(string text, string? detail = null)
     {
-        Record("message", () => Messages.Add(text));
+        Record("message", () =>
+        {
+            Messages.Add(text);
+            MessagesWithDetail.Add((text, detail));
+        });
         return Task.CompletedTask;
     }
 

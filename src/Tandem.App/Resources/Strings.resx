@@ -656,4 +656,27 @@ Details were written to {1}.</value>
   <data name="Progress_Remaining" xml:space="preserve">
     <value>About {0} left</value>
   </data>
+
+  <!-- Why a whole operation stopped (OperationTexts.ForFailure); used as {0} of Operation_Failed -->
+  <data name="OperationFailed_AccessDenied" xml:space="preserve">
+    <value>access was denied.</value>
+  </data>
+  <data name="OperationFailed_NotFound" xml:space="preserve">
+    <value>an item or folder was not found.</value>
+  </data>
+  <data name="OperationFailed_AlreadyExists" xml:space="preserve">
+    <value>an item already exists.</value>
+  </data>
+  <data name="OperationFailed_ContentMismatch" xml:space="preserve">
+    <value>a copy differs from its original.</value>
+  </data>
+  <data name="OperationFailed_DiskFull" xml:space="preserve">
+    <value>there is not enough space on the disk.</value>
+  </data>
+  <data name="OperationFailed_IO" xml:space="preserve">
+    <value>an item could not be read or written.</value>
+  </data>
+  <data name="OperationFailed_Other" xml:space="preserve">
+    <value>an unexpected error occurred.</value>
+  </data>
 </root>

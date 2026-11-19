@@ -58,8 +58,10 @@ public partial class FileListView : UserControl
         (DataContext is SideViewModel { IsActive: true } &&
          TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is null);
 
+    /// <summary>Focuses the cursor's row; while that row is being renamed its editor keeps the focus.</summary>
     private bool FocusCursorRow() =>
-        Rows.SelectedIndex >= 0 && Rows.ContainerFromIndex(Rows.SelectedIndex) is { } row && row.Focus();
+        Rows.SelectedItem is EntryRowViewModel { IsRenaming: true } ||
+        (Rows.SelectedIndex >= 0 && Rows.ContainerFromIndex(Rows.SelectedIndex) is { } row && row.Focus());
 
     private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
     {

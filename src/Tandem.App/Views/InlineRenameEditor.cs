@@ -17,6 +17,8 @@ namespace Tandem.App.Views;
 public sealed class InlineRenameEditor : TextBox
 {
     private InlineRenameViewModel? _session;
+    private EntryRowViewModel? _row; // the row this control was made for; the session may move on to a newer one
+    private bool _tracking; // the selection is mirrored into the session once this control has set it up
 
     public InlineRenameEditor()
     {
@@ -36,27 +38,47 @@ public sealed class InlineRenameEditor : TextBox
     {
         base.OnDataContextChanged(e);
         if (_session is not null) _session.PropertyChanged -= OnSessionPropertyChanged;
+        _tracking = false;
         _session = DataContext as InlineRenameViewModel;
         if (_session is not { } session) return;
+        _row = session.Row;
         session.PropertyChanged += OnSessionPropertyChanged;
         Text = session.Text;
         ShowError(null);
+        // A recycled row may hand this control a session without detaching and attaching it again.
+        if (IsAttachedToVisualTree()) TakeFocusLater();
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
+        TakeFocusLater();
+    }
+
+    private void TakeFocusLater()
+    {
         Dispatcher.UIThread.Post(() =>
         {
             if (_session is not { IsOpen: true } session || !IsAttachedToVisualTree()) return;
             Focus();
-            SelectionStart = 0;
-            SelectionEnd = session.SelectionLength;
+            // Where the user was: the name part at first, the caret and selection after a refresh moved the editor.
+            SelectionStart = session.SelectionStart;
+            SelectionEnd = session.SelectionEnd;
+            _tracking = true;
         }, DispatcherPriority.Loaded);
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == SelectionStartProperty || change.Property == SelectionEndProperty ||
+            change.Property == CaretIndexProperty)
+            RememberSelection();
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
+        _tracking = false;
         ToolTip.SetIsOpen(this, false);
         base.OnDetachedFromVisualTree(e);
     }
@@ -86,9 +108,20 @@ public sealed class InlineRenameEditor : TextBox
     protected override void OnLostFocus(FocusChangedEventArgs e)
     {
         base.OnLostFocus(e);
-        _session?.Cancel(); // nothing happens if it was committed or cancelled already
+        // Nothing happens if it was committed or cancelled already. When a refresh replaced the rows, the session has
+        // moved to the new row's editor and this control is merely going away: that is not the user leaving.
+        if (_session is { } session && ReferenceEquals(session.Row, _row)) session.Cancel();
     }
 
+    private void RememberSelection()
+    {
+        if (!_tracking || _session is not { IsOpen: true } session || !ReferenceEquals(session.Row, _row)) return;
+        session.SelectionStart = Math.Min(SelectionStart, SelectionEnd);
+        session.SelectionEnd = Math.Max(SelectionStart, SelectionEnd);
+        if (session.SelectionStart == session.SelectionEnd) session.SelectionStart = session.SelectionEnd = CaretIndex;
+    }
+
+    /// <summary>Never throws: the session reports a failing rename to the app's failure path itself.</summary>
     private async Task CommitAsync(InlineRenameViewModel session)
     {
         var list = this.FindAncestorOfType<FileListView>();

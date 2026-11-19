@@ -62,10 +62,10 @@ public sealed class FileCommands : IDisposable
 
         void On(string id, Func<Task> run, Func<bool> canRun) => commands.Register(id, () => Tracked(run()), canRun);
         On(CommandIds.FileCopy, () => CopyOrMoveAsync(move: false), CanCopyOrMove);
-        On(CommandIds.FileMove, () => CopyOrMoveAsync(move: true), CanCopyOrMove);
+        On(CommandIds.FileMove, () => CopyOrMoveAsync(move: true), CanMove);
         On(CommandIds.FileMkdir, MakeDirectoryAsync, CanMakeDirectory);
-        On(CommandIds.FileDelete, () => DeleteAsync(permanent: false), HasTargets);
-        On(CommandIds.FileDeletePermanent, () => DeleteAsync(permanent: true), HasTargets);
+        On(CommandIds.FileDelete, () => DeleteAsync(permanent: false), CanDelete);
+        On(CommandIds.FileDeletePermanent, () => DeleteAsync(permanent: true), CanDelete);
         On(CommandIds.FileRename, BeginRename, HasCursorEntry);
         On(CommandIds.SelectByMask, () => MarkByMaskAsync(select: true), HasRows);
         On(CommandIds.UnselectByMask, () => MarkByMaskAsync(select: false), HasRows);
@@ -135,8 +135,13 @@ public sealed class FileCommands : IDisposable
 
     private bool CanMakeDirectory() => Active is { Error: null } panel && CanWrite(panel);
 
+    /// <summary>Copying needs a writable destination only; moving and deleting change the source too.</summary>
     private bool CanCopyOrMove() =>
         HasTargets() && Passive is { Error: null } passive && CanWrite(passive);
+
+    private bool CanMove() => CanCopyOrMove() && CanWrite(Active!);
+
+    private bool CanDelete() => HasTargets() && CanWrite(Active!);
 
     private void OnWorkspacePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -180,7 +185,7 @@ public sealed class FileCommands : IDisposable
 
     private async Task CopyOrMoveAsync(bool move)
     {
-        if (!CanCopyOrMove() || Active is not { } active || Passive is not { } passive) return;
+        if (!(move ? CanMove() : CanCopyOrMove()) || Active is not { } active || Passive is not { } passive) return;
         var targets = active.GetOperationTargets();
         if (targets.Count == 0) return;
 
@@ -203,13 +208,17 @@ public sealed class FileCommands : IDisposable
             return;
         }
         if (target.CreateDirectory && !await CreateDirectoryAsync(target.Directory)) return;
+        // A folder made for the copy shows up in its parent, which the passive panel may be showing.
+        IReadOnlyList<VfsPath> alsoChanged = target.CreateDirectory
+            ? [target.Directory.Parent ?? target.Directory, to]
+            : [];
 
         var sources = targets.Select(t => t.Path).ToArray();
         var options = new CopyOptions(answer.VerifyContent, target.NewName);
         FileOperation operation = move
             ? new MoveOperation(_providers, sources, target.Directory, options, _interaction, _nativeCopy)
             : new CopyOperation(_providers, sources, target.Directory, options, _interaction, _nativeCopy);
-        Start(operation, answer.RunImmediately);
+        Start(operation, answer.RunImmediately, alsoChanged: alsoChanged);
     }
 
     private static Func<VfsPath, CancellationToken, Task<DestinationKind>> OffTheUiThread(
@@ -245,11 +254,18 @@ public sealed class FileCommands : IDisposable
         {
             if (FolderSegments(text, out var error) is not { } segments) return error;
             var target = Combine(directory, segments);
-            var existing = await Task.Run(() => provider.GetEntryAsync(target, CancellationToken.None));
-            return existing is null ? null : Loc.Format("NewFolder_Exists", text);
+            try
+            {
+                var existing = await Task.Run(() => provider.GetEntryAsync(target, CancellationToken.None));
+                return existing is null ? null : Loc.Format("NewFolder_Exists", text);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                return OperationTexts.ForError(target, e); // the dialog stays open and says why
+            }
         }
 
-        var name = await _dialogs.AskNameAsync("NewFolder_Title", "", Validate);
+        var name = await _dialogs.AskNewFolderNameAsync("", Validate);
         if (name is null) return;
         if (FolderSegments(name, out var invalid) is not { } names)
         {
@@ -289,7 +305,7 @@ public sealed class FileCommands : IDisposable
 
     private async Task DeleteAsync(bool permanent)
     {
-        if (!HasTargets() || Active is not { } panel) return;
+        if (!CanDelete() || Active is not { } panel) return;
         var targets = panel.GetOperationTargets();
         if (targets.Count == 0) return;
 
@@ -312,7 +328,7 @@ public sealed class FileCommands : IDisposable
         var editor = new InlineRenameViewModel(row, name => RenameAsync(panel, entry, name), closed =>
         {
             if (_rename == closed) _rename = null;
-        });
+        }, _reportFailure);
         _rename = editor;
         row.Rename = editor;
         return Task.CompletedTask;
@@ -321,11 +337,15 @@ public sealed class FileCommands : IDisposable
     private Task RenameAsync(PanelViewModel panel, FileEntry entry, string newName)
     {
         var directory = entry.Path.Parent!.Value;
+        // Onto an existing name, the conflict answer decides what the new name ends up as (kept, overwritten, or
+        // renamed again): the cursor must not guess and land on the other file.
+        var nameTaken = panel.Rows.Any(r => !r.IsParentLink && string.Equals(r.Name, newName, StringComparison.Ordinal));
         var operation = new MoveOperation(_providers, [entry.Path], directory, new CopyOptions(NewName: newName),
             _interaction, _nativeCopy);
-        Start(operation, runImmediately: true, result =>
+        Start(operation, runImmediately: true, afterRefresh: result =>
         {
-            if (result is { State: OperationState.Completed } && panel.CurrentPath == directory)
+            if (!nameTaken && result is { State: OperationState.Completed, Skipped.Count: 0 } &&
+                panel.CurrentPath == directory)
                 FocusRow(panel, newName);
         });
         return Task.CompletedTask;
@@ -345,18 +365,21 @@ public sealed class FileCommands : IDisposable
 
     // ---- Running and finishing ---------------------------------------------------------------------------
 
-    private void Start(FileOperation operation, bool runImmediately, Action<OperationResult?>? afterRefresh = null)
+    /// <param name="alsoChanged">Folders changed before the operation (a destination folder made for it).</param>
+    private void Start(FileOperation operation, bool runImmediately, Action<OperationResult?>? afterRefresh = null,
+        IReadOnlyList<VfsPath>? alsoChanged = null)
     {
         var completion = _queue.Enqueue(operation, runImmediately);
         _operations.Track(operation);
-        Tracked(FinishAsync(operation, completion, afterRefresh));
+        Tracked(FinishAsync(operation, completion, afterRefresh, alsoChanged ?? []));
     }
 
-    /// <summary>After an operation, whatever its outcome: both panels show the folders it changed again (marks of
-    /// items that are gone go with them), then the user hears about a refusal, a failure or skipped items. Nothing
-    /// is said after a cancel the user asked for, nor after a clean run.</summary>
+    /// <summary>After an operation, whatever its outcome: every tab showing a folder it changed is read again (marks
+    /// of items that are gone go with them), then the user hears about a refusal, a failure or skipped items. Nothing
+    /// is said after a cancel the user asked for, after an Abort the user chose in the error dialog, nor after a
+    /// clean run.</summary>
     private async Task FinishAsync(FileOperation operation, Task<OperationResult> completion,
-        Action<OperationResult?>? afterRefresh)
+        Action<OperationResult?>? afterRefresh, IReadOnlyList<VfsPath> alsoChanged)
     {
         OperationResult? result = null;
         Exception? error = null;
@@ -371,15 +394,16 @@ public sealed class FileCommands : IDisposable
 
         try
         {
-            var changed = operation.Sources.Select(s => s.Parent ?? s).ToList();
+            var changed = operation.Sources.Select(s => s.Parent ?? s).Concat(alsoChanged).ToList();
             if (operation.Destination is { } destination) changed.Add(destination);
             await RefreshPanelsShowingAsync(changed, operation.Sources);
             afterRefresh?.Invoke(result);
 
             if (error is OperationRejectedException rejected)
                 await _dialogs.ShowMessageAsync(OperationTexts.ForRejection(rejected));
-            else if (error is not null)
-                await _dialogs.ShowMessageAsync(Loc.Format("Operation_Failed", error.Message));
+            else if (error is not null && !(_interaction is DialogOperationInteraction asked && asked.WasAbortedByUser(error)))
+                await _dialogs.ShowMessageAsync(Loc.Format("Operation_Failed", OperationTexts.ForFailure(error)),
+                    error.Message);
             else if (result is { State: not OperationState.Cancelled, Skipped.Count: > 0 })
                 await _dialogs.ShowSummaryAsync(result.Skipped);
         }
@@ -389,12 +413,13 @@ public sealed class FileCommands : IDisposable
         }
     }
 
-    /// <summary>Refreshes each side's shown panel whose folder is one of <paramref name="folders"/> or lies inside
-    /// one of <paramref name="removed"/> (a refresh of a folder that is gone moves to its nearest ancestor).</summary>
+    /// <summary>Refreshes every tab, on both sides and in front or not, whose folder is one of
+    /// <paramref name="folders"/> or lies inside one of <paramref name="removed"/> (a refresh of a folder that is gone
+    /// moves to its nearest ancestor).</summary>
     private async Task RefreshPanelsShowingAsync(IReadOnlyList<VfsPath> folders, IReadOnlyList<VfsPath> removed)
     {
         if (!_workspace.IsLoaded) return;
-        var panels = new[] { _workspace.Left.Active.Panel, _workspace.Right.Active.Panel }.Distinct();
+        var panels = _workspace.Left.Tabs.Concat(_workspace.Right.Tabs).Select(t => t.Panel).Distinct();
         var refreshes = panels
             .Where(p => p.CurrentPath != default &&
                         (folders.Contains(p.CurrentPath) || removed.Any(r => p.CurrentPath.IsSameOrDescendantOf(r))))

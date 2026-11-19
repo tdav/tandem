@@ -648,4 +648,27 @@
   <data name="Progress_Remaining" xml:space="preserve">
     <value>Осталось около {0}</value>
   </data>
+
+  <!-- Why a whole operation stopped (OperationTexts.ForFailure); used as {0} of Operation_Failed -->
+  <data name="OperationFailed_AccessDenied" xml:space="preserve">
+    <value>нет доступа.</value>
+  </data>
+  <data name="OperationFailed_NotFound" xml:space="preserve">
+    <value>объект или папка не найдены.</value>
+  </data>
+  <data name="OperationFailed_AlreadyExists" xml:space="preserve">
+    <value>объект уже существует.</value>
+  </data>
+  <data name="OperationFailed_ContentMismatch" xml:space="preserve">
+    <value>копия не совпадает с исходным файлом.</value>
+  </data>
+  <data name="OperationFailed_DiskFull" xml:space="preserve">
+    <value>недостаточно места на диске.</value>
+  </data>
+  <data name="OperationFailed_IO" xml:space="preserve">
+    <value>не удалось прочитать или записать объект.</value>
+  </data>
+  <data name="OperationFailed_Other" xml:space="preserve">
+    <value>произошла непредвиденная ошибка.</value>
+  </data>
 </root>

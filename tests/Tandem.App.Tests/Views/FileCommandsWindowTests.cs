@@ -164,6 +164,31 @@ public class FileCommandsWindowTests : LanguageTestBase
     }
 
     [AvaloniaFact]
+    public async Task An_open_inline_rename_keeps_its_text_and_focus_across_a_refresh()
+    {
+        await using var app = await StartAsync();
+        app.Left.CursorIndex = IndexOf(app.Left, "notes.txt");
+        app.Pump();
+        app.Press(Key.F2, physical: PhysicalKey.F2);
+        app.Type("draft");
+        Assert.Equal("draft.txt", Editor(app)!.Text);
+
+        await app.Left.RefreshAsync(); // the folder changed on disk: the rows are replaced
+        app.Pump();
+
+        var editor = Editor(app);
+        Assert.NotNull(editor);
+        Assert.Same(editor, app.Focused);
+        Assert.Equal("draft.txt", editor.Text);
+        Assert.Equal(5, editor.CaretIndex); // still after what was typed
+        app.Press(Key.Enter, physical: PhysicalKey.Enter);
+        await Settle(app);
+
+        Assert.True(app.Fs.Exists("/home/draft.txt"));
+        Assert.Equal("draft.txt", app.Left.CursorRow?.Name);
+    }
+
+    [AvaloniaFact]
     public async Task A_refused_inline_name_keeps_the_editor_open_with_the_reason()
     {
         await using var app = await StartAsync();

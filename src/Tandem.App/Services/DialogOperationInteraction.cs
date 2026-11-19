@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Tandem.Core.Operations;
 using Tandem.Core.Vfs;
 
@@ -25,6 +26,7 @@ public sealed class DialogOperationInteraction : IOperationInteraction
     private readonly CancellationTokenSource _closed = new();
     private readonly Queue<Func<Task>> _waiting = new(); // UI thread only
     private bool _asking; // UI thread only
+    private readonly ConditionalWeakTable<Exception, object> _userAborts = new();
 
     /// <summary>Created on the UI thread, whose context the questions are posted to.</summary>
     public DialogOperationInteraction(IDialogService dialogs, Action<Exception>? onFailure = null)
@@ -40,8 +42,17 @@ public sealed class DialogOperationInteraction : IOperationInteraction
         AskAsync(ct, CancelDecision, token => _dialogs.AskConflictAsync(source, existing, token));
 
     public Task<ErrorAction> ResolveErrorAsync(VfsPath item, Exception error, CancellationToken ct) =>
-        AskAsync(ct, ErrorAction.Abort,
-            token => _dialogs.AskErrorAsync(item, OperationTexts.ForError(item, error), error.Message, token));
+        AskAsync(ct, ErrorAction.Abort, async token =>
+        {
+            var action = await _dialogs.AskErrorAsync(item, OperationTexts.ForError(item, error), error.Message, token);
+            if (action == ErrorAction.Abort) _userAborts.AddOrUpdate(error, error);
+            return action;
+        });
+
+    /// <summary>Whether the user chose Abort in the dialog for <paramref name="error"/> (the engine then ends the
+    /// operation with that very exception, so there is nothing more to tell). The Abort given without asking — the
+    /// window closing, the operation cancelled, a failing dialog — is not recorded. Any thread.</summary>
+    public bool WasAbortedByUser(Exception error) => _userAborts.TryGetValue(error, out _);
 
     /// <summary>Answers every pending question as cancelled and every later one at once, without a dialog. Any
     /// thread.</summary>

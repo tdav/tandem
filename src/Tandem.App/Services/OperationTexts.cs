@@ -13,21 +13,28 @@ public static class OperationTexts
     private const int WindowsHandleDiskFull = unchecked((int)0x80070027);
 
     /// <summary>What went wrong with <paramref name="item"/>, worded from the kind of <paramref name="error"/>.</summary>
-    public static string ForError(VfsPath item, Exception error)
+    public static string ForError(VfsPath item, Exception error) =>
+        Loc.Format("OperationError_" + KindOf(error), item.Path);
+
+    /// <summary>Why a whole operation stopped, worded from the kind of <paramref name="error"/>, without an item
+    /// (the engine does not say which one); the system's own message belongs in a detail line.</summary>
+    public static string ForFailure(Exception error) => Loc.Get("OperationFailed_" + KindOf(error));
+
+    /// <summary>The resource key suffix for the kind of error, shared by <see cref="ForError"/> and
+    /// <see cref="ForFailure"/>.</summary>
+    private static string KindOf(Exception error)
     {
         ArgumentNullException.ThrowIfNull(error);
-        var key = error switch
+        return error switch
         {
-            VfsAccessDeniedException or UnauthorizedAccessException => "OperationError_AccessDenied",
-            VfsNotFoundException or FileNotFoundException or DirectoryNotFoundException => "OperationError_NotFound",
-            VfsAlreadyExistsException => "OperationError_AlreadyExists",
-            ContentMismatchException => "OperationError_ContentMismatch",
-            IOException { HResult: MacDiskFull or WindowsDiskFull or WindowsHandleDiskFull } =>
-                "OperationError_DiskFull",
-            IOException => "OperationError_IO",
-            _ => "OperationError_Other",
+            VfsAccessDeniedException or UnauthorizedAccessException => "AccessDenied",
+            VfsNotFoundException or FileNotFoundException or DirectoryNotFoundException => "NotFound",
+            VfsAlreadyExistsException => "AlreadyExists",
+            ContentMismatchException => "ContentMismatch",
+            IOException { HResult: MacDiskFull or WindowsDiskFull or WindowsHandleDiskFull } => "DiskFull",
+            IOException => "IO",
+            _ => "Other",
         };
-        return Loc.Format(key, item.Path);
     }
 
     /// <summary>Why the engine refused to start, with the item it names when there is one.</summary>

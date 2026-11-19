@@ -191,6 +191,30 @@ public class DialogOperationInteractionTests : LanguageTestBase
     }
 
     [AvaloniaFact]
+    public async Task Only_an_abort_the_user_chose_is_remembered()
+    {
+        var dialogs = new ScriptedDialogs();
+        dialogs.ErrorAnswers.Enqueue(ErrorAction.Abort);
+        dialogs.ErrorAnswers.Enqueue(ErrorAction.Skip);
+        var interaction = new DialogOperationInteraction(dialogs);
+        var chosen = new IOException("chosen");
+        var skipped = new IOException("skipped");
+        var afterClose = new IOException("after close");
+
+        Assert.Equal(ErrorAction.Abort, await Task.Run(() =>
+            interaction.ResolveErrorAsync(VfsPath.Local("/a"), chosen, CancellationToken.None)));
+        await Task.Run(() => interaction.ResolveErrorAsync(VfsPath.Local("/b"), skipped, CancellationToken.None));
+        interaction.Close();
+        Assert.Equal(ErrorAction.Abort, await Task.Run(() =>
+            interaction.ResolveErrorAsync(VfsPath.Local("/c"), afterClose, CancellationToken.None)));
+
+        Assert.True(interaction.WasAbortedByUser(chosen));
+        Assert.False(interaction.WasAbortedByUser(skipped));
+        Assert.False(interaction.WasAbortedByUser(afterClose));
+        Assert.False(interaction.WasAbortedByUser(new IOException("never asked")));
+    }
+
+    [AvaloniaFact]
     public async Task A_failing_dialog_aborts_instead_of_hanging_and_is_reported()
     {
         var failures = new List<Exception>();

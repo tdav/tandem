@@ -87,6 +87,10 @@ public static class DestinationParser
 
             var name = path.Name;
             var parent = path.Parent!.Value;
+            // Compared exactly (ordinal). Edge case on a case-insensitive volume: "/dst/DOCS" typed for the folder
+            // "docs", with /dst/docs existing, is not taken as the item's own name but as the existing folder to
+            // copy into, giving /dst/docs/docs. The default text uses the item's exact name, so only a retyped
+            // name in other case reaches this.
             var ownName = itemCount == 1 && string.Equals(name, singleName, StringComparison.Ordinal);
             if (kind == DestinationKind.Directory && !ownName)
                 return new(new DestinationTarget(path, null, false), null);

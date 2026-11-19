@@ -22,8 +22,8 @@ public sealed class DialogService : IDialogService
     public Task<CopyMoveAnswer?> AskCopyMoveAsync(CopyMoveRequest request) =>
         ShowAsync<CopyMoveAnswer>(new CopyMoveDialog(new CopyMoveDialogViewModel(request)));
 
-    public Task<string?> AskNameAsync(string titleKey, string initial, TextValidator? validate = null) =>
-        ShowAsync<string>(new NameDialog(new NameDialogViewModel(titleKey, initial, validate),
+    public Task<string?> AskNewFolderNameAsync(string initial, TextValidator? validate = null) =>
+        ShowAsync<string>(new NameDialog(new NameDialogViewModel("NewFolder_Title", initial, validate),
             Loc.Get("NewFolder_Prompt"), Loc.Get("Button_Create")));
 
     public async Task<bool> ConfirmDeleteAsync(int itemCount, string? singleName, bool permanent) =>
@@ -48,7 +48,8 @@ public sealed class DialogService : IDialogService
     public Task ShowSummaryAsync(IReadOnlyList<SkippedItem> skipped) =>
         ShowAsync<object>(new SummaryDialog(new SummaryDialogViewModel(skipped)));
 
-    public Task ShowMessageAsync(string text) => MessageDialog.ShowAsync(Owner, "Tandem", text);
+    public Task ShowMessageAsync(string text, string? detail = null) =>
+        MessageDialog.ShowAsync(Owner, "Tandem", string.IsNullOrWhiteSpace(detail) ? text : text + "\n\n" + detail);
 
     /// <summary>The dialog's result, or default when there is no owner or <paramref name="ct"/> closes it.</summary>
     private async Task<T?> ShowAsync<T>(Window dialog, CancellationToken ct = default) where T : class

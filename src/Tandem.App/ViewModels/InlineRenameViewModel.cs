@@ -13,21 +13,36 @@ public sealed partial class InlineRenameViewModel : ObservableObject
 {
     private readonly Func<string, Task> _rename;
     private readonly Action<InlineRenameViewModel> _closed;
+    private readonly Action<Exception>? _onFailure;
 
-    internal InlineRenameViewModel(EntryRowViewModel row, Func<string, Task> rename,
-        Action<InlineRenameViewModel> closed)
+    /// <param name="rename">Starts the rename to the given name.</param>
+    /// <param name="closed">Called once the editor has closed, whatever the reason.</param>
+    /// <param name="onFailure">Hears an exception from <paramref name="rename"/>; the editor never throws it.</param>
+    public InlineRenameViewModel(EntryRowViewModel row, Func<string, Task> rename,
+        Action<InlineRenameViewModel> closed, Action<Exception>? onFailure = null)
     {
+        ArgumentNullException.ThrowIfNull(row);
         ArgumentNullException.ThrowIfNull(row.Entry);
         Row = row;
         _rename = rename;
         _closed = closed;
+        _onFailure = onFailure;
         OriginalName = row.Name;
         Text = OriginalName;
         var extension = row.Entry.Extension;
         SelectionLength = extension.Length > 0 ? OriginalName.Length - extension.Length - 1 : OriginalName.Length;
+        SelectionEnd = SelectionLength;
     }
 
-    public EntryRowViewModel Row { get; }
+    /// <summary>The row being renamed; a refresh that replaces the rows moves the editor to the new row of the same
+    /// item.</summary>
+    public EntryRowViewModel Row { get; private set; }
+
+    /// <summary>The selection (and caret, at its end) in the editor, kept so a new editor control for a replaced
+    /// row continues where the user was. Starts as the name part.</summary>
+    public int SelectionStart { get; set; }
+
+    public int SelectionEnd { get; set; }
 
     public string OriginalName { get; }
 
@@ -61,8 +76,28 @@ public sealed partial class InlineRenameViewModel : ObservableObject
             return false;
         }
         Close();
-        await _rename(name);
+        try
+        {
+            await _rename(name);
+        }
+        catch (Exception e)
+        {
+            _onFailure?.Invoke(e);
+        }
         return true;
+    }
+
+    /// <summary>The panel's rows were replaced: carries the open editor over to <paramref name="row"/>, the new row
+    /// of the same item, with the text and selection kept.</summary>
+    internal void MoveTo(EntryRowViewModel row)
+    {
+        if (!IsOpen || ReferenceEquals(row, Row)) return;
+        // Row first: clearing the old row's editor makes its control lose the focus, and the control must then
+        // see the session has moved on, not that the user left it.
+        var old = Row;
+        Row = row;
+        if (old.Rename == this) old.Rename = null;
+        row.Rename = this;
     }
 
     /// <summary>Esc, or the editor lost the focus.</summary>

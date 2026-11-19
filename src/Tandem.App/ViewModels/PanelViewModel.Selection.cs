@@ -162,7 +162,13 @@ public sealed partial class PanelViewModel
     /// ones start, and the totals are counted afresh (marks carried over by a refresh included).</summary>
     private void AttachRows(IReadOnlyList<EntryRowViewModel> rows)
     {
-        foreach (var row in _rows.Items) row.SelectionChanged = null;
+        InlineRenameViewModel? editor = null;
+        foreach (var row in _rows.Items)
+        {
+            row.SelectionChanged = null;
+            editor ??= row.Rename;
+        }
+        if (editor is not null) CarryRenameOver(editor, rows);
 
         var handler = _onRowSelectionChanged ??= OnRowSelectionChanged;
         int total = 0, selected = 0;
@@ -182,6 +188,20 @@ public sealed partial class PanelViewModel
         _totalBytes = totalBytes;
         _selectedCount = selected;
         _selectedBytes = selectedBytes;
+    }
+
+    /// <summary>An inline rename is open while the rows are replaced (a refresh): it moves to the new row of the same
+    /// item, or is cancelled when the item is gone.</summary>
+    private static void CarryRenameOver(InlineRenameViewModel editor, IReadOnlyList<EntryRowViewModel> rows)
+    {
+        var path = editor.Row.Entry!.Path;
+        foreach (var row in rows)
+        {
+            if (row.IsParentLink || row.Entry!.Path != path) continue;
+            editor.MoveTo(row);
+            return;
+        }
+        editor.Cancel();
     }
 
     private void RaiseListingTotalsChanged()

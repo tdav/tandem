@@ -26,8 +26,8 @@ public interface IDialogService
 {
     Task<CopyMoveAnswer?> AskCopyMoveAsync(CopyMoveRequest request);
 
-    /// <summary>A name (for a new folder); <paramref name="titleKey"/> is the resource key of the title.</summary>
-    Task<string?> AskNameAsync(string titleKey, string initial, TextValidator? validate = null);
+    /// <summary>The name of a new folder ("a/b" makes nested folders), starting from <paramref name="initial"/>.</summary>
+    Task<string?> AskNewFolderNameAsync(string initial, TextValidator? validate = null);
 
     /// <summary>Asks before deleting. <paramref name="permanent"/>: the items will not go to the Trash, and the dialog
     /// says it cannot be undone; its default button is then Cancel.</summary>
@@ -48,5 +48,6 @@ public interface IDialogService
     /// <summary>The items an operation left alone, and why.</summary>
     Task ShowSummaryAsync(IReadOnlyList<SkippedItem> skipped);
 
-    Task ShowMessageAsync(string text);
+    /// <summary>A message; <paramref name="detail"/>, when given, is secondary (e.g. the system's own words).</summary>
+    Task ShowMessageAsync(string text, string? detail = null);
 }

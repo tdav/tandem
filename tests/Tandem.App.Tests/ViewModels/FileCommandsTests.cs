@@ -27,9 +27,10 @@ public class FileCommandsTests : LanguageTestBase
     }
 
     private static async Task<TestApp> StartAsync(InMemoryFileSystem? fs = null, bool trashCapable = false,
-        string? right = "/dst")
+        string? right = "/dst", ProviderCapabilities removed = ProviderCapabilities.None)
     {
-        var app = await TestApp.StartAsync(fs ?? FileSystem(), show: false, trashCapable: trashCapable);
+        var app = await TestApp.StartAsync(fs ?? FileSystem(), show: false, trashCapable: trashCapable,
+            removedCapabilities: removed);
         if (right is not null) await app.Right.NavigateToAsync(VfsPath.Local(right));
         return app;
     }
@@ -107,6 +108,7 @@ public class FileCommandsTests : LanguageTestBase
         await Run(app, CommandIds.FileCopy);
 
         Assert.Equal("notes", app.Fs.ReadAllText("/dst/new/notes.txt"));
+        Assert.Contains("new", Names(app.Right)); // the passive panel shows the folder just made
     }
 
     [AvaloniaFact]
@@ -262,13 +264,18 @@ public class FileCommandsTests : LanguageTestBase
         Assert.Equal("old", app.Fs.ReadAllText("/dst/notes.txt"));
     }
 
-    [AvaloniaFact]
-    public async Task An_aborted_operation_says_it_stopped()
+    private static InMemoryFileSystem DeniedNotes()
     {
         var fs = FileSystem();
         fs.FailOn((op, path) => op == "OpenRead" && path.Path == "/home/notes.txt",
             () => new VfsAccessDeniedException("denied by test"));
-        await using var app = await StartAsync(fs);
+        return fs;
+    }
+
+    [AvaloniaFact]
+    public async Task An_abort_chosen_by_the_user_shows_no_second_message()
+    {
+        await using var app = await StartAsync(DeniedNotes());
         Cursor(app.Left, "notes.txt");
         app.Dialogs.AnswerCopyMove();
         app.Dialogs.ErrorAnswers.Enqueue(ErrorAction.Abort);
@@ -277,7 +284,46 @@ public class FileCommandsTests : LanguageTestBase
 
         Assert.Equal(Loc.Format("OperationError_AccessDenied", "/home/notes.txt"),
             Assert.Single(app.Dialogs.ErrorRequests).Message);
-        Assert.Equal(Loc.Format("Operation_Failed", "denied by test"), Assert.Single(app.Dialogs.Messages));
+        Assert.Empty(app.Dialogs.Messages); // the user stopped it; nothing more to say
+        Assert.Empty(app.Dialogs.Summaries);
+        Assert.Empty(app.Failures);
+    }
+
+    [AvaloniaFact]
+    public async Task A_failure_the_user_did_not_choose_is_worded_in_the_users_language()
+    {
+        await using var app = await StartAsync(DeniedNotes());
+        Loc.SetLanguage("ru"); // after start-up, which applies the saved language
+        Cursor(app.Left, "notes.txt");
+        app.Dialogs.AnswerCopyMove();
+        app.Main.OnWindowClosing(); // questions are now answered "abort" without asking the user
+
+        await Run(app, CommandIds.FileCopy);
+
+        Assert.Empty(app.Dialogs.ErrorRequests);
+        var (text, detail) = Assert.Single(app.Dialogs.MessagesWithDetail);
+        Assert.Equal(Loc.Format("Operation_Failed", Loc.Get("OperationFailed_AccessDenied")), text);
+        Assert.StartsWith("Операция прервана", text);
+        Assert.DoesNotContain("denied by test", text);
+        Assert.Equal("denied by test", detail); // the system's words only as the detail
+    }
+
+    public static TheoryData<Exception, string> Failures => new()
+    {
+        { new VfsAccessDeniedException("x"), "OperationFailed_AccessDenied" },
+        { new VfsNotFoundException("x"), "OperationFailed_NotFound" },
+        { new VfsAlreadyExistsException("x"), "OperationFailed_AlreadyExists" },
+        { new ContentMismatchException("x"), "OperationFailed_ContentMismatch" },
+        { new IOException("x", 28), "OperationFailed_DiskFull" },
+        { new IOException("x"), "OperationFailed_IO" },
+        { new InvalidOperationException("x"), "OperationFailed_Other" },
+    };
+
+    [Theory]
+    [MemberData(nameof(Failures))]
+    public void Failures_are_worded_by_exception_type(Exception error, string key)
+    {
+        Assert.Equal(Loc.Get(key), OperationTexts.ForFailure(error));
     }
 
     [AvaloniaFact]
@@ -307,7 +353,7 @@ public class FileCommandsTests : LanguageTestBase
 
         await Run(app, CommandIds.FileMkdir);
 
-        Assert.Equal(("NewFolder_Title", ""), Assert.Single(app.Dialogs.NameRequests));
+        Assert.Equal("", Assert.Single(app.Dialogs.NameRequests));
         Assert.True(app.Fs.Exists("/home/a/b/c"));
         Assert.Equal("a", app.Left.CursorRow?.Name);
         Assert.Contains("a", Names(app.Right)); // the other panel shows the same folder
@@ -332,6 +378,23 @@ public class FileCommandsTests : LanguageTestBase
             Loc.Format("NewFolder_Exists", "docs"),
         ], app.Dialogs.ValidationErrors);
         Assert.Equal(before, app.Fs.AllPaths);
+    }
+
+    [AvaloniaFact]
+    public async Task F7_reports_a_folder_it_cannot_check_instead_of_crashing()
+    {
+        var fs = FileSystem();
+        var failure = new VfsAccessDeniedException("no peeking");
+        fs.FailOn((op, path) => op == "GetEntry" && path.Path == "/home/secret", () => failure);
+        await using var app = await StartAsync(fs);
+        app.Dialogs.NameAnswers.Enqueue("secret");
+        app.Dialogs.NameAnswers.Enqueue(null);
+
+        await Run(app, CommandIds.FileMkdir);
+
+        Assert.Equal([OperationTexts.ForError(VfsPath.Local("/home/secret"), failure)], app.Dialogs.ValidationErrors);
+        Assert.Empty(app.Failures);
+        Assert.False(app.Fs.Exists("/home/secret"));
     }
 
     [Theory]
@@ -447,13 +510,16 @@ public class FileCommandsTests : LanguageTestBase
         Assert.Contains("renamed.txt", Names(app.Right));
     }
 
-    [AvaloniaFact]
-    public async Task Rename_onto_an_existing_name_asks_about_the_conflict()
+    [AvaloniaTheory]
+    [InlineData(ConflictAction.Skip)]
+    [InlineData(ConflictAction.Rename)]
+    [InlineData(ConflictAction.Overwrite)]
+    public async Task Rename_onto_an_existing_name_never_puts_the_cursor_on_the_other_file(ConflictAction answer)
     {
         await using var app = await StartAsync();
         Cursor(app.Left, "notes.txt");
         await Run(app, CommandIds.FileRename);
-        app.Dialogs.ConflictAnswers.Enqueue(new ConflictDecision(ConflictAction.Skip, false));
+        app.Dialogs.ConflictAnswers.Enqueue(new ConflictDecision(answer, false));
         var editor = app.Main.Files.Rename!;
 
         editor.Text = "report.pdf";
@@ -461,8 +527,89 @@ public class FileCommandsTests : LanguageTestBase
         await app.Main.Files.WhenIdleAsync();
 
         Assert.Single(app.Dialogs.ConflictRequests);
-        Assert.Equal("report", app.Fs.ReadAllText("/home/report.pdf"));
-        Assert.True(app.Fs.Exists("/home/notes.txt"));
+        if (answer == ConflictAction.Skip)
+        {
+            Assert.Equal("report", app.Fs.ReadAllText("/home/report.pdf"));
+            Assert.Equal("notes.txt", app.Left.CursorRow?.Name);
+        }
+        Assert.True(answer == ConflictAction.Overwrite || app.Left.CursorRow?.Name != "report.pdf");
+    }
+
+    [AvaloniaFact]
+    public async Task An_open_rename_survives_a_refresh_and_closes_when_its_item_goes()
+    {
+        await using var app = await StartAsync();
+        Cursor(app.Left, "notes.txt");
+        await Run(app, CommandIds.FileRename);
+        var editor = app.Main.Files.Rename!;
+        editor.Text = "draft";
+        editor.SelectionStart = 2;
+        editor.SelectionEnd = 3;
+        var oldRow = editor.Row;
+
+        await app.Left.RefreshAsync(); // e.g. a change on disk: the rows are new
+
+        Assert.NotSame(oldRow, editor.Row);
+        Assert.Contains(editor.Row, app.Left.Rows);
+        Assert.Same(editor, editor.Row.Rename);
+        Assert.Null(oldRow.Rename);
+        Assert.True(editor.IsOpen);
+        Assert.Same(editor, app.Main.Files.Rename);
+        Assert.Equal(("draft", 2, 3), (editor.Text, editor.SelectionStart, editor.SelectionEnd));
+
+        await app.Fs.DeleteAsync(VfsPath.Local("/home/notes.txt"), false, TestContext.Current.CancellationToken);
+        await app.Left.RefreshAsync();
+
+        Assert.False(editor.IsOpen);
+        Assert.Null(app.Main.Files.Rename);
+        Assert.DoesNotContain(app.Left.Rows, r => r.Rename is not null);
+    }
+
+    [AvaloniaFact]
+    public async Task A_rename_that_throws_is_reported_not_lost()
+    {
+        await using var app = await StartAsync();
+        var row = app.Left.Rows[IndexOf(app.Left, "notes.txt")];
+        var failures = new List<Exception>();
+        var editor = new InlineRenameViewModel(row, _ => throw new InvalidOperationException("boom"), _ => { },
+            failures.Add) { Text = "x.txt" };
+
+        Assert.True(await editor.CommitAsync());
+
+        Assert.Equal("boom", Assert.Single(failures).Message);
+        Assert.False(editor.IsOpen);
+    }
+
+    [AvaloniaFact]
+    public async Task A_read_only_source_disables_delete_move_and_rename()
+    {
+        await using var app = await StartAsync(removed: ProviderCapabilities.Write);
+        Cursor(app.Left, "notes.txt");
+
+        Assert.False(app.Main.Commands.CanExecute(CommandIds.FileDelete));
+        Assert.False(app.Main.Commands.CanExecute(CommandIds.FileDeletePermanent));
+        Assert.False(app.Main.Commands.CanExecute(CommandIds.FileMove));
+        Assert.False(app.Main.Commands.CanExecute(CommandIds.FileRename));
+        Assert.False(app.Main.Commands.CanExecute(CommandIds.FileMkdir));
+        Assert.True(app.Main.Commands.CanExecute(CommandIds.SelectByMask));
+    }
+
+    [AvaloniaFact]
+    public async Task Background_tabs_showing_a_changed_folder_are_refreshed_too()
+    {
+        await using var app = await StartAsync();
+        var background = app.Left;
+        Mark(background, "notes.txt");
+        await app.Main.Workspace.Left.NewTabAsync(); // the new tab, also /home, is in front now
+        var front = app.Left;
+        Assert.NotSame(background, front);
+        Cursor(front, "notes.txt");
+        app.Dialogs.AnswerCopyMove();
+
+        await Run(app, CommandIds.FileMove);
+
+        Assert.DoesNotContain("notes.txt", Names(background));
+        Assert.Equal(0, background.SelectedCount); // no stale mark on a vanished item
     }
 
     [AvaloniaTheory]
