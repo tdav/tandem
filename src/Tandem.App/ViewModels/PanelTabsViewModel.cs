@@ -69,18 +69,42 @@ public sealed partial class PanelTabsViewModel : ObservableObject, IDisposable
         SetActive(tab);
     }
 
+    /// <summary>Whether <paramref name="tab"/> may be closed: it is one of this side's tabs, not the only one, and not
+    /// pinned. The one rule every way of closing a tab follows.</summary>
+    public bool CanClose(TabViewModel tab) => _tabs.Count > 1 && !tab.IsPinned && _tabs.Contains(tab);
+
     /// <summary>Closes the active tab and activates its right neighbour (or the left one if it was the last).
-    /// False, and nothing closed, for the only tab and for a pinned one.</summary>
-    public bool CloseActive()
+    /// False, and nothing closed, when <see cref="CanClose"/> refuses (the only tab, a pinned one).</summary>
+    public bool CloseActive() => _active is { } active && Close(active);
+
+    /// <summary>Closes <paramref name="tab"/> (its close button). The active tab stays active unless it is the one
+    /// closed; then its right neighbour (or the left one) becomes active. False, and nothing closed, when
+    /// <see cref="CanClose"/> refuses.</summary>
+    public bool Close(TabViewModel tab)
     {
-        if (_tabs.Count <= 1 || Active.IsPinned) return false;
-        var tab = Active;
+        ArgumentNullException.ThrowIfNull(tab);
+        if (!CanClose(tab)) return false;
         var index = _tabs.IndexOf(tab);
         Detach(tab);
         _tabs.RemoveAt(index);
-        SetActive(_tabs[Math.Min(index, _tabs.Count - 1)]);
+        if (ReferenceEquals(tab, _active)) SetActive(_tabs[Math.Min(index, _tabs.Count - 1)]);
+        else RaiseStateChanged();
         tab.Dispose();
         return true;
+    }
+
+    /// <summary>Whether <see cref="CloseOthers"/> would close anything.</summary>
+    public bool CanCloseOthers(TabViewModel keep) => _tabs.Any(tab => !ReferenceEquals(tab, keep) && CanClose(tab));
+
+    /// <summary>Activates <paramref name="keep"/> and closes every other tab that <see cref="CanClose"/> allows, so
+    /// pinned tabs stay. Returns how many were closed.</summary>
+    public int CloseOthers(TabViewModel keep)
+    {
+        Activate(keep);
+        var closed = 0;
+        foreach (var tab in _tabs.Where(tab => !ReferenceEquals(tab, keep)).ToList())
+            if (Close(tab)) closed++;
+        return closed;
     }
 
     /// <summary>Activates the tab to the right, the first after the last.</summary>

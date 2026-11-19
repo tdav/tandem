@@ -33,6 +33,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private IReadOnlyList<VolumeInfo> _volumes = [];
     private int _volumeReadVersion;
     private int _pageSize = DefaultPageSize;
+    private bool[] _tabAvailable = [];
     private volatile bool _disposed;
 
     /// <param name="progressWindowDelay">Waits before the progress window may appear; the real delay when null.</param>
@@ -73,6 +74,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         CommandLine = new CommandLineViewModel(workspace, services.Processes, workspace.HomeDirectory);
         Commands.RaiseCanExecuteChanged();
         workspace.PropertyChanged += OnWorkspacePropertyChanged;
+        workspace.Left.StateChanged += OnTabsStateChanged;
+        workspace.Right.StateChanged += OnTabsStateChanged;
         _volumeService = services.Volumes;
         _volumeService.Changed += OnVolumesChanged;
         _ = ReadVolumesAsync();
@@ -243,6 +246,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _disposed = true;
         _volumeService.Changed -= OnVolumesChanged;
         Workspace.PropertyChanged -= OnWorkspacePropertyChanged;
+        Workspace.Left.StateChanged -= OnTabsStateChanged;
+        Workspace.Right.StateChanged -= OnTabsStateChanged;
         Interaction.Close();
         Shell.CloseQuickLook();
         CommandLine.Dispose();
@@ -306,11 +311,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private void RegisterCommands()
     {
-        void On(string id, Action action) => Commands.Register(id, () =>
+        void On(string id, Action action, Func<bool>? canExecute = null) => Commands.Register(id, () =>
         {
             action();
             return Task.CompletedTask;
-        });
+        }, canExecute);
 
         PanelTabsViewModel ActiveTabs() => ActiveSide.Tabs;
         PanelViewModel Panel() => Workspace.ActivePanel;
@@ -332,7 +337,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         On(CommandIds.SelectAll, () => Panel().SelectAll());
         On(CommandIds.SelectInvert, () => Panel().InvertSelection());
         Commands.Register(CommandIds.TabNew, () => ActiveTabs().NewTabAsync());
-        On(CommandIds.TabClose, () => ActiveTabs().CloseActive());
+        Commands.Register(CommandIds.TabDuplicate, () => ActiveTabs().NewTabAsync());
+        // A pinned tab, and the only one, cannot be closed: PanelTabsViewModel.CanClose decides, and the commands are
+        // off then (no error is shown).
+        On(CommandIds.TabClose, () => ActiveTabs().CloseActive(),
+            () => Workspace.IsLoaded && ActiveTabs().CanClose(ActiveTabs().Active));
+        On(CommandIds.TabCloseOthers, () => ActiveTabs().CloseOthers(ActiveTabs().Active),
+            () => Workspace.IsLoaded && ActiveTabs().CanCloseOthers(ActiveTabs().Active));
+        On(CommandIds.TabTogglePin, () => ActiveTabs().Active.IsPinned = !ActiveTabs().Active.IsPinned,
+            () => Workspace.IsLoaded);
         On(CommandIds.TabNext, () => ActiveTabs().Next());
         On(CommandIds.TabPrev, () => ActiveTabs().Previous());
         On(CommandIds.FavoritesShow, () => FavoritesMenuRequested?.Invoke(this, EventArgs.Empty));
@@ -354,12 +367,26 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 OnPropertyChanged(nameof(ActiveSide));
                 Left.OnActiveSideChanged();
                 Right.OnActiveSideChanged();
+                UpdateTabAvailability();
                 break;
             case nameof(WorkspaceViewModel.View):
                 Left.OnViewChanged();
                 Right.OnViewChanged();
                 break;
         }
+    }
+
+    /// <summary>A side's tabs, active tab or a tab's pin changed: closing tabs may have become possible or not.</summary>
+    private void OnTabsStateChanged(object? sender, EventArgs e) => UpdateTabAvailability();
+
+    /// <summary>Raises <see cref="CommandRegistry.RaiseCanExecuteChanged"/> only when closing tabs became possible or
+    /// impossible.</summary>
+    private void UpdateTabAvailability()
+    {
+        bool[] available = [Commands.CanExecute(CommandIds.TabClose), Commands.CanExecute(CommandIds.TabCloseOthers)];
+        if (available.SequenceEqual(_tabAvailable)) return;
+        _tabAvailable = available;
+        Commands.RaiseCanExecuteChanged();
     }
 
     /// <summary>Any thread. The service may raise one late event after this model is disposed, and must never be

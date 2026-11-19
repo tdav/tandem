@@ -36,6 +36,7 @@ public class KeyMapTests
     [InlineData("Cmd+OemMinus", "unselect.byMask")]
     [InlineData("Ctrl+Shift+Tab", "tab.prev")]
     [InlineData("Cmd+Shift+OemPeriod", "view.toggleHidden")]
+    [InlineData("Ctrl+Cmd+P", "tab.togglePin")]
     public void Default_binding(string chord, string id) => Assert.Equal(id, KeyMap.Default.Find(KeyChord.Parse(chord)));
 
     [Fact]
@@ -54,7 +55,7 @@ public class KeyMapTests
             "tab.new=Cmd+T", "tab.close=Cmd+W", "tab.next=Ctrl+Tab", "tab.prev=Ctrl+Shift+Tab",
             "favorites.show=Cmd+D", "view.toggleHidden=Cmd+Shift+OemPeriod",
             "sort.byName=Ctrl+Cmd+1", "sort.byExtension=Ctrl+Cmd+2", "sort.bySize=Ctrl+Cmd+3", "sort.byDate=Ctrl+Cmd+4",
-            "sort.reverse=Ctrl+Cmd+R",
+            "sort.reverse=Ctrl+Cmd+R", "tab.togglePin=Ctrl+Cmd+P",
         ];
 
         var expectedBindings = expected.Select(e => e.Split('=')).Select(p => (p[0], KeyChord.Parse(p[1])));
@@ -77,6 +78,8 @@ public class KeyMapTests
         Assert.Empty(KeyMap.Default.ChordsFor(CommandIds.ShellReveal));
         Assert.Empty(KeyMap.Default.ChordsFor(CommandIds.ShellOpenTerminal));
         Assert.Empty(KeyMap.Default.ChordsFor(CommandIds.ShellOpenWith));
+        Assert.Empty(KeyMap.Default.ChordsFor(CommandIds.TabDuplicate));
+        Assert.Empty(KeyMap.Default.ChordsFor(CommandIds.TabCloseOthers));
         Assert.Empty(KeyMap.Default.ChordsFor("no.such.command"));
     }
 
@@ -129,7 +132,10 @@ public class KeyMapTests
         var bound = KeyMap.Default.Bindings.Select(b => b.CommandId).ToHashSet();
         var unbound = ConstantIds().Where(id => !bound.Contains(id)).Order();
 
-        Assert.Equal([CommandIds.ShellOpenTerminal, CommandIds.ShellOpenWith, CommandIds.ShellReveal], unbound);
+        Assert.Equal(
+            [CommandIds.ShellOpenTerminal, CommandIds.ShellOpenWith, CommandIds.ShellReveal, CommandIds.TabCloseOthers,
+                CommandIds.TabDuplicate],
+            unbound);
     }
 
     [Fact]

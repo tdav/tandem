@@ -31,8 +31,10 @@ public class MainViewModelTests : LanguageTestBase
     public async Task Registers_every_command()
     {
         await using var app = await TestApp.StartAsync(show: false);
+        // Closing tabs is available once there are two; the file and shell commands once the cursor is on a local
+        // file.
+        await app.Main.Workspace.Left.NewTabAsync();
         var panel = app.Main.Workspace.ActivePanel;
-        // The file and shell commands are available once the cursor is on a local file.
         panel.CursorIndex = panel.Rows.ToList().FindIndex(r => r.Name == "notes.txt");
 
         Assert.All(CommandIds.All, id => Assert.True(app.Main.Commands.CanExecute(id), id));

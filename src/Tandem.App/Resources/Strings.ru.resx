@@ -350,6 +350,18 @@
   <data name="Menu_tab_prev" xml:space="preserve">
     <value>Предыдущая вкладка</value>
   </data>
+  <data name="Menu_tab_togglePin" xml:space="preserve">
+    <value>Закрепить вкладку</value>
+  </data>
+  <data name="Menu_UnpinTab" xml:space="preserve">
+    <value>Открепить вкладку</value>
+  </data>
+  <data name="Menu_tab_duplicate" xml:space="preserve">
+    <value>Дублировать вкладку</value>
+  </data>
+  <data name="Menu_tab_closeOthers" xml:space="preserve">
+    <value>Закрыть остальные вкладки</value>
+  </data>
   <data name="Menu_favorites_show" xml:space="preserve">
     <value>Избранное…</value>
   </data>
@@ -738,6 +750,24 @@
   </data>
   <data name="Context_Refresh" xml:space="preserve">
     <value>Обновить</value>
+  </data>
+  <data name="Context_TabNew" xml:space="preserve">
+    <value>Новая вкладка</value>
+  </data>
+  <data name="Context_TabDuplicate" xml:space="preserve">
+    <value>Дублировать</value>
+  </data>
+  <data name="Context_TabPin" xml:space="preserve">
+    <value>Закрепить</value>
+  </data>
+  <data name="Context_TabUnpin" xml:space="preserve">
+    <value>Открепить</value>
+  </data>
+  <data name="Context_TabClose" xml:space="preserve">
+    <value>Закрыть</value>
+  </data>
+  <data name="Context_TabCloseOthers" xml:space="preserve">
+    <value>Закрыть остальные</value>
   </data>
 
   <!-- The properties dialog (PropertiesViewModel, PropertiesDialog) -->

@@ -1,8 +1,10 @@
 using System.ComponentModel;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Tandem.App.Input;
 using Tandem.App.Resources;
 using Tandem.App.ViewModels;
@@ -29,7 +31,11 @@ public partial class PanelView : UserControl
             };
         }
         PathRow.AddHandler(PointerPressedEvent, (_, _) => _side?.Activate(), RoutingStrategies.Tunnel);
+        TabStrip.AddHandler(PointerPressedEvent, OnTabStripPointerPressed, RoutingStrategies.Tunnel);
     }
+
+    /// <summary>The tab menu open now, if any; for tests.</summary>
+    public ContextMenu? OpenTabMenu { get; private set; }
 
     /// <summary>The control the favourites menu opens at.</summary>
     public Control PathRowControl => PathRow;
@@ -94,6 +100,30 @@ public partial class PanelView : UserControl
             var focused = TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement();
             if (focused is not null && !ReferenceEquals(focused, PathEditor)) side.CancelPathEdit();
         });
+    }
+
+    /// <summary>A right click on a tab: that tab and this side become active first, then its menu opens at the
+    /// pointer.</summary>
+    private void OnTabStripPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (_side is not { } side || !e.GetCurrentPoint(TabStrip).Properties.IsRightButtonPressed) return;
+        if ((e.Source as Visual)?.FindAncestorOfType<ListBoxItem>(includeSelf: true) is not
+            { DataContext: TabViewModel tab } item) return;
+        e.Handled = true;
+        var items = side.ContextMenuForTab(tab);
+        FocusList();
+        if (items.Count == 0) return;
+        OpenTabMenu?.Close();
+        var menu = ContextMenuView.Build(items);
+        menu.Placement = PlacementMode.Pointer;
+        menu.Closed += (_, _) =>
+        {
+            if (OpenTabMenu != menu) return;
+            OpenTabMenu = null;
+            FocusList();
+        };
+        OpenTabMenu = menu;
+        menu.Open(item);
     }
 
     private void FillHistoryMenu(MenuFlyout flyout)

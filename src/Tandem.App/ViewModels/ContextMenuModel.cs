@@ -97,6 +97,22 @@ public static class ContextMenuModel
         ];
     }
 
+    /// <summary>New tab, Duplicate, Pin (Unpin for a pinned tab), Close, Close others: for the active tab of the
+    /// active side, which a right click on a tab has made the clicked one.</summary>
+    public static IReadOnlyList<ContextMenuItem> ForTab(MainViewModel main)
+    {
+        ArgumentNullException.ThrowIfNull(main);
+        var pinned = main.ActiveSide.Tabs.Active.IsPinned;
+        return
+        [
+            Command(main, CommandIds.TabNew, "Context_TabNew"),
+            Command(main, CommandIds.TabDuplicate, "Context_TabDuplicate"),
+            Command(main, CommandIds.TabTogglePin, pinned ? "Context_TabUnpin" : "Context_TabPin"),
+            Command(main, CommandIds.TabClose, "Context_TabClose"),
+            Command(main, CommandIds.TabCloseOthers, "Context_TabCloseOthers"),
+        ];
+    }
+
     /// <summary>The applications that can open the cursor item, asked for now (off the UI thread); one disabled "No
     /// applications" item when there are none. A failing query is told or reported and shows as none. Null when the
     /// cursor moved to another item while the query ran (nothing to show). Each item opens the item the applications

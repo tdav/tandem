@@ -97,6 +97,52 @@ public class PanelTabsTests : IDisposable
     }
 
     [AvaloniaFact]
+    public async Task Close_others_keeps_the_given_and_pinned_tabs()
+    {
+        await RestoreAsync(Tab("/a", pinned: true), Tab("/x"), Tab("/home"), Tab("/a/b"));
+        var (pinned, keep) = (_tabs.Tabs[0], _tabs.Tabs[2]);
+        var changes = 0;
+        _tabs.StateChanged += (_, _) => changes++;
+
+        Assert.True(_tabs.CanCloseOthers(keep));
+        Assert.Equal(2, _tabs.CloseOthers(keep));
+
+        Assert.Equal([pinned, keep], _tabs.Tabs);
+        Assert.Same(keep, _tabs.Active);
+        Assert.True(changes > 0);
+        Assert.False(_tabs.CanCloseOthers(keep)); // only the pinned one is left besides it
+        Assert.Equal(0, _tabs.CloseOthers(keep));
+    }
+
+    [AvaloniaFact]
+    public async Task Close_others_disposes_closed_panels()
+    {
+        await RestoreAsync(Tab("/a"), Tab("/x"), Tab("/home"));
+        await WaitUntil(() => _observed.ActiveWatches == 3);
+
+        _tabs.CloseOthers(_tabs.Tabs[1]);
+
+        Assert.Equal(Mem("/x"), Assert.Single(_tabs.Tabs).Panel.CurrentPath);
+        await WaitUntil(() => _observed.ActiveWatches == 1); // only the kept tab still watches its folder
+    }
+
+    [AvaloniaFact]
+    public async Task Closing_another_tab_keeps_the_active_one_and_refuses_a_pinned_one()
+    {
+        await RestoreAsync(Tab("/a"), Tab("/x", pinned: true), Tab("/home"));
+        var active = _tabs.Tabs[2];
+        _tabs.Activate(active);
+
+        Assert.False(_tabs.CanClose(_tabs.Tabs[1]));
+        Assert.False(_tabs.Close(_tabs.Tabs[1]));
+        Assert.True(_tabs.CanClose(_tabs.Tabs[0]));
+        Assert.True(_tabs.Close(_tabs.Tabs[0]));
+
+        Assert.Equal([Mem("/x"), Mem("/home")], _tabs.Tabs.Select(t => t.Panel.CurrentPath));
+        Assert.Same(active, _tabs.Active);
+    }
+
+    [AvaloniaFact]
     public async Task Close_activates_neighbour()
     {
         await RestoreAsync(Tab("/a"), Tab("/x"), Tab("/home"));

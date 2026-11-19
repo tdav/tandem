@@ -41,6 +41,7 @@ public static class CommandIds
     public const string TabClose = "tab.close";
     public const string TabNext = "tab.next";
     public const string TabPrev = "tab.prev";
+    public const string TabTogglePin = "tab.togglePin";
 
     public const string SortByName = "sort.byName";
     public const string SortByExtension = "sort.byExtension";
@@ -55,6 +56,8 @@ public static class CommandIds
     public const string ShellReveal = "shell.reveal";
     public const string ShellOpenTerminal = "shell.openTerminal";
     public const string ShellOpenWith = "shell.openWith";
+    public const string TabDuplicate = "tab.duplicate";
+    public const string TabCloseOthers = "tab.closeOthers";
 
     /// <summary>Every id declared above, in declaration order.</summary>
     public static IReadOnlyList<string> All { get; } =

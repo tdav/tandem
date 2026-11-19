@@ -28,6 +28,10 @@ public sealed partial class SideViewModel : ObservableObject
         _main = main;
         Side = side;
         Tabs = tabs;
+        CloseTabCommand = new RelayCommand<TabViewModel>(tab =>
+        {
+            if (tab is not null) CloseTab(tab);
+        });
         tabs.PropertyChanged += OnTabsPropertyChanged;
     }
 
@@ -180,6 +184,29 @@ public sealed partial class SideViewModel : ObservableObject
     {
         Activate();
         return _panel is null ? [] : ContextMenuModel.ForEmptySpace(_main);
+    }
+
+    /// <summary>A right click on a tab: activates this side and that tab (as a click does), so the menu acts on the
+    /// tab under the pointer. Empty when the tab is not one of this side's.</summary>
+    public IReadOnlyList<ContextMenuItem> ContextMenuForTab(TabViewModel tab)
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        if (_panel is null || !Tabs.Tabs.Contains(tab)) return [];
+        Activate();
+        Tabs.Activate(tab);
+        return ContextMenuModel.ForTab(_main);
+    }
+
+    /// <summary>The tabs' close buttons: <see cref="CloseTab"/> with the button's tab.</summary>
+    public IRelayCommand<TabViewModel> CloseTabCommand { get; }
+
+    /// <summary>A tab's close button: activates this side and closes that tab, unless
+    /// <see cref="PanelTabsViewModel.CanClose"/> refuses (a pinned tab, the only one). True when it was closed.</summary>
+    public bool CloseTab(TabViewModel tab)
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        Activate();
+        return Tabs.Close(tab);
     }
 
     /// <summary>What a drop at row <paramref name="rowIndex"/> (or below the rows, -1) would go into, when the

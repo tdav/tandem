@@ -39,7 +39,9 @@ public static class MainMenu
 
     private static readonly string[] WindowCommands =
     [
-        CommandIds.TabNew, CommandIds.TabClose, CommandIds.TabNext, CommandIds.TabPrev,
+        CommandIds.TabNew, CommandIds.TabDuplicate, CommandIds.TabClose, CommandIds.TabCloseOthers, "-",
+        CommandIds.TabTogglePin, "-",
+        CommandIds.TabNext, CommandIds.TabPrev,
     ];
 
     /// <summary>The resource key of a command's menu label: "Menu_" and the id with '.' as '_'.</summary>
@@ -53,8 +55,29 @@ public static class MainMenu
         menu.Items.Add(Submenu("Menu_Selection", Commands(main, SelectionCommands)));
         menu.Items.Add(Submenu("Menu_Go", Commands(main, GoCommands)));
         menu.Items.Add(Submenu("Menu_View", ViewItems(main)));
-        menu.Items.Add(Submenu("Menu_Window", Commands(main, WindowCommands)));
+        menu.Items.Add(Submenu("Menu_Window", WindowItems(main)));
         return menu;
+    }
+
+    /// <summary>The tab commands; the pin item reads "Unpin Tab" while the active tab is pinned.</summary>
+    private static IEnumerable<NativeMenuItemBase> WindowItems(MainViewModel main)
+    {
+        var items = Commands(main, WindowCommands).ToList();
+        var pin = items.OfType<NativeMenuItem>().Single(i => i.CommandParameter as string == CommandIds.TabTogglePin);
+
+        void Update() => pin.Header = Loc.Get(main.Workspace.IsLoaded && main.ActiveSide.Tabs.Active.IsPinned
+            ? "Menu_UnpinTab"
+            : LabelKey(CommandIds.TabTogglePin));
+
+        Update();
+        main.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainViewModel.ActiveSide)) Update();
+        };
+        // Raised for the active tab changing (swaps included) and for a tab's pin.
+        main.Workspace.Left.StateChanged += (_, _) => Update();
+        main.Workspace.Right.StateChanged += (_, _) => Update();
+        return items;
     }
 
     private static NativeMenuItem Submenu(string labelKey, IEnumerable<NativeMenuItemBase> items)

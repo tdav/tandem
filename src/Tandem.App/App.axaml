@@ -45,6 +45,12 @@
                     <SolidColorBrush x:Key="Tandem.DropTargetBorder" Color="#FF4ADE80" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
+
+            <!-- Small glyphs drawn as vector paths (16×16 design box); views colour them with the brushes above. -->
+            <!-- A push pin, filled: a pinned tab. -->
+            <StreamGeometry x:Key="Tandem.PinGlyph">M5,1 L11,1 L11,2.5 L10,2.5 L10,7 L12.5,9.5 L12.5,10.5 L8.6,10.5 L8,15.5 L7.4,10.5 L3.5,10.5 L3.5,9.5 L6,7 L6,2.5 L5,2.5 Z</StreamGeometry>
+            <!-- A cross, stroked: a tab's close button. -->
+            <StreamGeometry x:Key="Tandem.CloseGlyph">M3,3 L13,13 M13,3 L3,13</StreamGeometry>
         </ResourceDictionary>
     </Application.Resources>
 

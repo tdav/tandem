@@ -358,6 +358,18 @@
   <data name="Menu_tab_prev" xml:space="preserve">
     <value>Previous Tab</value>
   </data>
+  <data name="Menu_tab_togglePin" xml:space="preserve">
+    <value>Pin Tab</value>
+  </data>
+  <data name="Menu_UnpinTab" xml:space="preserve">
+    <value>Unpin Tab</value>
+  </data>
+  <data name="Menu_tab_duplicate" xml:space="preserve">
+    <value>Duplicate Tab</value>
+  </data>
+  <data name="Menu_tab_closeOthers" xml:space="preserve">
+    <value>Close Other Tabs</value>
+  </data>
   <data name="Menu_favorites_show" xml:space="preserve">
     <value>Favorites…</value>
   </data>
@@ -746,6 +758,24 @@ Details were written to {1}.</value>
   </data>
   <data name="Context_Refresh" xml:space="preserve">
     <value>Refresh</value>
+  </data>
+  <data name="Context_TabNew" xml:space="preserve">
+    <value>New Tab</value>
+  </data>
+  <data name="Context_TabDuplicate" xml:space="preserve">
+    <value>Duplicate</value>
+  </data>
+  <data name="Context_TabPin" xml:space="preserve">
+    <value>Pin</value>
+  </data>
+  <data name="Context_TabUnpin" xml:space="preserve">
+    <value>Unpin</value>
+  </data>
+  <data name="Context_TabClose" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="Context_TabCloseOthers" xml:space="preserve">
+    <value>Close Others</value>
   </data>
 
   <!-- The properties dialog (PropertiesViewModel, PropertiesDialog) -->

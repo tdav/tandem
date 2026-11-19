@@ -70,8 +70,24 @@
                 </ItemsPanelTemplate>
             </ListBox.ItemsPanel>
             <ListBox.ItemTemplate>
+                <!-- A pinned tab shows a pin and has no close button. -->
                 <DataTemplate x:DataType="vm:TabViewModel">
-                    <TextBlock Text="{Binding Title}" MaxWidth="180" TextTrimming="CharacterEllipsis" />
+                    <DockPanel>
+                        <Path x:Name="PinGlyph" DockPanel.Dock="Left" IsVisible="{Binding IsPinned}"
+                              Data="{StaticResource Tandem.PinGlyph}" Fill="{DynamicResource Tandem.SecondaryForeground}"
+                              Stretch="Uniform" Width="8" Height="11" Margin="0,0,5,0" VerticalAlignment="Center" />
+                        <Button x:Name="CloseTabButton" DockPanel.Dock="Right" Classes="flat" Padding="3"
+                                Margin="6,0,-6,0" IsVisible="{Binding !IsPinned}"
+                                ToolTip.Tip="{loc:Tr Key=Menu_tab_close}"
+                                Command="{Binding $parent[v:PanelView].((vm:SideViewModel)DataContext).CloseTabCommand}"
+                                CommandParameter="{Binding}">
+                            <Path Data="{StaticResource Tandem.CloseGlyph}"
+                                  Stroke="{DynamicResource Tandem.SecondaryForeground}" StrokeThickness="1.5"
+                                  Stretch="Uniform" Width="7" Height="7" />
+                        </Button>
+                        <TextBlock x:Name="TabTitle" Text="{Binding Title}" MaxWidth="180"
+                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                    </DockPanel>
                 </DataTemplate>
             </ListBox.ItemTemplate>
         </ListBox>
