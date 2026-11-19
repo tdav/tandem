@@ -14,8 +14,9 @@ public static class EntrySorter
 {
     public static IComparer<FileEntry> Create(SortSpec spec) => new EntryComparer(spec);
 
-    /// <summary>The case- and normalization-insensitive form of a name used for comparing and matching.</summary>
-    internal static string Fold(string name) => name.Normalize(NormalizationForm.FormC).ToUpperInvariant();
+    /// <summary>The case- and normalization-insensitive form of a name used for comparing and matching: form C,
+    /// upper case (invariant). Two names that differ only in case or normalization form fold to the same string.</summary>
+    public static string Fold(string name) => name.Normalize(NormalizationForm.FormC).ToUpperInvariant();
 
     private sealed class FoldedKeys(string name, string extension)
     {

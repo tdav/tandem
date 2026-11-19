@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Tandem.App.Resources;
 using Tandem.App.Services;
+using Tandem.Core.Listing;
 using Tandem.Core.Vfs;
 
 namespace Tandem.App.ViewModels;
@@ -18,6 +19,8 @@ public sealed partial class EntryRowViewModel : ObservableObject
     private string? _sizeText;
     private string? _dateText;
     private string? _modeText;
+    private string? _foldedName;
+    private bool _isSelected;
 
     public EntryRowViewModel(FileEntry entry)
     {
@@ -59,8 +62,41 @@ public sealed partial class EntryRowViewModel : ObservableObject
     /// <summary>The permissions as nine characters, e.g. "rwxr-xr-x"; empty when the entry has no mode.</summary>
     public string ModeText => _modeText ??= Entry!.Mode is { } mode ? FormatMode(mode) : "";
 
-    [ObservableProperty]
-    public partial bool IsSelected { get; set; }
+    /// <summary>Whether the row is marked. The ".." row refuses to be marked: setting true leaves it false. A change
+    /// made here (e.g. by the view's binding) is reported to the panel listing the row, which keeps its totals.</summary>
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set
+        {
+            if (SetSelectedSilently(value)) SelectionChanged?.Invoke(this);
+        }
+    }
+
+    /// <summary>The panel whose rows include this one hears every change made through <see cref="IsSelected"/>;
+    /// null while the row is not shown. UI thread only.</summary>
+    internal Action<EntryRowViewModel>? SelectionChanged { get; set; }
+
+    /// <summary>Changes the mark without reporting to the panel, for the panel's own bulk changes; still raises
+    /// <see cref="ObservableObject.PropertyChanged"/> for the view. True when the mark changed.</summary>
+    internal bool SetSelectedSilently(bool value)
+    {
+        if (value && IsParentLink)
+        {
+            OnPropertyChanged(nameof(IsSelected)); // a binding that pushed true reads false back
+            return false;
+        }
+        if (_isSelected == value) return false;
+        _isSelected = value;
+        OnPropertyChanged(nameof(IsSelected));
+        return true;
+    }
+
+    /// <summary>The bytes the row adds to a selection's size: the size of a file, 0 for anything directory-like.</summary>
+    internal long SelectableBytes => IsDirectoryLike ? 0 : Entry!.Size;
+
+    /// <summary><see cref="Name"/> folded as the sorter folds it, for matching typed text.</summary>
+    internal string FoldedName => _foldedName ??= EntrySorter.Fold(Name);
 
     private static string FormatMode(UnixFileMode mode) => string.Create(9, mode, static (chars, m) =>
     {

@@ -64,14 +64,14 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
     /// collection Reset per change of the listing.</summary>
     public IReadOnlyList<EntryRowViewModel> Rows => _rows;
 
-    /// <summary>The row under the cursor; -1 when there are no rows. Values outside the rows are clamped.</summary>
+    /// <summary>The row under the cursor; -1 when there are no rows. Values outside the rows are clamped. Moving it
+    /// ends a quick search.</summary>
     public int CursorIndex
     {
         get => _cursorIndex;
         set
         {
-            var clamped = _rows.Count == 0 ? -1 : Math.Clamp(value, 0, _rows.Count - 1);
-            if (SetProperty(ref _cursorIndex, clamped)) OnPropertyChanged(nameof(CursorRow));
+            if (SetCursor(value)) EndQuickSearch();
         }
     }
 
@@ -245,6 +245,15 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>Moves the cursor (clamped) without touching the quick search; true when it moved.</summary>
+    private bool SetCursor(int index)
+    {
+        var clamped = _rows.Count == 0 ? -1 : Math.Clamp(index, 0, _rows.Count - 1);
+        if (!SetProperty(ref _cursorIndex, clamped, nameof(CursorIndex))) return false;
+        OnPropertyChanged(nameof(CursorRow));
+        return true;
+    }
+
     private bool IsCurrent(int version) => version == _loadVersion && !_disposed;
 
     /// <summary>Background: subscribes to changes (before reading, so no change is missed), reads the folder and
@@ -319,11 +328,13 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
             DisposeInBackground(oldWatch);
             CurrentPath = path;
             _hasPath = true;
+            EndQuickSearch();
             cursor = focusName is null ? 0 : Math.Max(IndexOf(rows, focusName), 0);
         }
         else
         {
-            // Keep the cursor and the selection on the same names; a vanished cursor name keeps its position.
+            // Keep the cursor and the selection on the same names; a vanished cursor name keeps its position. A
+            // navigation keeps no selection: its rows are new.
             var cursorName = CursorRow?.Name;
             var index = cursorName is null ? -1 : IndexOf(rows, cursorName);
             cursor = index >= 0 ? index : _cursorIndex;
@@ -355,10 +366,12 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
 
     private void Publish(IReadOnlyList<EntryRowViewModel> rows, int cursor)
     {
+        AttachRows(rows);
         _rows.Replace(rows);
         _cursorIndex = rows.Count == 0 ? -1 : Math.Clamp(cursor, 0, rows.Count - 1);
         OnPropertyChanged(nameof(CursorIndex));
         OnPropertyChanged(nameof(CursorRow));
+        RaiseListingTotalsChanged();
     }
 
     private void FinishLoading()
