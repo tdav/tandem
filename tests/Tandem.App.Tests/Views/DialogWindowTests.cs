@@ -4,6 +4,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Tandem.App.Resources;
 using Tandem.App.Services;
 using Tandem.App.Views.Dialogs;
 using Tandem.Core.Operations;
@@ -129,6 +130,30 @@ public class DialogWindowTests : LanguageTestBase
         Press(dialog, Key.Enter);
 
         Assert.False(await Finish(asking));
+        owner.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task Enter_in_the_quit_dialog_stays_and_the_other_button_stops_and_quits()
+    {
+        var (owner, service) = Start();
+        var asking = service.ConfirmQuitAsync(2);
+        var dialog = Dialog<ConfirmQuitDialog>(owner);
+        Assert.Equal("Stay", ActionButtons(dialog).Single(b => b.IsDefault).Name);
+        Assert.Contains("(2 operations)", dialog.GetVisualDescendants().OfType<TextBlock>()
+            .Single(t => t.Name == "Message").Text);
+
+        Press(dialog, Key.Enter);
+        Assert.False(await Finish(asking));
+
+        Loc.SetLanguage("ru");
+        asking = service.ConfirmQuitAsync(1);
+        dialog = Dialog<ConfirmQuitDialog>(owner);
+        var quit = ActionButtons(dialog).Single(b => b.Name == "StopAndQuit");
+        Assert.Equal("Остановить и выйти", quit.Content);
+        Assert.Equal("Остаться", ActionButtons(dialog).Single(b => b.Name == "Stay").Content);
+        quit.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Assert.True(await Finish(asking));
         owner.Close();
     }
 

@@ -905,4 +905,16 @@
   <data name="Output_LineShortened" xml:space="preserve">
     <value>… (строка сокращена)</value>
   </data>
+  <data name="Quit_Title" xml:space="preserve">
+    <value>Выход из Tandem</value>
+  </data>
+  <data name="Quit_Message" xml:space="preserve">
+    <value>Файловые операции ещё выполняются ({0}). Остановить их и выйти? Недописанные файлы будут удалены, уже скопированные останутся.</value>
+  </data>
+  <data name="Button_StopAndQuit" xml:space="preserve">
+    <value>Остановить и выйти</value>
+  </data>
+  <data name="Button_Stay" xml:space="preserve">
+    <value>Остаться</value>
+  </data>
 </root>

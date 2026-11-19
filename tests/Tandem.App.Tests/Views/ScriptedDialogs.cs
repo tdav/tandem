@@ -40,6 +40,8 @@ internal class ScriptedDialogs : IDialogService
     public List<PropertiesViewModel> PropertiesRequests { get; } = [];
     public List<string> ValidationErrors { get; } = [];
     public List<string> Unscripted { get; } = [];
+    public Queue<bool> QuitAnswers { get; } = new();
+    public List<int> QuitRequests { get; } = [];
 
     /// <summary>Every dialog asked for, in order, by kind ("copyMove", "name", "delete", "mask", "conflict", "error",
     /// "summary", "message", "properties").</summary>
@@ -133,6 +135,13 @@ internal class ScriptedDialogs : IDialogService
     {
         Record("summary", () => Summaries.Add(skipped));
         return ThrowOnSummary is { } error ? Task.FromException(error) : Task.CompletedTask;
+    }
+
+    /// <summary>Unscripted, it stays (the dialog's default).</summary>
+    public virtual Task<bool> ConfirmQuitAsync(int operationCount)
+    {
+        Record("quit", () => QuitRequests.Add(operationCount));
+        return Task.FromResult(TryTake(QuitAnswers, "quit", out var answer) && answer);
     }
 
     public virtual Task ShowMessageAsync(string text, string? detail = null)

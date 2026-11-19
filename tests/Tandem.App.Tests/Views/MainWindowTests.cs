@@ -585,6 +585,34 @@ public class MainWindowTests : LanguageTestBase
     }
 
     [AvaloniaFact]
+    public async Task Closing_while_an_operation_runs_asks_first_and_stays_or_stops_and_closes()
+    {
+        await using var app = await TestApp.StartAsync();
+        var window = app.Window!;
+        var op = new Tandem.App.Tests.ViewModels.GateOperation();
+        _ = app.Main.Services.Operations.Enqueue(op, runImmediately: true);
+        await op.Started;
+        var closed = false;
+        window.Closed += (_, _) => closed = true;
+
+        app.Dialogs.QuitAnswers.Enqueue(false);
+        window.Close();
+        await TestApp.WaitUntil(() => { app.Pump(); return app.Dialogs.QuitRequests.Count == 1; });
+        app.Pump();
+
+        Assert.False(closed);
+        Assert.True(window.IsVisible);
+        Assert.Equal(Tandem.Core.Operations.OperationState.Running, op.State);
+
+        app.Dialogs.QuitAnswers.Enqueue(true);
+        window.Close();
+        await TestApp.WaitUntil(() => { app.Pump(); return closed; });
+
+        Assert.Equal([1, 1], app.Dialogs.QuitRequests);
+        Assert.Equal(Tandem.Core.Operations.OperationState.Cancelled, (await op.Completion).State);
+    }
+
+    [AvaloniaFact]
     public async Task Off_screen_placement_is_centred_with_the_default_size()
     {
         var state = AppState.Default(TestApp.Home) with

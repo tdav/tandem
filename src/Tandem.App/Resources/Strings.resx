@@ -913,4 +913,16 @@ Details were written to {1}.</value>
   <data name="Output_LineShortened" xml:space="preserve">
     <value>… (line shortened)</value>
   </data>
+  <data name="Quit_Title" xml:space="preserve">
+    <value>Quit Tandem</value>
+  </data>
+  <data name="Quit_Message" xml:space="preserve">
+    <value>File operations are still running ({0}). Stop them and quit? Unfinished files are removed; files already copied stay.</value>
+  </data>
+  <data name="Button_StopAndQuit" xml:space="preserve">
+    <value>Stop and Quit</value>
+  </data>
+  <data name="Button_Stay" xml:space="preserve">
+    <value>Stay</value>
+  </data>
 </root>

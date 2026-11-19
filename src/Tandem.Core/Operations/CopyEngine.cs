@@ -582,7 +582,10 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
         }
 
         var backup = SiblingPath(destination, BackupSuffix);
-        // A backup left by an earlier crash is stale: the destination it backed up is still in place.
+        // Reached only with a destination in place (the conflict was asked about it), so a backup left over from an
+        // earlier attempt is not the only copy of this name: it is an older version, set aside by an overwrite that
+        // was interrupted (a crash between the two renames leaves the old file only there, and no file under the
+        // real name until the user copies again). Removing it here keeps the older version from piling up.
         await DeleteQuietlyAsync(backup, target).ConfigureAwait(false);
         await target.MoveAsync(destination, backup, ct).ConfigureAwait(false);
         try

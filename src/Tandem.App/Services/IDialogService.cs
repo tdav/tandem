@@ -54,6 +54,10 @@ public interface IDialogService
     /// and closes the dialog when that succeeds. True when the changes were applied, false when cancelled.</summary>
     Task<bool> ShowPropertiesAsync(PropertiesViewModel properties);
 
+    /// <summary>The app is asked to quit while <paramref name="operationCount"/> file operations are running or
+    /// waiting: true to stop them and quit. "Stay" is the default button.</summary>
+    Task<bool> ConfirmQuitAsync(int operationCount);
+
     /// <summary>A message; <paramref name="detail"/>, when given, is secondary (e.g. the system's own words).</summary>
     Task ShowMessageAsync(string text, string? detail = null);
 }

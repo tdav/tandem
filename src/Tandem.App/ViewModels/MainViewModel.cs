@@ -257,6 +257,43 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Workspace.Dispose();
     }
 
+    /// <summary>How long quitting waits for stopped operations to clean up (remove their part files) before it
+    /// goes ahead anyway.</summary>
+    public static readonly TimeSpan StopOperationsTimeout = TimeSpan.FromSeconds(10);
+
+    /// <summary>True while file operations are running or waiting in the queue.</summary>
+    public bool HasOperations => Services.Operations.Operations.Count > 0;
+
+    /// <summary>The window (or the app) is asked to close. With no file operation running or waiting, true at once.
+    /// Otherwise the user is asked whether to stop them and quit: on "stay", false; on "stop", every operation is
+    /// cancelled, their open questions are answered as cancelled, and their ends are awaited (at most
+    /// <paramref name="timeout"/>, <see cref="StopOperationsTimeout"/> by default) so each removes its unfinished part
+    /// file; then true.</summary>
+    public async Task<bool> ConfirmCloseAsync(TimeSpan? timeout = null)
+    {
+        var operations = Services.Operations.Operations;
+        if (operations.Count == 0) return true;
+        if (!await Services.Dialogs.ConfirmQuitAsync(operations.Count)) return false;
+
+        operations = Services.Operations.Operations; // some may have ended while the question was open
+        foreach (var operation in operations) operation.Cancel();
+        Interaction.Close();
+        var ended = Task.WhenAll(operations.Select(o => (Task)o.Completion));
+        try
+        {
+            await ended.WaitAsync(timeout ?? StopOperationsTimeout);
+        }
+        catch (TimeoutException)
+        {
+            Services.Log.Write(new TimeoutException("File operations did not stop in time before quitting."), "quit");
+        }
+        catch (Exception)
+        {
+            // An operation that failed has ended all the same.
+        }
+        return true;
+    }
+
     /// <summary>The main window is closing: questions of running operations are answered as cancelled, so no
     /// operation waits for a dialog that will never be shown, Quick Look closes, and a command still running in
     /// the command line is killed.</summary>

@@ -7,6 +7,7 @@ using Tandem.App.Resources;
 using Tandem.App.Services;
 using Tandem.App.Tests.Views;
 using Tandem.App.ViewModels;
+using Tandem.Core.Operations;
 using Tandem.Core.Platform;
 using Tandem.Core.Settings;
 using Tandem.Core.Vfs;
@@ -277,6 +278,92 @@ public class MainViewModelTests : LanguageTestBase
         finally
         {
             Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task Closing_without_operations_asks_nothing()
+    {
+        await using var app = await TestApp.StartAsync(show: false);
+
+        Assert.True(await app.Main.ConfirmCloseAsync());
+        Assert.Empty(app.Dialogs.QuitRequests);
+    }
+
+    [AvaloniaFact]
+    public async Task Closing_with_a_running_operation_asks_and_staying_keeps_it_running()
+    {
+        await using var app = await TestApp.StartAsync(show: false);
+        var op = new GateOperation();
+        _ = app.Main.Services.Operations.Enqueue(op, runImmediately: true);
+        await op.Started;
+        app.Dialogs.QuitAnswers.Enqueue(false);
+
+        Assert.False(await app.Main.ConfirmCloseAsync());
+
+        Assert.Equal([1], app.Dialogs.QuitRequests);
+        Assert.Equal(OperationState.Running, op.State);
+        op.Release();
+        Assert.Equal(OperationState.Completed, (await op.Completion).State);
+    }
+
+    [AvaloniaFact]
+    public async Task Closing_and_stopping_cancels_running_and_queued_operations_and_waits_for_them()
+    {
+        await using var app = await TestApp.StartAsync(show: false);
+        var running = new GateOperation("v", "a.txt");
+        var queued = new GateOperation("v", "b.txt"); // same volume: waits for the first
+        _ = app.Main.Services.Operations.Enqueue(running);
+        _ = app.Main.Services.Operations.Enqueue(queued);
+        await running.Started;
+        app.Dialogs.QuitAnswers.Enqueue(true);
+
+        Assert.True(await app.Main.ConfirmCloseAsync());
+
+        Assert.Equal([2], app.Dialogs.QuitRequests);
+        Assert.True(running.Completion.IsCompleted); // awaited, not just asked to stop
+        Assert.Equal(OperationState.Cancelled, (await running.Completion).State);
+        Assert.Equal(OperationState.Cancelled, (await queued.Completion).State);
+    }
+
+    [AvaloniaFact]
+    public async Task Closing_waits_for_stopped_operations_only_so_long()
+    {
+        await using var app = await TestApp.StartAsync(show: false);
+        var stubborn = new StubbornOperation();
+        _ = app.Main.Services.Operations.Enqueue(stubborn, runImmediately: true);
+        await stubborn.Started;
+        app.Dialogs.QuitAnswers.Enqueue(true);
+
+        Assert.True(await app.Main.ConfirmCloseAsync(TimeSpan.FromMilliseconds(100)));
+
+        Assert.False(stubborn.Completion.IsCompleted);
+        Assert.Contains("did not stop in time", File.ReadAllText(app.LogFile));
+        stubborn.Release();
+        await stubborn.Completion;
+    }
+
+    /// <summary>An operation that does not react to cancellation until released.</summary>
+    private sealed class StubbornOperation : FileOperation
+    {
+        private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public override OperationKind Kind => OperationKind.Copy;
+        public override int ItemCount => 1;
+        public override IReadOnlyList<VfsPath> Sources { get; } = [VfsPath.Local("/src/a.txt")];
+        public override VfsPath? Destination => VfsPath.Local("/dst");
+        public Task Started => _started.Task;
+        public void Release() => _release.TrySetResult();
+
+        public override Task<IReadOnlyCollection<string>> GetVolumeKeysAsync(CancellationToken ct) =>
+            Task.FromResult<IReadOnlyCollection<string>>(["stubborn"]);
+
+        protected override async Task ExecuteAsync(CancellationToken ct)
+        {
+            SetState(OperationState.Running);
+            _started.TrySetResult();
+            await _release.Task;
         }
     }
 }

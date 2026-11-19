@@ -24,6 +24,8 @@ public partial class MainWindow : Window
     private KeyModifiers _modifiers;
     private (PixelPoint Position, double Width, double Height)? _normalBounds;
     private bool _placementApplied;
+    private bool _closeConfirmed;
+    private bool _confirmingClose;
     private ProgressWindow? _progress;
     private double _outputHeight = DefaultOutputHeight;
 
@@ -75,13 +77,45 @@ public partial class MainWindow : Window
             _placementApplied = true;
             FocusActivePanel();
         };
-        Closing += (_, _) =>
-        {
-            RecordPlacement();
-            main.Workspace.Save();
-            main.OnWindowClosing();
-        };
+        Closing += OnClosing;
         Closed += (_, _) => Detach();
+    }
+
+    /// <summary>Closing the window, by the user or by quitting the app (Cmd+Q, the Dock, the system: the app's
+    /// shutdown closes this window first). While file operations run, the close is held back and the user asked
+    /// (<see cref="MainViewModel.ConfirmCloseAsync"/>); once the operations are stopped the window closes again for
+    /// real. Then the placement and the workspace are saved.</summary>
+    private void OnClosing(object? sender, WindowClosingEventArgs e)
+    {
+        if (_main is not { } main) return;
+        if (!_closeConfirmed && main.HasOperations)
+        {
+            e.Cancel = true;
+            if (!_confirmingClose) _ = ConfirmCloseAsync(main);
+            return;
+        }
+        RecordPlacement();
+        main.Workspace.Save();
+        main.OnWindowClosing();
+    }
+
+    private async Task ConfirmCloseAsync(MainViewModel main)
+    {
+        _confirmingClose = true;
+        try
+        {
+            if (!await main.ConfirmCloseAsync()) return;
+            _closeConfirmed = true;
+            Close();
+        }
+        catch (Exception failure)
+        {
+            main.ReportFailure(failure);
+        }
+        finally
+        {
+            _confirmingClose = false;
+        }
     }
 
     /// <summary>The left panel's share of the panels' width.</summary>

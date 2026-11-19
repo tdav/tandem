@@ -22,6 +22,21 @@ public sealed class ConfirmDeleteDialog : DialogWindow
     }
 }
 
+/// <summary>Quitting while file operations run: true to stop them and quit. "Stay" is the default button, and closing
+/// the dialog any other way stays too.</summary>
+public sealed class ConfirmQuitDialog : DialogWindow
+{
+    public ConfirmQuitDialog(int operationCount) : base(Loc.Get("Quit_Title"))
+    {
+        var quit = MakeButton(Loc.Get("Button_StopAndQuit"), isDefault: false, name: "StopAndQuit");
+        quit.Click += (_, _) => Close(true);
+        var stay = MakeButton(Loc.Get("Button_Stay"), isDefault: true, isCancel: true, name: "Stay");
+        stay.Click += (_, _) => Close(false);
+        SetContent(stay, [Text(Loc.Format("Quit_Message", Loc.Count("Count_Operations", operationCount)),
+            name: "Message")], quit, stay);
+    }
+}
+
 /// <summary>The destination exists: both files' size and date, the choices and "apply to all". Closing the window
 /// any other way cancels the operation.</summary>
 public sealed class ConflictDialog : DialogWindow

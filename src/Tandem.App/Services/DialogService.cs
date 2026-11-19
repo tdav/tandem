@@ -52,6 +52,9 @@ public sealed class DialogService : IDialogService
     public async Task<bool> ShowPropertiesAsync(PropertiesViewModel properties) =>
         await ShowAsync<object>(new PropertiesDialog(properties)) is true;
 
+    public async Task<bool> ConfirmQuitAsync(int operationCount) =>
+        await ShowAsync<object>(new ConfirmQuitDialog(operationCount)) is true;
+
     public Task ShowMessageAsync(string text, string? detail = null) =>
         MessageDialog.ShowAsync(Owner, "Tandem", string.IsNullOrWhiteSpace(detail) ? text : text + "\n\n" + detail);
 
