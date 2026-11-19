@@ -18,7 +18,7 @@ namespace Tandem.App.Views;
 /// Drag and drop: pressing a row of a local panel and moving past a few pixels drags its items (the marked ones when
 /// the row is marked) to the other panel or to Finder, offering copy and move; files dragged onto the list from
 /// Finder or the other panel go, through the copy/move dialog, into the folder row under the pointer or the panel's
-/// folder (Cmd held: move). The target is highlighted while the drag is over it.</summary>
+/// folder; the dialog asks whether to copy or move. The target is highlighted while the drag is over it.</summary>
 public partial class FileListView : UserControl
 {
     private const string DropTargetClass = "dropTarget";

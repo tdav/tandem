@@ -814,4 +814,49 @@ Details were written to {1}.</value>
   <data name="Shell_OpenAccessSettings" xml:space="preserve">
     <value>Open access settings</value>
   </data>
+  <data name="CommandLine_Unavailable" xml:space="preserve">
+    <value>The command line is not available for this source</value>
+  </data>
+  <data name="CommandLine_Running" xml:space="preserve">
+    <value>Running…</value>
+  </data>
+  <data name="CommandLine_StartFailed" xml:space="preserve">
+    <value>Could not start the command: {0}</value>
+  </data>
+  <data name="CommandLine_Failed" xml:space="preserve">
+    <value>The command could not be followed to the end: {0}</value>
+  </data>
+  <data name="CommandLine_CdFailed" xml:space="preserve">
+    <value>Cannot open the folder {0}: {1}</value>
+  </data>
+  <data name="CommandLine_CdPreviousUnsupported" xml:space="preserve">
+    <value>“cd -” is not supported</value>
+  </data>
+  <data name="CommandLine_CdUserHomeUnsupported" xml:space="preserve">
+    <value>Paths like “~user” are not supported</value>
+  </data>
+  <data name="CommandLine_CdUnterminated" xml:space="preserve">
+    <value>The cd path has an unclosed quote or ends in a backslash</value>
+  </data>
+  <data name="CommandLine_CdTooManyArguments" xml:space="preserve">
+    <value>cd takes one folder; put a name with spaces in quotes</value>
+  </data>
+  <data name="Output_ExitCode" xml:space="preserve">
+    <value>The command finished with code {0}</value>
+  </data>
+  <data name="Output_EarlierDropped" xml:space="preserve">
+    <value>Earlier output was dropped</value>
+  </data>
+  <data name="Output_Kill" xml:space="preserve">
+    <value>Kill</value>
+  </data>
+  <data name="Output_Clear" xml:space="preserve">
+    <value>Clear</value>
+  </data>
+  <data name="Output_Close" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="Output_Title" xml:space="preserve">
+    <value>Output</value>
+  </data>
 </root>

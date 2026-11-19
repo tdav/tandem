@@ -81,7 +81,7 @@ internal sealed class TestApp : IAsyncDisposable
         IDialogService? dialogs = null, ITrash? trash = null, bool trashCapable = false,
         ProviderCapabilities removedCapabilities = ProviderCapabilities.None, IShellIntegration? shell = null,
         IQuickLook? quickLook = null, IFileMetadataService? metadata = null,
-        IReadOnlyList<IFileSystemProvider>? extraProviders = null)
+        IReadOnlyList<IFileSystemProvider>? extraProviders = null, IProcessRunner? processes = null)
     {
         var providers = new ProviderRegistry();
         var added = trashCapable ? ProviderCapabilities.Trash : ProviderCapabilities.None;
@@ -92,7 +92,7 @@ internal sealed class TestApp : IAsyncDisposable
         var platform = new FakePlatform();
         return new AppServices(providers, volumes, shell ?? platform, quickLook ?? platform, metadata,
             trash ?? platform,
-            new InMemoryNativeCopy(fs), platform, new OperationQueue(), new UnrestrictedAccessBroker(),
+            new InMemoryNativeCopy(fs), processes ?? platform, new OperationQueue(), new UnrestrictedAccessBroker(),
             new ErrorLog(logFile), dialogs ?? new ScriptedDialogs());
     }
 
@@ -102,7 +102,8 @@ internal sealed class TestApp : IAsyncDisposable
         Func<TimeSpan, CancellationToken, Task>? progressWindowDelay = null,
         ProviderCapabilities removedCapabilities = ProviderCapabilities.None,
         Func<TimeSpan, CancellationToken, Task>? quickLookDelay = null,
-        IReadOnlyList<IFileSystemProvider>? extraProviders = null, bool withMetadata = true)
+        IReadOnlyList<IFileSystemProvider>? extraProviders = null, bool withMetadata = true,
+        IProcessRunner? processes = null)
     {
         fs ??= DefaultFileSystem();
         var stateDirectory = Path.Combine(Path.GetTempPath(), "tandem-window-tests-" + Guid.NewGuid().ToString("N"));
@@ -111,7 +112,7 @@ internal sealed class TestApp : IAsyncDisposable
         var app = new TestApp(fs, new FakeVolumeService(), stateDirectory);
         app.Main = await Composition.StartAsync(
             Services(fs, app.Volumes, app.LogFile, app.Dialogs, app.Trash, trashCapable, removedCapabilities,
-                app.Shell, app.QuickLook, withMetadata ? app.Metadata : null, extraProviders),
+                app.Shell, app.QuickLook, withMetadata ? app.Metadata : null, extraProviders, processes),
             stateDirectory, Home,
             autosaveDelay: (_, ct) => Task.Delay(Timeout.Infinite, ct),
             progressWindowDelay: progressWindowDelay ?? ((_, ct) => Task.Delay(Timeout.Infinite, ct)),

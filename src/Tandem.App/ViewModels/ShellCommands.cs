@@ -80,7 +80,7 @@ public sealed class ShellCommands : IDisposable
     }
 
     /// <summary>"Open With" was chosen from the main menu: the view shows the applications of
-    /// <see cref="GetOpenWithApps"/> at the cursor.</summary>
+    /// <see cref="QueryOpenWithAsync"/> at the cursor.</summary>
     public event EventHandler? OpenWithMenuRequested;
 
     /// <summary>

@@ -1,0 +1,20 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Tandem.App.ViewModels"
+             xmlns:loc="using:Tandem.App.Resources"
+             x:Class="Tandem.App.Views.CommandLineView"
+             x:DataType="vm:CommandLineViewModel">
+    <!-- The prompt (the active panel's folder), the field, and while a command runs, a note saying so. -->
+    <Border Background="{DynamicResource Tandem.BarBackground}" BorderBrush="{DynamicResource Tandem.DividerBrush}"
+            BorderThickness="0,1,0,0" Padding="6,3">
+        <DockPanel>
+            <TextBlock DockPanel.Dock="Left" Classes="secondary" VerticalAlignment="Center" Margin="0,0,6,0"
+                       MaxWidth="360" TextTrimming="LeadingCharacterEllipsis"
+                       Text="{Binding Prompt, StringFormat='{}{0}&gt;'}" />
+            <TextBlock x:Name="RunningNote" DockPanel.Dock="Right" Classes="secondary" VerticalAlignment="Center"
+                       Margin="6,0,0,0" Text="{loc:Tr Key=CommandLine_Running}" IsVisible="{Binding IsRunning}" />
+            <TextBox x:Name="CommandLineBox" MinHeight="0" Padding="4,1" Text="{Binding Text}"
+                     IsEnabled="{Binding IsAvailable}" PlaceholderText="{Binding Placeholder}" />
+        </DockPanel>
+    </Border>
+</UserControl>

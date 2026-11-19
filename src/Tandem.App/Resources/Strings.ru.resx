@@ -806,4 +806,49 @@
   <data name="Shell_OpenAccessSettings" xml:space="preserve">
     <value>Открыть настройки доступа</value>
   </data>
+  <data name="CommandLine_Unavailable" xml:space="preserve">
+    <value>Командная строка недоступна для этого источника</value>
+  </data>
+  <data name="CommandLine_Running" xml:space="preserve">
+    <value>Выполняется…</value>
+  </data>
+  <data name="CommandLine_StartFailed" xml:space="preserve">
+    <value>Не удалось запустить команду: {0}</value>
+  </data>
+  <data name="CommandLine_Failed" xml:space="preserve">
+    <value>Не удалось дождаться завершения команды: {0}</value>
+  </data>
+  <data name="CommandLine_CdFailed" xml:space="preserve">
+    <value>Не удалось открыть папку {0}: {1}</value>
+  </data>
+  <data name="CommandLine_CdPreviousUnsupported" xml:space="preserve">
+    <value>«cd -» не поддерживается</value>
+  </data>
+  <data name="CommandLine_CdUserHomeUnsupported" xml:space="preserve">
+    <value>Пути вида «~пользователь» не поддерживаются</value>
+  </data>
+  <data name="CommandLine_CdUnterminated" xml:space="preserve">
+    <value>В пути для cd не закрыта кавычка или он заканчивается обратной косой чертой</value>
+  </data>
+  <data name="CommandLine_CdTooManyArguments" xml:space="preserve">
+    <value>cd принимает одну папку; имя с пробелами заключите в кавычки</value>
+  </data>
+  <data name="Output_ExitCode" xml:space="preserve">
+    <value>Команда завершена с кодом {0}</value>
+  </data>
+  <data name="Output_EarlierDropped" xml:space="preserve">
+    <value>Более ранний вывод удалён</value>
+  </data>
+  <data name="Output_Kill" xml:space="preserve">
+    <value>Прервать</value>
+  </data>
+  <data name="Output_Clear" xml:space="preserve">
+    <value>Очистить</value>
+  </data>
+  <data name="Output_Close" xml:space="preserve">
+    <value>Закрыть</value>
+  </data>
+  <data name="Output_Title" xml:space="preserve">
+    <value>Вывод</value>
+  </data>
 </root>

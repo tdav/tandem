@@ -25,6 +25,13 @@ public partial class MainWindow : Window
     private (PixelPoint Position, double Width, double Height)? _normalBounds;
     private bool _placementApplied;
     private ProgressWindow? _progress;
+    private double _outputHeight = DefaultOutputHeight;
+
+    /// <summary>The output pane's height when it first opens.</summary>
+    public const double DefaultOutputHeight = 180;
+
+    /// <summary>The panels keep at least this height when the output pane is resized.</summary>
+    private const double MinPanelsHeight = 120;
 
     /// <summary>For the designer only.</summary>
     public MainWindow()
@@ -47,7 +54,9 @@ public partial class MainWindow : Window
         AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Tunnel, handledEventsToo: true);
         AddHandler(KeyUpEvent, (_, e) => _modifiers = e.KeyModifiers, RoutingStrategies.Tunnel, handledEventsToo: true);
         AddHandler(TextInputEvent, OnTextInput, RoutingStrategies.Bubble);
-        CommandLineBox.AddHandler(KeyDownEvent, OnCommandLineKeyDown, RoutingStrategies.Tunnel);
+        CommandLineView.ReturnFocusRequested += OnCommandLineReturnFocusRequested;
+        CommandLineView.Failed += OnCommandLineFailed;
+        WorkArea.RowDefinitions[0].MinHeight = MinPanelsHeight;
         foreach (var panel in new[] { LeftPanel, RightPanel })
             panel.List.PageSizeChanged += (_, rows) => main.PageSize = rows;
 
@@ -57,6 +66,7 @@ public partial class MainWindow : Window
         main.NoticeRequested += OnNoticeRequested;
         main.Shell.OpenWithMenuRequested += OnOpenWithMenuRequested;
         main.Operations.PropertyChanged += OnOperationsPropertyChanged;
+        main.CommandLine.PropertyChanged += OnCommandLinePropertyChanged;
         PositionChanged += (_, _) => RecordPlacement();
         SizeChanged += (_, _) => RecordPlacement();
         Splitter.DragCompleted += (_, _) => RecordPlacement();
@@ -138,13 +148,27 @@ public partial class MainWindow : Window
         if (_main.HandleTextInput(text)) e.Handled = true;
     }
 
-    private void OnCommandLineKeyDown(object? sender, KeyEventArgs e)
+    private void OnCommandLineReturnFocusRequested(object? sender, EventArgs e) => FocusActivePanel();
+
+    private void OnCommandLineFailed(object? sender, Exception failure) => _main?.ReportFailure(failure);
+
+    private void OnCommandLinePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.Key == Key.Escape && e.KeyModifiers == KeyModifiers.None)
-        {
-            e.Handled = true;
-            FocusActivePanel();
-        }
+        if (e.PropertyName == nameof(CommandLineViewModel.IsOutputVisible)) UpdateOutputPane();
+    }
+
+    /// <summary>Opens or closes the output pane above the command line; its height (as the splitter left it) is kept
+    /// for the next time it opens.</summary>
+    private void UpdateOutputPane()
+    {
+        if (_main is null) return;
+        var visible = _main.CommandLine.IsOutputVisible;
+        var row = WorkArea.RowDefinitions[2];
+        if (visible == OutputPane.IsVisible) return;
+        if (!visible && OutputPane.Bounds.Height > 0) _outputHeight = OutputPane.Bounds.Height;
+        OutputPane.IsVisible = visible;
+        OutputSplitter.IsVisible = visible;
+        row.Height = new GridLength(visible ? _outputHeight : 0);
     }
 
     private void OnMainPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -159,7 +183,8 @@ public partial class MainWindow : Window
         (_main.Workspace.ActiveSide == PanelSide.Left ? LeftPanel : RightPanel).FocusList();
     }
 
-    private void OnCommandLineFocusRequested(object? sender, EventArgs e) => CommandLineBox.Focus();
+    /// <summary>Cmd+L: the field takes the focus; nothing happens while the command line is hidden or disabled.</summary>
+    private void OnCommandLineFocusRequested(object? sender, EventArgs e) => CommandLineView.FocusField();
 
     private void OnFavoritesMenuRequested(object? sender, EventArgs e)
     {
@@ -234,5 +259,8 @@ public partial class MainWindow : Window
         main.NoticeRequested -= OnNoticeRequested;
         main.Shell.OpenWithMenuRequested -= OnOpenWithMenuRequested;
         main.Operations.PropertyChanged -= OnOperationsPropertyChanged;
+        main.CommandLine.PropertyChanged -= OnCommandLinePropertyChanged;
+        CommandLineView.ReturnFocusRequested -= OnCommandLineReturnFocusRequested;
+        CommandLineView.Failed -= OnCommandLineFailed;
     }
 }

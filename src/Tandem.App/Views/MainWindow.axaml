@@ -18,26 +18,26 @@
                     Content="{Binding Operations.IndicatorText}" Command="{Binding Operations.ShowWindowCommand}" />
         </Border>
 
-        <!-- The command line: only the field for now; running commands comes with Task 24. -->
-        <Border x:Name="CommandLine" DockPanel.Dock="Bottom" IsVisible="{Binding Workspace.View.CommandLine}"
-                Background="{DynamicResource Tandem.BarBackground}" BorderBrush="{DynamicResource Tandem.DividerBrush}"
-                BorderThickness="0,1,0,0" Padding="6,3">
-            <DockPanel>
-                <TextBlock DockPanel.Dock="Left" Classes="secondary" VerticalAlignment="Center" Margin="0,0,6,0"
-                           MaxWidth="360" TextTrimming="LeadingCharacterEllipsis"
-                           Text="{Binding ActiveSide.Panel.CurrentPath.Path, StringFormat='{}{0}&gt;'}" />
-                <TextBox x:Name="CommandLineBox" MinHeight="0" Padding="4,1" />
-            </DockPanel>
-        </Border>
+        <!-- The command line; its output pane opens above it, under the panels. -->
+        <Panel x:Name="CommandLine" DockPanel.Dock="Bottom" IsVisible="{Binding Workspace.View.CommandLine}">
+            <v:CommandLineView x:Name="CommandLineView" DataContext="{Binding CommandLine}" />
+        </Panel>
 
-        <Grid ColumnDefinitions="Auto,*">
-            <v:SidebarView x:Name="Sidebar" Width="200" IsVisible="{Binding Workspace.View.Sidebar}" />
-            <Grid x:Name="Panels" Grid.Column="1" ColumnDefinitions="*,4,*">
-                <v:PanelView x:Name="LeftPanel" DataContext="{Binding Left}" />
-                <GridSplitter x:Name="Splitter" Grid.Column="1" ResizeDirection="Columns"
-                              Background="{DynamicResource Tandem.DividerBrush}" />
-                <v:PanelView x:Name="RightPanel" Grid.Column="2" DataContext="{Binding Right}" />
+        <!-- The output pane and its splitter are shown from code, which sizes their row: zero while the pane is
+             closed, its last height while open. -->
+        <Grid x:Name="WorkArea" RowDefinitions="*,Auto,0">
+            <Grid ColumnDefinitions="Auto,*">
+                <v:SidebarView x:Name="Sidebar" Width="200" IsVisible="{Binding Workspace.View.Sidebar}" />
+                <Grid x:Name="Panels" Grid.Column="1" ColumnDefinitions="*,4,*">
+                    <v:PanelView x:Name="LeftPanel" DataContext="{Binding Left}" />
+                    <GridSplitter x:Name="Splitter" Grid.Column="1" ResizeDirection="Columns"
+                                  Background="{DynamicResource Tandem.DividerBrush}" />
+                    <v:PanelView x:Name="RightPanel" Grid.Column="2" DataContext="{Binding Right}" />
+                </Grid>
             </Grid>
+            <GridSplitter x:Name="OutputSplitter" Grid.Row="1" ResizeDirection="Rows" Height="4"
+                          Background="{DynamicResource Tandem.DividerBrush}" IsVisible="False" />
+            <v:OutputPane x:Name="OutputPane" Grid.Row="2" DataContext="{Binding CommandLine}" IsVisible="False" />
         </Grid>
     </DockPanel>
 </Window>

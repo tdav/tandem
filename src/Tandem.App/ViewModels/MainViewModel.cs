@@ -69,6 +69,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Drops = new DropHandler(workspace, Files);
         Shell = new ShellCommands(workspace, services.Shell, services.QuickLook, services.Dialogs, Commands,
             services.Providers, services.Metadata, ReportFailure, quickLookDelay);
+        CommandLine = new CommandLineViewModel(workspace, services.Processes, workspace.HomeDirectory);
         Commands.RaiseCanExecuteChanged();
         workspace.PropertyChanged += OnWorkspacePropertyChanged;
         _volumeService = services.Volumes;
@@ -95,6 +96,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     /// <summary>Opening files, Quick Look, Reveal in Finder, the terminal, "Open With" and the properties dialog.</summary>
     public ShellCommands Shell { get; }
+
+    /// <summary>The command line under the panels and its output pane.</summary>
+    public CommandLineViewModel CommandLine { get; }
 
     /// <summary>Puts the operations' questions to the user, one at a time.</summary>
     public DialogOperationInteraction Interaction { get; }
@@ -240,6 +244,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Workspace.PropertyChanged -= OnWorkspacePropertyChanged;
         Interaction.Close();
         Shell.CloseQuickLook();
+        CommandLine.Dispose();
         Shell.Dispose();
         Files.Dispose();
         Operations.Dispose();
@@ -247,11 +252,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>The main window is closing: questions of running operations are answered as cancelled, so no
-    /// operation waits for a dialog that will never be shown, and Quick Look closes.</summary>
+    /// operation waits for a dialog that will never be shown, Quick Look closes, and a command still running in
+    /// the command line is killed.</summary>
     public void OnWindowClosing()
     {
         Interaction.Close();
         Shell.CloseQuickLook();
+        CommandLine.Dispose();
     }
 
     internal void ReportFailure(Exception error) => CommandFailed?.Invoke(this, error);
