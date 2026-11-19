@@ -52,14 +52,6 @@ public static class Composition
             new MacNativeCopy(broker), processes, new OperationQueue(), broker, log, new DialogService());
     }
 
-    /// <summary>The main view model on the real services, its state kept in <paramref name="stateDirectory"/>. Not
-    /// loaded yet: the caller sets the language first and awaits <see cref="WorkspaceViewModel.LoadAsync()"/>;
-    /// <see cref="StartAsync"/> does both.</summary>
-    [SupportedOSPlatform("macos")]
-    public static MainViewModel Build(string stateDirectory, string homeDirectory) =>
-        Build(CreatePlatformServices(new ErrorLog(DefaultLogFile(homeDirectory))), new JsonStateStore(stateDirectory),
-            homeDirectory);
-
     /// <summary>Where the app writes unexpected errors: <c>~/Library/Logs/Tandem/tandem.log</c>.</summary>
     public static string DefaultLogFile(string homeDirectory) =>
         Path.Combine(homeDirectory, "Library", "Logs", "Tandem", "tandem.log");
@@ -75,7 +67,8 @@ public static class Composition
         Func<TimeSpan, CancellationToken, Task>? quickLookDelay = null)
     {
         ArgumentNullException.ThrowIfNull(services);
-        var workspace = new WorkspaceViewModel(services.Providers, store, homeDirectory, autosaveDelay);
+        var workspace = new WorkspaceViewModel(services.Providers, store, homeDirectory, autosaveDelay,
+            e => services.Log.Write(e, "settings"));
         return new MainViewModel(workspace, services, KeyMap.Default, progressWindowDelay, quickLookDelay);
     }
 

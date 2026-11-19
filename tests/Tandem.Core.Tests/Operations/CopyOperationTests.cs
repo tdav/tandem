@@ -552,6 +552,28 @@ public sealed class CopyOperationTests
     }
 
     [Fact]
+    public async Task A_link_whose_target_cannot_be_read_is_an_item_error()
+    {
+        using var temp = new TempDir();
+        Directory.CreateDirectory(temp.Combine("src/dir"));
+        Directory.CreateDirectory(temp.Combine("dst"));
+        var link = temp.Combine("src/link");
+        File.CreateSymbolicLink(link, "dir");
+        using (var chmod = System.Diagnostics.Process.Start("/bin/chmod", ["-h", "000", link])) chmod.WaitForExit();
+        _interaction.OnError(ErrorAction.Skip);
+        var providers = new ProviderRegistry();
+        providers.Register(new LocalFileSystemProvider(new UnrestrictedAccessBroker()));
+        var op = new CopyOperation(providers, [VfsPath.Local(link)], VfsPath.Local(temp.Combine("dst")),
+            new CopyOptions(), _interaction);
+
+        var result = await op.RunAsync();
+
+        Assert.Equal(OperationState.Completed, result.State);
+        Assert.IsType<VfsAccessDeniedException>(Assert.Single(_interaction.Errors).Error);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(temp.Combine("dst")));
+    }
+
+    [Fact]
     public async Task Copying_a_file_onto_a_case_variant_of_its_own_name_is_rejected()
     {
         using var temp = new TempDir();

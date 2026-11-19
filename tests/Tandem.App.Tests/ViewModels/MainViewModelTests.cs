@@ -282,6 +282,31 @@ public class MainViewModelTests : LanguageTestBase
     }
 
     [AvaloniaFact]
+    public async Task Free_space_is_read_again_when_an_operation_ends()
+    {
+        await using var app = await TestApp.StartAsync(show: false);
+        await TestApp.WaitUntil(() => app.Main.Volumes.Count == 1);
+        var op = new GateOperation();
+        _ = app.Main.Services.Operations.Enqueue(op, runImmediately: true);
+        await op.Started;
+        await Task.Delay(50);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        var readsWhileRunning = Volatile.Read(ref app.Volumes.Reads);
+        app.Volumes.ChangeVolumesSilently(
+            [new VolumeInfo("Macintosh HD", "/", 1000L * 1024 * 1024 * 1024, 100L * 1024 * 1024 * 1024, false)]);
+
+        op.Release();
+        await op.Completion;
+
+        await TestApp.WaitUntil(() =>
+        {
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            return app.Main.Volumes[0].FreeBytes == 100L * 1024 * 1024 * 1024;
+        });
+        Assert.True(Volatile.Read(ref app.Volumes.Reads) > readsWhileRunning);
+    }
+
+    [AvaloniaFact]
     public async Task Closing_without_operations_asks_nothing()
     {
         await using var app = await TestApp.StartAsync(show: false);

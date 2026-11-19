@@ -253,6 +253,41 @@ public class WorkspaceTests : IDisposable
     }
 
     [AvaloniaFact]
+    public async Task A_save_failure_is_logged_once_until_saving_works_again()
+    {
+        var blocker = Path.Combine(Path.GetTempPath(), "tandem-workspace-blocker-" + Guid.NewGuid().ToString("N"));
+        await File.WriteAllTextAsync(blocker, "");
+        var stateDirectory = Path.Combine(blocker, "sub");
+        try
+        {
+            var logged = new List<IOException>();
+            var workspace = new WorkspaceViewModel(_providers, new JsonStateStore(stateDirectory), Home, _delay.Invoke,
+                logged.Add);
+            _workspaces.Add(workspace);
+            await workspace.LoadAsync();
+
+            workspace.Save();
+            workspace.Save(); // the same failure on every autosave tick
+            Assert.Single(logged);
+            Assert.Equal(workspace.LastSaveError!.Message, logged[0].Message);
+
+            File.Delete(blocker); // now the folder can be made
+            workspace.Save();
+            Assert.Null(workspace.LastSaveError);
+            Directory.Delete(blocker, recursive: true);
+            await File.WriteAllTextAsync(blocker, "");
+            workspace.Save();
+
+            Assert.Equal(2, logged.Count); // failing again after a success is told again
+        }
+        finally
+        {
+            if (File.Exists(blocker)) File.Delete(blocker);
+            else if (Directory.Exists(blocker)) Directory.Delete(blocker, recursive: true);
+        }
+    }
+
+    [AvaloniaFact]
     public async Task Changes_schedule_one_throttled_save()
     {
         var workspace = await LoadedAsync();

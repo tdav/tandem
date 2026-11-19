@@ -235,6 +235,10 @@ internal sealed class FakeVolumeService : IVolumeService
         return Task.Run(() => Changed?.Invoke(this, EventArgs.Empty));
     }
 
+    /// <summary>Replaces the volumes without raising <see cref="Changed"/>: free space changes on a volume that stays,
+    /// which the system does not announce.</summary>
+    public void ChangeVolumesSilently(IReadOnlyList<VolumeInfo> volumes) => _volumes = volumes;
+
     public int HandlerCount => Changed?.GetInvocationList().Length ?? 0;
 }
 

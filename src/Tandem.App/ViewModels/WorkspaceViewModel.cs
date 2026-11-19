@@ -24,6 +24,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     private readonly JsonStateStore _store;
     private readonly string _homeDirectory;
     private readonly Func<TimeSpan, CancellationToken, Task> _delay;
+    private readonly Action<IOException>? _saveFailed;
 
     private PanelSide _activeSide;
     private ViewState _view = new();
@@ -36,8 +37,10 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
 
     /// <param name="delay">Waits before an automatic save; <see cref="Task.Delay(TimeSpan, CancellationToken)"/>
     /// when null. Tests pass one they complete themselves.</param>
+    /// <param name="saveFailed">Told about a failed save (for the error log): once per failure, not again on every
+    /// later save that fails the same way, and again after a save has worked.</param>
     public WorkspaceViewModel(ProviderRegistry providers, JsonStateStore store, string homeDirectory,
-        Func<TimeSpan, CancellationToken, Task>? delay = null)
+        Func<TimeSpan, CancellationToken, Task>? delay = null, Action<IOException>? saveFailed = null)
     {
         ArgumentNullException.ThrowIfNull(providers);
         ArgumentNullException.ThrowIfNull(store);
@@ -45,6 +48,7 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         _store = store;
         _homeDirectory = homeDirectory;
         _delay = delay ?? Task.Delay;
+        _saveFailed = saveFailed;
 
         Left = new PanelTabsViewModel(providers);
         Right = new PanelTabsViewModel(providers);
@@ -203,7 +207,10 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         }
         catch (IOException e)
         {
+            var repeated = LastSaveError is { } last && last.GetType() == e.GetType() &&
+                           string.Equals(last.Message, e.Message, StringComparison.Ordinal);
             LastSaveError = e;
+            if (!repeated) _saveFailed?.Invoke(e);
         }
     }
 

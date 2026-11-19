@@ -255,14 +255,17 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker) : IFileSys
     private static FileEntry ToEntry(VfsPath path, FileSystemInfo info)
     {
         var attributes = info.Attributes;
-        var linkTarget = attributes.HasFlag(FileAttributes.ReparsePoint) ? info.LinkTarget : null;
-        var kind = linkTarget is not null ? EntryKind.Symlink
+        // The same test as DeleteAsync: a link is a link even when its target cannot be read (readlink refused):
+        // it is then reported without a target, and never as the directory it may lead to.
+        var isLink = attributes.HasFlag(FileAttributes.ReparsePoint);
+        var linkTarget = isLink ? ReadLinkTarget(info) : null;
+        var kind = isLink ? EntryKind.Symlink
             : attributes.HasFlag(FileAttributes.Directory) ? EntryKind.Directory
             : EntryKind.File;
         var size = kind switch
         {
             EntryKind.File => info is FileInfo file ? file.Length : 0,
-            EntryKind.Symlink => Encoding.UTF8.GetByteCount(linkTarget!),
+            EntryKind.Symlink => linkTarget is null ? 0 : Encoding.UTF8.GetByteCount(linkTarget),
             _ => 0,
         };
         var mode = info.UnixFileMode; // -1 when unknown, e.g. for a broken link
@@ -273,6 +276,19 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker) : IFileSys
             IsHidden: attributes.HasFlag(FileAttributes.Hidden),
             LinkTarget: linkTarget,
             LinkPointsToDirectory: kind == EntryKind.Symlink && attributes.HasFlag(FileAttributes.Directory));
+    }
+
+    /// <summary>The link's target, or null when it cannot be read.</summary>
+    private static string? ReadLinkTarget(FileSystemInfo info)
+    {
+        try
+        {
+            return info.LinkTarget;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     /// <summary>An open directory listing plus the broker scope that covers it.</summary>

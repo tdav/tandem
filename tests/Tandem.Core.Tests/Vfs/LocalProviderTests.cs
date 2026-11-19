@@ -202,6 +202,47 @@ public sealed class LocalProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task A_link_whose_target_cannot_be_read_is_still_a_link_never_a_directory()
+    {
+        Directory.CreateDirectory(_temp.Combine("dir"));
+        File.WriteAllText(_temp.Combine("dir/inside.txt"), "x");
+        var link = _temp.Combine("unreadable");
+        File.CreateSymbolicLink(link, "dir");
+        Chmod("000", link); // on macOS readlink needs read permission on the link itself
+        try
+        {
+            Assert.Null(new FileInfo(link).LinkTarget); // .NET reads no target for it
+
+            var listed = Assert.Single(await ListAsync(_fs, _temp.Root), e => e.Name == "unreadable");
+            var single = await _fs.GetEntryAsync(_temp.Root.Combine("unreadable"), Ct);
+
+            foreach (var entry in new[] { listed, single! })
+            {
+                Assert.Equal(EntryKind.Symlink, entry.Kind);
+                Assert.Null(entry.LinkTarget);
+                Assert.True(entry.LinkPointsToDirectory);
+            }
+
+            // Deleting it removes the link, never what it points to.
+            await _fs.DeleteAsync(_temp.Root.Combine("unreadable"), recursive: false, Ct);
+            Assert.False(Path.Exists(link) || new FileInfo(link).Exists);
+            Assert.True(File.Exists(_temp.Combine("dir/inside.txt")));
+        }
+        finally
+        {
+            var attributes = new FileInfo(link).Attributes; // -1 once the link is gone
+            if ((int)attributes != -1 && attributes.HasFlag(FileAttributes.ReparsePoint)) Chmod("755", link);
+        }
+    }
+
+    private static void Chmod(string mode, string path)
+    {
+        using var process = System.Diagnostics.Process.Start("/bin/chmod", ["-h", mode, path]);
+        process.WaitForExit();
+        Assert.Equal(0, process.ExitCode);
+    }
+
+    [Fact]
     public async Task Move_onto_broken_symlink_throws_AlreadyExists()
     {
         File.WriteAllText(_temp.Combine("a.txt"), "x");

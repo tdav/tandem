@@ -78,6 +78,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         workspace.Right.StateChanged += OnTabsStateChanged;
         _volumeService = services.Volumes;
         _volumeService.Changed += OnVolumesChanged;
+        services.Operations.Changed += OnOperationsChanged;
         _ = ReadVolumesAsync();
     }
 
@@ -123,7 +124,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>F3–F8 of the F-key bar.</summary>
     public IReadOnlyList<FKeyItem> FKeys { get; }
 
-    /// <summary>The mounted volumes; read again when <see cref="IVolumeService.Changed"/> reports a change.</summary>
+    /// <summary>The mounted volumes; read again when <see cref="IVolumeService.Changed"/> reports a change, on Cmd+R,
+    /// and when a file operation ends (free space).</summary>
     public IReadOnlyList<VolumeInfo> Volumes
     {
         get => _volumes;
@@ -245,6 +247,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         if (_disposed) return;
         _disposed = true;
         _volumeService.Changed -= OnVolumesChanged;
+        Services.Operations.Changed -= OnOperationsChanged;
         Workspace.PropertyChanged -= OnWorkspacePropertyChanged;
         Workspace.Left.StateChanged -= OnTabsStateChanged;
         Workspace.Right.StateChanged -= OnTabsStateChanged;
@@ -430,6 +433,25 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>Any thread. The service may raise one late event after this model is disposed, and must never be
     /// blocked: post to the UI thread and drop the event once disposed.</summary>
     private void OnVolumesChanged(object? sender, EventArgs e)
+    {
+        if (_disposed) return;
+        try
+        {
+            _ui.Post(_ =>
+            {
+                if (!_disposed) _ = ReadVolumesAsync();
+            }, null);
+        }
+        catch (Exception)
+        {
+            // the UI is shutting down
+        }
+    }
+
+    /// <summary>Any thread. An operation that ended may have changed the free space (which no volume event reports):
+    /// the volumes are read again whenever the queue changes. Telling an end from a start would race with operations
+    /// that end at once; an extra read is cheap, and only the latest read is kept.</summary>
+    private void OnOperationsChanged(object? sender, EventArgs e)
     {
         if (_disposed) return;
         try

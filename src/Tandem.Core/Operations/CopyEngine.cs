@@ -286,11 +286,13 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
 
         if (source.Kind == EntryKind.Symlink)
         {
+            if (source.LinkTarget is null)
+                throw new VfsAccessDeniedException($"The target of the link '{source.Path.Path}' cannot be read.");
             if (replace)
                 await ReplaceWithPartAsync(destination, target, replace: true,
-                    part => target.CreateSymlinkAsync(part, source.LinkTarget!, io)).ConfigureAwait(false);
+                    part => target.CreateSymlinkAsync(part, source.LinkTarget, io)).ConfigureAwait(false);
             else
-                await target.CreateSymlinkAsync(destination, source.LinkTarget!, io).ConfigureAwait(false);
+                await target.CreateSymlinkAsync(destination, source.LinkTarget, io).ConfigureAwait(false);
         }
         else
         {
