@@ -69,6 +69,103 @@ public sealed class NativeCopyOperationTests : IDisposable
     }
 
     [Fact]
+    public async Task A_plain_file_keeps_content_time_mode_and_extended_attributes()
+    {
+        var content = RandomBytes(256 * 1024);
+        var modified = new DateTime(2020, 5, 17, 10, 30, 0, DateTimeKind.Utc);
+        const UnixFileMode mode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+                                  UnixFileMode.GroupRead;
+        var source = _temp.Combine("src/plain.bin");
+        await File.WriteAllBytesAsync(source, content, Ct);
+        XAttr.Set(source, "user.tandem.test", "kept");
+        File.SetUnixFileMode(source, mode);
+        File.SetLastWriteTimeUtc(source, modified);
+
+        var result = await Copy("src/plain.bin", Native()).RunAsync().WaitAsync(Timeout, Ct);
+
+        Assert.Equal(OperationState.Completed, result.State);
+        Assert.Equal(["plain.bin"], Entries("dst"));
+        var copy = _temp.Combine("dst/plain.bin");
+        Assert.Equal(content, await File.ReadAllBytesAsync(copy, Ct));
+        Assert.Equal(modified, File.GetLastWriteTimeUtc(copy));
+        Assert.Equal(mode, File.GetUnixFileMode(copy));
+        Assert.Equal("kept", XAttr.Get(copy, "user.tandem.test"));
+        Assert.Equal(content, await File.ReadAllBytesAsync(source, Ct));
+    }
+
+    [Fact]
+    public async Task A_read_only_source_is_copied_and_stays_read_only()
+    {
+        var source = _temp.Combine("src/read-only.txt");
+        await File.WriteAllTextAsync(source, "read only", Ct);
+        File.SetUnixFileMode(source, UnixFileMode.UserRead | UnixFileMode.GroupRead);
+
+        var result = await Copy("src/read-only.txt", Native()).RunAsync().WaitAsync(Timeout, Ct);
+
+        Assert.Equal(OperationState.Completed, result.State);
+        Assert.Empty(_interaction.Errors);
+        Assert.Equal(["read-only.txt"], Entries("dst"));
+        Assert.Equal("read only", await File.ReadAllTextAsync(_temp.Combine("dst/read-only.txt"), Ct));
+        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.GroupRead,
+            File.GetUnixFileMode(_temp.Combine("dst/read-only.txt")));
+    }
+
+    [Fact]
+    public async Task Overwrite_replaces_the_old_file_and_leaves_no_part_or_backup()
+    {
+        await File.WriteAllTextAsync(_temp.Combine("src/a.txt"), "new content", Ct);
+        await File.WriteAllTextAsync(_temp.Combine("dst/a.txt"), "old", Ct);
+        _interaction.OnConflict(ConflictAction.Overwrite);
+
+        var result = await Copy("src/a.txt", Native()).RunAsync().WaitAsync(Timeout, Ct);
+
+        Assert.Equal(OperationState.Completed, result.State);
+        Assert.Single(_interaction.Conflicts);
+        Assert.Equal(["a.txt"], Entries("dst")); // no .a.txt.tandem-part, no .a.txt.tandem-old
+        Assert.Equal("new content", await File.ReadAllTextAsync(_temp.Combine("dst/a.txt"), Ct));
+    }
+
+    [Fact]
+    public async Task Cancel_inside_a_file_leaves_nothing_behind_and_the_source_intact()
+    {
+        var content = RandomBytes(BigSize);
+        await File.WriteAllBytesAsync(_temp.Combine("src/big.bin"), content, Ct);
+        CopyOperation? op = null;
+        op = Copy("src/big.bin", new FirstBytesHook(NativeInBlocks(), () => op!.Cancel()));
+
+        var result = await op.RunAsync().WaitAsync(Timeout, Ct);
+
+        Assert.Equal(OperationState.Cancelled, result.State);
+        Assert.Empty(Entries("dst"));
+        Assert.Equal(content, await File.ReadAllBytesAsync(_temp.Combine("src/big.bin"), Ct));
+    }
+
+    [Fact]
+    public async Task A_file_moved_to_another_volume_keeps_its_metadata_and_leaves_the_source()
+    {
+        using var volume = TinyVolume.Create(_temp.Combine("tiny.dmg"), _temp.Combine("mnt"));
+        var mountPoint = RealPath(volume.MountPoint);
+        var modified = new DateTime(2018, 3, 4, 5, 6, 7, DateTimeKind.Utc);
+        var source = _temp.Combine("src/a.txt");
+        await File.WriteAllTextAsync(source, "moved", Ct);
+        XAttr.Set(source, "user.tandem.test", "kept");
+        File.SetLastWriteTimeUtc(source, modified);
+        var op = new MoveOperation(_providers, [VfsPath.Local(source)], VfsPath.Local(mountPoint), new CopyOptions(),
+            _interaction, Native());
+
+        var result = await op.RunAsync().WaitAsync(Timeout, Ct);
+
+        Assert.Equal(OperationState.Completed, result.State);
+        Assert.False(File.Exists(source));
+        var moved = Path.Combine(mountPoint, "a.txt");
+        Assert.Equal("moved", await File.ReadAllTextAsync(moved, Ct));
+        Assert.Equal(modified, File.GetLastWriteTimeUtc(moved));
+        Assert.Equal("kept", XAttr.Get(moved, "user.tandem.test"));
+        Assert.DoesNotContain(Directory.EnumerateFileSystemEntries(mountPoint).Select(Path.GetFileName),
+            n => n!.StartsWith(".a.txt.tandem-", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task A_Finder_locked_file_is_copied_and_the_copy_is_locked_too()
     {
         var modified = new DateTime(2019, 8, 7, 6, 5, 4, DateTimeKind.Utc);
