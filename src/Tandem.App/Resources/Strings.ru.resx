@@ -490,4 +490,165 @@
   <data name="Destination_Unreadable" xml:space="preserve">
     <value>Не удалось проверить {0}: {1}</value>
   </data>
+
+  <!-- File command dialogs; Operation_ItemName quotes one name, {0} of the prompts is a name or a count -->
+  <data name="Operation_ItemName" xml:space="preserve">
+    <value>«{0}»</value>
+  </data>
+  <data name="Operation_Title" xml:space="preserve">
+    <value>{0}: {1}</value>
+  </data>
+  <data name="Operation_TitleTo" xml:space="preserve">
+    <value>{0}: {1} → {2}</value>
+  </data>
+  <data name="Operation_RejectedItem" xml:space="preserve">
+    <value>{0}: {1}</value>
+  </data>
+  <data name="Operation_Failed" xml:space="preserve">
+    <value>Операция прервана: {0}</value>
+  </data>
+  <data name="CopyMove_CopyOne" xml:space="preserve">
+    <value>Копировать «{0}» в:</value>
+  </data>
+  <data name="CopyMove_CopyMany" xml:space="preserve">
+    <value>Копировать {0} в:</value>
+  </data>
+  <data name="CopyMove_MoveOne" xml:space="preserve">
+    <value>Перенести «{0}» в:</value>
+  </data>
+  <data name="CopyMove_MoveMany" xml:space="preserve">
+    <value>Перенести {0} в:</value>
+  </data>
+  <data name="CopyMove_Verify" xml:space="preserve">
+    <value>Проверить содержимое после копирования</value>
+  </data>
+  <data name="CopyMove_RunImmediately" xml:space="preserve">
+    <value>Начать сразу, не дожидаясь очереди</value>
+  </data>
+  <data name="NewFolder_Title" xml:space="preserve">
+    <value>Новая папка</value>
+  </data>
+  <data name="NewFolder_Prompt" xml:space="preserve">
+    <value>Имя папки («a/b» создаёт вложенные папки):</value>
+  </data>
+  <data name="NewFolder_Empty" xml:space="preserve">
+    <value>Укажите имя папки</value>
+  </data>
+  <data name="NewFolder_Invalid" xml:space="preserve">
+    <value>«{0}» — недопустимое имя папки</value>
+  </data>
+  <data name="NewFolder_Exists" xml:space="preserve">
+    <value>«{0}» уже существует</value>
+  </data>
+  <data name="Button_Create" xml:space="preserve">
+    <value>Создать</value>
+  </data>
+  <data name="Delete_TitleTrash" xml:space="preserve">
+    <value>Переместить в Корзину</value>
+  </data>
+  <data name="Delete_TitlePermanent" xml:space="preserve">
+    <value>Удалить безвозвратно</value>
+  </data>
+  <data name="Delete_AskTrash" xml:space="preserve">
+    <value>Переместить {0} в Корзину?</value>
+  </data>
+  <data name="Delete_AskPermanent" xml:space="preserve">
+    <value>Удалить {0} безвозвратно?</value>
+  </data>
+  <data name="Delete_CannotUndo" xml:space="preserve">
+    <value>Это действие нельзя отменить.</value>
+  </data>
+  <data name="Delete_MoveToTrash" xml:space="preserve">
+    <value>Переместить</value>
+  </data>
+  <data name="Conflict_Title" xml:space="preserve">
+    <value>Файл уже существует</value>
+  </data>
+  <data name="Conflict_Message" xml:space="preserve">
+    <value>«{0}» уже есть в папке {1}.</value>
+  </data>
+  <data name="Conflict_Source" xml:space="preserve">
+    <value>Новый: {0}</value>
+  </data>
+  <data name="Conflict_Existing" xml:space="preserve">
+    <value>Имеющийся: {0}</value>
+  </data>
+  <data name="Conflict_Details" xml:space="preserve">
+    <value>{0}, изменён {1}</value>
+  </data>
+  <data name="Conflict_ApplyToAll" xml:space="preserve">
+    <value>Применить ко всем</value>
+  </data>
+  <data name="OperationError_Title" xml:space="preserve">
+    <value>Ошибка</value>
+  </data>
+  <data name="OperationError_AccessDenied" xml:space="preserve">
+    <value>Нет доступа к {0}.</value>
+  </data>
+  <data name="OperationError_NotFound" xml:space="preserve">
+    <value>{0} не найден.</value>
+  </data>
+  <data name="OperationError_AlreadyExists" xml:space="preserve">
+    <value>{0} уже существует.</value>
+  </data>
+  <data name="OperationError_ContentMismatch" xml:space="preserve">
+    <value>Копия {0} не совпадает с исходным файлом.</value>
+  </data>
+  <data name="OperationError_DiskFull" xml:space="preserve">
+    <value>Недостаточно места на диске для {0}.</value>
+  </data>
+  <data name="OperationError_IO" xml:space="preserve">
+    <value>Не удалось прочитать или записать {0}.</value>
+  </data>
+  <data name="OperationError_Other" xml:space="preserve">
+    <value>Не удалось обработать {0}.</value>
+  </data>
+  <data name="Summary_Title" xml:space="preserve">
+    <value>Некоторые объекты пропущены</value>
+  </data>
+  <data name="Summary_Message" xml:space="preserve">
+    <value>Пропущено: {0}</value>
+  </data>
+  <data name="Mask_SelectTitle" xml:space="preserve">
+    <value>Выделить по маске</value>
+  </data>
+  <data name="Mask_UnselectTitle" xml:space="preserve">
+    <value>Снять выделение по маске</value>
+  </data>
+  <data name="Mask_Hint" xml:space="preserve">
+    <value>Например, *.txt;*.md</value>
+  </data>
+  <data name="Mask_Empty" xml:space="preserve">
+    <value>Укажите маску</value>
+  </data>
+  <data name="Button_Select" xml:space="preserve">
+    <value>Выделить</value>
+  </data>
+  <data name="Button_Deselect" xml:space="preserve">
+    <value>Снять</value>
+  </data>
+  <data name="Rename_Invalid" xml:space="preserve">
+    <value>«{0}» — недопустимое имя</value>
+  </data>
+  <data name="Rename_Empty" xml:space="preserve">
+    <value>Укажите имя</value>
+  </data>
+  <data name="Progress_Title" xml:space="preserve">
+    <value>Операции</value>
+  </data>
+  <data name="Progress_Files" xml:space="preserve">
+    <value>Файлов: {0} из {1}</value>
+  </data>
+  <data name="Progress_Bytes" xml:space="preserve">
+    <value>{0} из {1}</value>
+  </data>
+  <data name="Progress_Speed" xml:space="preserve">
+    <value>{0}/с</value>
+  </data>
+  <data name="Progress_Remaining" xml:space="preserve">
+    <value>Осталось около {0}</value>
+  </data>
+  <data name="Progress_Indicator" xml:space="preserve">
+    <value>{0} — показать</value>
+  </data>
 </root>
