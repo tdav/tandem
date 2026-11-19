@@ -46,7 +46,7 @@ public class KeyMapTests
             "file.view=F3", "file.view=Cmd+3", "file.edit=F4", "file.edit=Cmd+4", "file.copy=F5", "file.copy=Cmd+5",
             "file.move=F6", "file.move=Cmd+6", "file.mkdir=F7", "file.mkdir=Cmd+7", "file.delete=F8",
             "file.delete=Cmd+Back", "file.deletePermanent=Shift+F8", "file.deletePermanent=Cmd+Alt+Back",
-            "file.rename=Shift+F6", "file.rename=F2", "file.quickLook=Cmd+Y", "file.properties=Cmd+I",
+            "file.rename=Shift+F6", "file.rename=F2", "file.rename=Cmd+Shift+R", "file.quickLook=Cmd+Y", "file.properties=Cmd+I",
             "panel.switch=Tab", "panel.refresh=Cmd+R", "panel.swap=Cmd+U", "panel.mirror=Cmd+Shift+U",
             "nav.up=Back", "nav.up=Cmd+Up", "nav.back=Cmd+OemOpenBrackets", "nav.forward=Cmd+OemCloseBrackets",
             "path.edit=Cmd+Shift+G", "cmdline.focus=Cmd+L", "select.toggleDown=Space", "select.all=Cmd+A",
@@ -63,7 +63,9 @@ public class KeyMapTests
     [Fact]
     public void ChordsFor_returns_chords_in_table_order()
     {
-        Assert.Equal([KeyChord.Parse("Shift+F6"), KeyChord.Parse("F2")], KeyMap.Default.ChordsFor(CommandIds.FileRename));
+        Assert.Equal(
+            [KeyChord.Parse("Shift+F6"), KeyChord.Parse("F2"), KeyChord.Parse("Cmd+Shift+R")],
+            KeyMap.Default.ChordsFor(CommandIds.FileRename));
         Assert.Equal([KeyChord.Parse("F3"), KeyChord.Parse("Cmd+3")], KeyMap.Default.ChordsFor(CommandIds.FileView));
     }
 
@@ -74,6 +76,17 @@ public class KeyMapTests
         Assert.Empty(KeyMap.Default.ChordsFor(CommandIds.ShellOpenTerminal));
         Assert.Empty(KeyMap.Default.ChordsFor(CommandIds.ShellOpenWith));
         Assert.Empty(KeyMap.Default.ChordsFor("no.such.command"));
+    }
+
+    [Fact]
+    public void Every_F_key_command_also_has_a_chord_without_an_F_key()
+    {
+        // Apple keyboards send media keys for F1–F12 unless fn is held, so an F-key alone is not enough.
+        static bool IsFKey(KeyChord chord) => chord.Key is >= Avalonia.Input.Key.F1 and <= Avalonia.Input.Key.F24;
+
+        var commandsWithFKeys = KeyMap.Default.Bindings.Where(b => IsFKey(b.Chord)).Select(b => b.CommandId).Distinct();
+
+        Assert.All(commandsWithFKeys, id => Assert.Contains(KeyMap.Default.ChordsFor(id), c => !IsFKey(c)));
     }
 
     [Fact]

@@ -32,7 +32,7 @@ public sealed class KeyMap
             (CommandIds.FileMkdir, "F7"), (CommandIds.FileMkdir, "Cmd+7"),
             (CommandIds.FileDelete, "F8"), (CommandIds.FileDelete, "Cmd+Back"),
             (CommandIds.FileDeletePermanent, "Shift+F8"), (CommandIds.FileDeletePermanent, "Cmd+Alt+Back"),
-            (CommandIds.FileRename, "Shift+F6"), (CommandIds.FileRename, "F2"),
+            (CommandIds.FileRename, "Shift+F6"), (CommandIds.FileRename, "F2"), (CommandIds.FileRename, "Cmd+Shift+R"),
             (CommandIds.FileQuickLook, "Cmd+Y"),
             (CommandIds.FileProperties, "Cmd+I"),
             (CommandIds.PanelSwitch, "Tab"),
