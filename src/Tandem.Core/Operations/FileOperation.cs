@@ -79,9 +79,11 @@ public abstract class FileOperation
     }
 
     /// <summary>Asks a started operation to pause. It stops at its next checkpoint (between scanned entries, between
-    /// items, and between the blocks of a file it copies or verifies itself), then reports <see cref="OperationState.Paused"/> until
-    /// <see cref="Resume"/> or <see cref="Cancel"/>. A file handed to the platform's own copy finishes before the
-    /// pause takes effect. Before <see cref="RunAsync"/>, after the end, or while already paused it does nothing.</summary>
+    /// items, and between the blocks of a file it copies or verifies, including a file handed to the platform's own
+    /// copy when that copies in blocks), then reports <see cref="OperationState.Paused"/> until <see cref="Resume"/>
+    /// or <see cref="Cancel"/>; until then <see cref="IsPauseRequested"/> tells the request is pending. A file
+    /// paused in the middle keeps its files open. Before <see cref="RunAsync"/>, after the end, or while already
+    /// paused or asked to pause it does nothing.</summary>
     public void Pause()
     {
         lock (_lock)
@@ -89,6 +91,13 @@ public abstract class FileOperation
             if (Volatile.Read(ref _started) == 0 || IsFinal(_state) || _resume is not null) return;
             _resume = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         }
+    }
+
+    /// <summary>True from <see cref="Pause"/> until <see cref="Resume"/>: while the request waits for a checkpoint
+    /// and while the operation is paused.</summary>
+    public bool IsPauseRequested
+    {
+        get { lock (_lock) return _resume is not null; }
     }
 
     /// <summary>Lets a paused operation go on (or withdraws a pause that has not taken effect yet); otherwise it

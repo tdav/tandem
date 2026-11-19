@@ -23,7 +23,7 @@ public sealed class MacNativeCopyTests : IDisposable
         XAttr.Set(source, "user.tandem.test", "kept");
         var destination = _temp.Combine(".source.bin.tandem-part");
 
-        await _copy.CopyFileAsync(source, destination, new Recorder(), TestContext.Current.CancellationToken);
+        await _copy.CopyFileAsync(source, destination, new Recorder(), NoPause, TestContext.Current.CancellationToken);
 
         Assert.Equal(content, await File.ReadAllBytesAsync(destination, TestContext.Current.CancellationToken));
         Assert.Equal(mtime, File.GetLastWriteTimeUtc(destination));
@@ -39,7 +39,7 @@ public sealed class MacNativeCopyTests : IDisposable
         await File.WriteAllBytesAsync(source, RandomBytes(8 * 1024 * 1024), TestContext.Current.CancellationToken);
         var progress = new Recorder();
 
-        await _copy.CopyFileAsync(source, _temp.Combine(".big.bin.tandem-part"), progress,
+        await _copy.CopyFileAsync(source, _temp.Combine(".big.bin.tandem-part"), progress, NoPause,
             TestContext.Current.CancellationToken);
 
         Assert.NotEmpty(progress.Values);
@@ -54,7 +54,7 @@ public sealed class MacNativeCopyTests : IDisposable
         var destination = _temp.Combine(".source.txt.tandem-part");
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            _copy.CopyFileAsync(source, destination, new Recorder(), new CancellationToken(canceled: true)));
+            _copy.CopyFileAsync(source, destination, new Recorder(), NoPause, new CancellationToken(canceled: true)));
         Assert.False(Path.Exists(destination));
     }
 
@@ -65,7 +65,7 @@ public sealed class MacNativeCopyTests : IDisposable
         await File.WriteAllTextAsync(source, "data", TestContext.Current.CancellationToken);
 
         var error = await Assert.ThrowsAsync<IOException>(() => _copy.CopyFileAsync(source,
-            _temp.Combine("missing/.source.txt.tandem-part"), new Recorder(), TestContext.Current.CancellationToken));
+            _temp.Combine("missing/.source.txt.tandem-part"), new Recorder(), NoPause, TestContext.Current.CancellationToken));
         Assert.Equal("No such file or directory", error.Message);
     }
 
@@ -77,7 +77,7 @@ public sealed class MacNativeCopyTests : IDisposable
         var destination = _temp.Combine(".source.txt.tandem-part");
         await File.WriteAllTextAsync(destination, "stale leftover, longer", TestContext.Current.CancellationToken);
 
-        await _copy.CopyFileAsync(source, destination, new Recorder(), TestContext.Current.CancellationToken);
+        await _copy.CopyFileAsync(source, destination, new Recorder(), NoPause, TestContext.Current.CancellationToken);
 
         Assert.Equal("fresh", await File.ReadAllTextAsync(destination, TestContext.Current.CancellationToken));
     }
@@ -92,7 +92,7 @@ public sealed class MacNativeCopyTests : IDisposable
         var destination = _temp.Combine(".source.txt.tandem-part");
         File.CreateSymbolicLink(destination, elsewhere);
 
-        await _copy.CopyFileAsync(source, destination, new Recorder(), TestContext.Current.CancellationToken);
+        await _copy.CopyFileAsync(source, destination, new Recorder(), NoPause, TestContext.Current.CancellationToken);
 
         Assert.Null(new FileInfo(destination).LinkTarget);
         Assert.Equal("fresh", await File.ReadAllTextAsync(destination, TestContext.Current.CancellationToken));
@@ -108,7 +108,7 @@ public sealed class MacNativeCopyTests : IDisposable
         File.CreateSymbolicLink(link, target);
         var destination = _temp.Combine(".link.tandem-part");
 
-        await _copy.CopyFileAsync(link, destination, new Recorder(), TestContext.Current.CancellationToken);
+        await _copy.CopyFileAsync(link, destination, new Recorder(), NoPause, TestContext.Current.CancellationToken);
 
         Assert.Equal(target, new FileInfo(destination).LinkTarget);
     }
@@ -121,7 +121,7 @@ public sealed class MacNativeCopyTests : IDisposable
         var destination = _temp.Combine(".source.txt.tandem-part");
         var broker = new CountingBroker();
 
-        await new MacNativeCopy(broker).CopyFileAsync(source, destination, new Recorder(),
+        await new MacNativeCopy(broker).CopyFileAsync(source, destination, new Recorder(), NoPause,
             TestContext.Current.CancellationToken);
 
         Assert.Equal([source, destination], broker.Accessed);
@@ -135,7 +135,7 @@ public sealed class MacNativeCopyTests : IDisposable
         await File.WriteAllBytesAsync(source, RandomBytes(8 * 1024 * 1024), TestContext.Current.CancellationToken);
         var progress = new Recorder();
 
-        await WithoutClone().CopyFileAsync(source, _temp.Combine(".big.bin.tandem-part"), progress,
+        await WithoutClone().CopyFileAsync(source, _temp.Combine(".big.bin.tandem-part"), progress, NoPause,
             TestContext.Current.CancellationToken);
 
         var values = progress.Values;
@@ -154,8 +154,55 @@ public sealed class MacNativeCopyTests : IDisposable
         var progress = new Recorder(onReport: _ => cts.Cancel());
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            WithoutClone().CopyFileAsync(source, _temp.Combine(".big.bin.tandem-part"), progress, cts.Token));
+            WithoutClone().CopyFileAsync(source, _temp.Combine(".big.bin.tandem-part"), progress, NoPause, cts.Token));
         Assert.Single(progress.Values);
+    }
+
+    [Fact]
+    public async Task Copy_paused_at_the_checkpoint_stops_until_resumed_then_completes()
+    {
+        var source = _temp.Combine("big.bin");
+        var content = RandomBytes(8 * 1024 * 1024);
+        await File.WriteAllBytesAsync(source, content, TestContext.Current.CancellationToken);
+        var destination = _temp.Combine(".big.bin.tandem-part");
+        var progress = new Recorder();
+        var pause = new PauseGate();
+
+        var copy = WithoutClone().CopyFileAsync(source, destination, progress, pause.CheckpointAsync,
+            TestContext.Current.CancellationToken);
+        await pause.Entered.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+        var reportsWhenPaused = progress.Values.Count;
+        await Task.Delay(300, TestContext.Current.CancellationToken);
+
+        Assert.False(copy.IsCompleted);
+        Assert.Equal(reportsWhenPaused, progress.Values.Count); // no byte moved while paused
+        Assert.True(progress.Values[^1] < content.Length);
+
+        pause.Release();
+        await copy.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+        Assert.Equal(content.Length, progress.Values[^1]);
+        Assert.Equal(content, await File.ReadAllBytesAsync(destination, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Copy_cancelled_while_paused_throws_OperationCanceled()
+    {
+        var source = _temp.Combine("big.bin");
+        await File.WriteAllBytesAsync(source, RandomBytes(8 * 1024 * 1024), TestContext.Current.CancellationToken);
+        using var cts = new CancellationTokenSource();
+        var progress = new Recorder();
+        var pause = new PauseGate();
+
+        var copy = WithoutClone().CopyFileAsync(source, _temp.Combine(".big.bin.tandem-part"), progress,
+            pause.CheckpointAsync, cts.Token);
+        await pause.Entered.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+        var reportsWhenPaused = progress.Values.Count;
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            copy.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+        Assert.Equal(reportsWhenPaused, progress.Values.Count);
     }
 
     [Fact]
@@ -166,7 +213,7 @@ public sealed class MacNativeCopyTests : IDisposable
         var progress = new Recorder(onReport: _ => throw new InvalidOperationException("progress failed"));
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() => WithoutClone().CopyFileAsync(source,
-            _temp.Combine(".big.bin.tandem-part"), progress, TestContext.Current.CancellationToken));
+            _temp.Combine(".big.bin.tandem-part"), progress, NoPause, TestContext.Current.CancellationToken));
         Assert.Equal("progress failed", error.Message);
         Assert.Single(progress.Values);
     }
@@ -179,7 +226,7 @@ public sealed class MacNativeCopyTests : IDisposable
         await File.WriteAllBytesAsync(source, RandomBytes(8 * 1024 * 1024), TestContext.Current.CancellationToken);
 
         var copy = _copy.CopyFileAsync(source, Path.Combine(volume.MountPoint, ".big.bin.tandem-part"),
-            new Recorder(), TestContext.Current.CancellationToken);
+            new Recorder(), NoPause, TestContext.Current.CancellationToken);
         var finished = await Task.WhenAny(copy, Task.Delay(TimeSpan.FromSeconds(30),
             TestContext.Current.CancellationToken));
 
@@ -187,6 +234,8 @@ public sealed class MacNativeCopyTests : IDisposable
         var error = await Assert.ThrowsAsync<IOException>(() => copy);
         Assert.Equal("No space left on device", error.Message);
     }
+
+    private static readonly Func<CancellationToken, ValueTask> NoPause = _ => ValueTask.CompletedTask;
 
     private static MacNativeCopy WithoutClone() =>
         new(new UnrestrictedAccessBroker(), MacNativeCopy.DefaultFlags & ~Interop.LibC.COPYFILE_CLONE);
@@ -196,6 +245,24 @@ public sealed class MacNativeCopyTests : IDisposable
         var bytes = new byte[count];
         Random.Shared.NextBytes(bytes);
         return bytes;
+    }
+
+    /// <summary>A pause checkpoint that holds the copy at its first call until <see cref="Release"/>, as a paused
+    /// operation does; cancelling the token ends the wait.</summary>
+    private sealed class PauseGate
+    {
+        private readonly TaskCompletionSource _entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _released = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task Entered => _entered.Task;
+
+        public void Release() => _released.TrySetResult();
+
+        public async ValueTask CheckpointAsync(CancellationToken ct)
+        {
+            _entered.TrySetResult();
+            await _released.Task.WaitAsync(ct);
+        }
     }
 
     /// <summary>Records every report synchronously, in order, then runs <c>onReport</c>.</summary>

@@ -23,10 +23,14 @@ internal sealed class GateOperation(string volume = "v", string name = "a.txt") 
     /// <summary>Lets the running operation pass one pause checkpoint.</summary>
     public void Checkpoint() => _checkpoint.Release();
 
+    /// <summary>Sets the progress, then raises <see cref="FileOperation.Changed"/> once more without the progress
+    /// throttle: the throttled notices of the two steps may be read in between them (or not raised at all), and a
+    /// test must not depend on that timing.</summary>
     public void Report(long done, long total)
     {
         SetTotals(1, total);
         AddBytesDone(done - Progress.BytesDone);
+        SetState(State);
     }
 
     public override Task<IReadOnlyCollection<string>> GetVolumeKeysAsync(CancellationToken ct) =>

@@ -515,7 +515,7 @@ public sealed class CopyOperationTests
         }
 
         public Task CopyFileAsync(string sourcePath, string destinationPath, IProgress<long> bytesCopied,
-            CancellationToken ct)
+            Func<CancellationToken, ValueTask> pauseCheckpoint, CancellationToken ct)
         {
             lock (_lock) _calls.Add((sourcePath, destinationPath));
             File.Copy(sourcePath, destinationPath);

@@ -24,7 +24,8 @@ internal enum CopyOutcome { Copied, DirectoryCreated, DirectoryMerged, Skipped }
 /// <see cref="IOperationInteraction.ResolveErrorAsync"/>. "Apply to all" and "skip all" answers last until the
 /// engine is discarded. Skipping a directory skips everything inside it, recorded as one item.</para>
 /// <para>Cancellation and pausing are checked between items, between scanned entries, and between the blocks of a
-/// file being written or verified; a cancelled or failed file leaves no part file behind. With
+/// file being written or verified, also by the platform's own copy (<see cref="INativeCopy"/>), which is handed the
+/// operation's pause checkpoint; a cancelled or failed file leaves no part file behind. With
 /// <paramref name="verifyContent"/>, each written file and its source are read back and their SHA-256 compared
 /// before the file is moved into place; the verification bytes count in the totals, doubling them. With
 /// <paramref name="checkSize"/> (used by move), a written file whose size differs from the source's, both read
@@ -460,10 +461,11 @@ internal sealed class CopyEngine(ProviderRegistry providers, FileOperation opera
             {
                 if (nativeCopy is not null && IsLocal(source.Path) && IsLocal(destination))
                 {
-                    // The platform copies the whole file in one call: cancellation reaches it through ct, but a
-                    // pause takes effect only once this file is done (at the next checkpoint).
+                    // The platform copies the whole file in one call; cancellation reaches it through ct and a
+                    // pause through the checkpoint it passes between blocks.
                     var progress = new RunningTotal(Count);
-                    await nativeCopy.CopyFileAsync(source.Path.Path, part.Path, progress, ct).ConfigureAwait(false);
+                    await nativeCopy.CopyFileAsync(source.Path.Path, part.Path, progress,
+                        operation.WaitWhilePausedAsync, ct).ConfigureAwait(false);
                 }
                 else
                 {

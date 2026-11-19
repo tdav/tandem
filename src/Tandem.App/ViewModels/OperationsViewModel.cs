@@ -151,7 +151,9 @@ public sealed partial class OperationsViewModel : ObservableObject, IDisposable
 }
 
 /// <summary>One operation in the progress window: its title, state, progress bar and buttons. The state shown is
-/// always the operation's own: pausing is a request the operation may honour late or not at all.</summary>
+/// always the operation's own: pausing is a request the operation honours at its next checkpoint. While the request
+/// waits, "Pause" is off and "Resume" is on, so the request can be withdrawn; no button is ever on without an
+/// effect.</summary>
 public sealed partial class OperationItemViewModel : ObservableObject
 {
     private readonly SynchronizationContext _ui;
@@ -204,10 +206,18 @@ public sealed partial class OperationItemViewModel : ObservableObject
     }
 
     [RelayCommand(CanExecute = nameof(CanPause))]
-    private void Pause() => Operation.Pause();
+    private void Pause()
+    {
+        Operation.Pause();
+        Update();
+    }
 
     [RelayCommand(CanExecute = nameof(CanResume))]
-    private void Resume() => Operation.Resume();
+    private void Resume()
+    {
+        Operation.Resume();
+        Update();
+    }
 
     [RelayCommand]
     private void Cancel() => Operation.Cancel();
@@ -222,8 +232,9 @@ public sealed partial class OperationItemViewModel : ObservableObject
         Percent = NextPercent(Percent, progress.BytesDone, progress.BytesTotal);
         CurrentItem = progress.CurrentItem;
         DetailText = Describe(progress);
-        CanPause = state is OperationState.Scanning or OperationState.Running;
-        CanResume = state == OperationState.Paused;
+        var pauseRequested = Operation.IsPauseRequested;
+        CanPause = (state is OperationState.Scanning or OperationState.Running) && !pauseRequested;
+        CanResume = state == OperationState.Paused || (pauseRequested && !OperationsViewModel.IsFinal(state));
     }
 
     internal void Detach()

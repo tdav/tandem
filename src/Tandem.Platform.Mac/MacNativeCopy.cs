@@ -16,7 +16,9 @@ namespace Tandem.Platform.Mac;
 /// <para>Any error copyfile reports to the status callback stops the copy (nothing is retried or ignored) and
 /// surfaces as an <see cref="IOException"/>.</para>
 /// <para>Progress comes from copyfile's status callback, which a clone never invokes, so the final size is
-/// always reported once the copy is done. Cancellation stops the copy at the next write.</para>
+/// always reported once the copy is done. Cancellation stops the copy at the next write. The pause checkpoint is
+/// awaited in the same callback after each reported block: while it waits, copyfile waits (the thread is blocked,
+/// the files stay open); a cancellation during the wait stops the copy.</para>
 /// </summary>
 [SupportedOSPlatform("macos")]
 public sealed class MacNativeCopy : INativeCopy
@@ -41,27 +43,28 @@ public sealed class MacNativeCopy : INativeCopy
     /// <exception cref="IOException">The copy failed; the message is <c>strerror(errno)</c>.</exception>
     /// <exception cref="OperationCanceledException"><paramref name="ct"/> was cancelled.</exception>
     public Task CopyFileAsync(string sourcePath, string destinationPath, IProgress<long> bytesCopied,
-        CancellationToken ct)
+        Func<CancellationToken, ValueTask> pauseCheckpoint, CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrEmpty(sourcePath);
         ArgumentException.ThrowIfNullOrEmpty(destinationPath);
         ArgumentNullException.ThrowIfNull(bytesCopied);
+        ArgumentNullException.ThrowIfNull(pauseCheckpoint);
         if (ct.IsCancellationRequested) return Task.FromCanceled(ct);
 
         return Task.Run(() =>
         {
             using var sourceAccess = _broker.Access(sourcePath);
             using var destinationAccess = _broker.Access(destinationPath);
-            Copy(sourcePath, destinationPath, _flags, bytesCopied, ct);
+            Copy(sourcePath, destinationPath, _flags, bytesCopied, pauseCheckpoint, ct);
         }, ct);
     }
 
     private static unsafe void Copy(string sourcePath, string destinationPath, uint flags, IProgress<long> bytesCopied,
-        CancellationToken ct)
+        Func<CancellationToken, ValueTask> pauseCheckpoint, CancellationToken ct)
     {
         var state = LibC.copyfile_state_alloc();
         if (state == IntPtr.Zero) throw new OutOfMemoryException("copyfile_state_alloc failed.");
-        var context = new CopyContext(bytesCopied, ct);
+        var context = new CopyContext(bytesCopied, pauseCheckpoint, ct);
         var handle = GCHandle.Alloc(context);
         try
         {
@@ -117,8 +120,15 @@ public sealed class MacNativeCopy : INativeCopy
                 long copied = 0; // off_t
                 if (LibC.copyfile_state_get(state, LibC.COPYFILE_STATE_COPIED, &copied) == 0)
                     context.Progress.Report(copied);
+                // Blocks this (copyfile's) thread for as long as the operation is paused.
+                context.PauseCheckpoint(context.Token).AsTask().GetAwaiter().GetResult();
             }
             return LibC.COPYFILE_CONTINUE;
+        }
+        catch (OperationCanceledException) when (context.Token.IsCancellationRequested)
+        {
+            context.QuitForCancellation = true; // cancelled while paused
+            return LibC.COPYFILE_QUIT;
         }
         catch (Exception e)
         {
@@ -128,9 +138,12 @@ public sealed class MacNativeCopy : INativeCopy
         }
     }
 
-    private sealed class CopyContext(IProgress<long> progress, CancellationToken token)
+    private sealed class CopyContext(IProgress<long> progress, Func<CancellationToken, ValueTask> pauseCheckpoint,
+        CancellationToken token)
     {
         public IProgress<long> Progress { get; } = progress;
+
+        public Func<CancellationToken, ValueTask> PauseCheckpoint { get; } = pauseCheckpoint;
 
         public CancellationToken Token { get; } = token;
 

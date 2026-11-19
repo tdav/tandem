@@ -370,6 +370,100 @@ public sealed class CopyControlTests
         Assert.Empty(Directory.GetFileSystemEntries(temp.Combine("dst")));
     }
 
+    [Fact]
+    public async Task Pause_reaches_an_in_flight_native_copy_and_resume_finishes_it()
+    {
+        using var temp = new TempDir();
+        _providers.Register(new LocalFileSystemProvider(new UnrestrictedAccessBroker()));
+        File.WriteAllText(temp.Combine("a.txt"), "content");
+        Directory.CreateDirectory(temp.Combine("dst"));
+        var native = new CheckpointNativeCopy();
+        var op = new CopyOperation(_providers, [VfsPath.Local(temp.Combine("a.txt"))],
+            VfsPath.Local(temp.Combine("dst")), new CopyOptions(), _interaction, native);
+        var paused = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        op.Changed += (_, _) =>
+        {
+            if (op.State == OperationState.Paused) paused.TrySetResult();
+        };
+
+        var run = op.RunAsync();
+        await native.Started.WaitAsync(Timeout, Ct);
+        op.Pause();
+        native.Continue();
+        await paused.Task.WaitAsync(Timeout, Ct);
+        await Task.Delay(100, Ct);
+
+        Assert.Equal(OperationState.Paused, op.State);
+        Assert.False(native.Finished); // the copy stands still inside the file
+        Assert.False(run.IsCompleted);
+
+        op.Resume();
+        var result = await run.WaitAsync(Timeout, Ct);
+
+        Assert.Equal(OperationState.Completed, result.State);
+        Assert.True(native.Finished);
+        Assert.Equal("content", File.ReadAllText(temp.Combine("dst/a.txt")));
+    }
+
+    [Fact]
+    public async Task Cancel_while_paused_inside_a_native_copy_removes_the_part_file()
+    {
+        using var temp = new TempDir();
+        _providers.Register(new LocalFileSystemProvider(new UnrestrictedAccessBroker()));
+        File.WriteAllText(temp.Combine("a.txt"), "content");
+        Directory.CreateDirectory(temp.Combine("dst"));
+        var native = new CheckpointNativeCopy();
+        var op = new CopyOperation(_providers, [VfsPath.Local(temp.Combine("a.txt"))],
+            VfsPath.Local(temp.Combine("dst")), new CopyOptions(), _interaction, native);
+        var paused = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        op.Changed += (_, _) =>
+        {
+            if (op.State == OperationState.Paused) paused.TrySetResult();
+        };
+
+        var run = op.RunAsync();
+        await native.Started.WaitAsync(Timeout, Ct);
+        op.Pause();
+        native.Continue();
+        await paused.Task.WaitAsync(Timeout, Ct);
+        op.Cancel();
+        var result = await run.WaitAsync(Timeout, Ct);
+
+        Assert.Equal(OperationState.Cancelled, result.State);
+        Assert.False(native.Finished);
+        Assert.Empty(Directory.GetFileSystemEntries(temp.Combine("dst")));
+        Assert.Equal("content", File.ReadAllText(temp.Combine("a.txt")));
+    }
+
+    /// <summary>Writes part of the file, waits for <see cref="Continue"/>, passes the pause checkpoint, then writes
+    /// the rest.</summary>
+    private sealed class CheckpointNativeCopy : INativeCopy
+    {
+        private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _continue = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private volatile bool _finished;
+
+        public Task Started => _started.Task;
+
+        public bool Finished => _finished;
+
+        public void Continue() => _continue.TrySetResult();
+
+        public async Task CopyFileAsync(string sourcePath, string destinationPath, IProgress<long> bytesCopied,
+            Func<CancellationToken, ValueTask> pauseCheckpoint, CancellationToken ct)
+        {
+            var content = await File.ReadAllBytesAsync(sourcePath, ct);
+            await File.WriteAllBytesAsync(destinationPath, content[..4], ct);
+            bytesCopied.Report(4);
+            _started.TrySetResult();
+            await _continue.Task.WaitAsync(ct);
+            await pauseCheckpoint(ct);
+            await File.WriteAllBytesAsync(destinationPath, content, ct);
+            bytesCopied.Report(content.Length);
+            _finished = true;
+        }
+    }
+
     /// <summary>Writes the part with one byte changed, as a faulty platform copy might.</summary>
     private sealed class CorruptingNativeCopy : INativeCopy
     {
@@ -378,7 +472,7 @@ public sealed class CopyControlTests
         public int Calls => Volatile.Read(ref _calls);
 
         public async Task CopyFileAsync(string sourcePath, string destinationPath, IProgress<long> bytesCopied,
-            CancellationToken ct)
+            Func<CancellationToken, ValueTask> pauseCheckpoint, CancellationToken ct)
         {
             Interlocked.Increment(ref _calls);
             var content = await File.ReadAllBytesAsync(sourcePath, ct);
@@ -396,7 +490,7 @@ public sealed class CopyControlTests
         public Task Started => _started.Task;
 
         public async Task CopyFileAsync(string sourcePath, string destinationPath, IProgress<long> bytesCopied,
-            CancellationToken ct)
+            Func<CancellationToken, ValueTask> pauseCheckpoint, CancellationToken ct)
         {
             await File.WriteAllTextAsync(destinationPath, "cont", ct);
             bytesCopied.Report(4);

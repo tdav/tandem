@@ -260,7 +260,7 @@ internal sealed class InMemoryTrash(InMemoryFileSystem fs) : ITrash
 internal sealed class InMemoryNativeCopy(InMemoryFileSystem fs) : INativeCopy
 {
     public async Task CopyFileAsync(string sourcePath, string destinationPath, IProgress<long> bytesCopied,
-        CancellationToken ct)
+        Func<CancellationToken, ValueTask> pauseCheckpoint, CancellationToken ct)
     {
         await using var source = await fs.OpenReadAsync(VfsPath.Local(sourcePath), ct);
         await using var destination = await fs.OpenWriteAsync(VfsPath.Local(destinationPath), ct);
@@ -271,6 +271,7 @@ internal sealed class InMemoryNativeCopy(InMemoryFileSystem fs) : INativeCopy
         {
             await destination.WriteAsync(buffer.AsMemory(0, read), ct);
             bytesCopied.Report(total += read);
+            await pauseCheckpoint(ct);
         }
     }
 }
@@ -428,6 +429,6 @@ internal sealed class FakePlatform : IShellIntegration, IQuickLook, IFileMetadat
     public OwnerInfo GetOwner(string path) => throw NotHere();
     public Task MoveToTrashAsync(string localPath, CancellationToken ct) => throw NotHere();
     public Task CopyFileAsync(string sourcePath, string destinationPath, IProgress<long> bytesCopied,
-        CancellationToken ct) => throw NotHere();
+        Func<CancellationToken, ValueTask> pauseCheckpoint, CancellationToken ct) => throw NotHere();
     public IRunningProcess Start(ProcessSpec spec) => throw NotHere();
 }

@@ -18,6 +18,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The engine tests over the real native copy answer the operation's questions from a script. -->
+    <Compile Include="..\Tandem.Core.Tests\Operations\ScriptedInteraction.cs" Link="ScriptedInteraction.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Tandem.Platform.Mac\Tandem.Platform.Mac.csproj" />
   </ItemGroup>
 </Project>

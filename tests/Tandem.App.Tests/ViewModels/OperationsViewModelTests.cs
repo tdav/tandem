@@ -175,8 +175,11 @@ public class OperationsViewModelTests : LanguageTestBase
 
         item.PauseCommand.Execute(null);
         await Settle();
-        // Only a request: until the operation reaches a checkpoint it still runs, and says so.
+        // Only a request: until the operation reaches a checkpoint it still runs, and says so; the request can be
+        // withdrawn, and asking again would do nothing.
         Assert.Equal(Loc.Enum(OperationState.Running), item.StateText);
+        Assert.False(item.CanPause);
+        Assert.True(item.CanResume);
         op.Checkpoint();
         await TestApp.WaitUntil(() =>
         {
@@ -192,6 +195,35 @@ public class OperationsViewModelTests : LanguageTestBase
             Dispatcher.UIThread.RunJobs();
             return item.StateText == Loc.Enum(OperationState.Running);
         });
+
+        item.CancelCommand.Execute(null);
+        Assert.Equal(OperationState.Cancelled, (await op.Completion).State);
+    }
+
+    [AvaloniaFact]
+    public async Task A_pause_request_can_be_withdrawn_before_it_takes_effect()
+    {
+        var queue = new OperationQueue();
+        using var vm = new OperationsViewModel(queue);
+        var op = new GateOperation();
+        _ = queue.Enqueue(op, runImmediately: true);
+        await op.Started;
+        await TestApp.WaitUntil(() => { Dispatcher.UIThread.RunJobs(); return vm.Items.Count == 1; });
+        var item = vm.Items[0];
+        Assert.True(item.CanPause);
+        Assert.False(item.CanResume);
+
+        item.PauseCommand.Execute(null);
+        Assert.True(item.ResumeCommand.CanExecute(null));
+        item.ResumeCommand.Execute(null);
+
+        Assert.True(item.CanPause);
+        Assert.False(item.CanResume);
+        Assert.False(op.IsPauseRequested);
+        op.Checkpoint(); // the withdrawn request does not stop it
+        await Settle();
+        Assert.Equal(Loc.Enum(OperationState.Running), item.StateText);
+        Assert.Equal(OperationState.Running, op.State);
 
         item.CancelCommand.Execute(null);
         Assert.Equal(OperationState.Cancelled, (await op.Completion).State);
