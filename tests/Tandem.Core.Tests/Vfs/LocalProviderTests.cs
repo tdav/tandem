@@ -25,6 +25,52 @@ public sealed class LocalProviderTests : IDisposable
                      ProviderCapabilities.Symlinks | ProviderCapabilities.Watch, _fs.Capabilities);
     }
 
+    /// <summary>/a/dir → /b/c/d and /a/dir/link → ../x: the system reads /b/c/x (".." of the real folder), not /a/x.</summary>
+    [Fact]
+    public async Task Links_resolve_against_the_real_folder_not_the_path_text()
+    {
+        Directory.CreateDirectory(_temp.Combine("a"));
+        Directory.CreateDirectory(_temp.Combine("b/c/d"));
+        File.WriteAllText(_temp.Combine("a/x"), "wrong");
+        File.WriteAllText(_temp.Combine("b/c/x"), "right");
+        Directory.CreateSymbolicLink(_temp.Combine("a/dir"), _temp.Combine("b/c/d"));
+        File.CreateSymbolicLink(_temp.Combine("b/c/d/link"), "../x");
+        File.CreateSymbolicLink(_temp.Combine("b/c/d/chain"), "link");
+
+        var resolved = await _fs.ResolveLinksAsync(VfsPath.Local(_temp.Combine("a/dir/chain")), Ct);
+
+        Assert.Equal(VfsPath.Local(RealPath(_temp.Combine("b/c/x"))), resolved);
+        Assert.Equal("right", await File.ReadAllTextAsync(resolved.Path, Ct));
+        Assert.Equal(VfsPath.Local(RealPath(_temp.Combine("a/x"))),
+            await _fs.ResolveLinksAsync(VfsPath.Local(_temp.Combine("a/x")), Ct));
+    }
+
+    [Fact]
+    public async Task Resolving_a_dangling_link_gives_the_missing_target_and_a_loop_fails()
+    {
+        File.CreateSymbolicLink(_temp.Combine("dangling"), "missing.txt");
+        File.CreateSymbolicLink(_temp.Combine("loop1"), "loop2");
+        File.CreateSymbolicLink(_temp.Combine("loop2"), "loop1");
+
+        var resolved = await _fs.ResolveLinksAsync(VfsPath.Local(_temp.Combine("dangling")), Ct);
+
+        Assert.Equal(VfsPath.Local(RealPath(_temp.Path) + "/missing.txt"), resolved);
+        await Assert.ThrowsAnyAsync<IOException>(() =>
+            _fs.ResolveLinksAsync(VfsPath.Local(_temp.Combine("loop1")), Ct));
+    }
+
+    /// <summary>The path with the temp folder's own links (/var → /private/var) resolved, as realpath(3) gives it
+    /// for an existing parent.</summary>
+    private static string RealPath(string path)
+    {
+        var parent = Path.GetDirectoryName(path)!;
+        var real = Marshal.PtrToStringUTF8(realpath(parent, IntPtr.Zero))!;
+        return real + "/" + Path.GetFileName(path);
+    }
+
+    [DllImport("libc", SetLastError = true)]
+    private static extern IntPtr realpath(string path, IntPtr resolved);
+
     [Fact]
     public async Task Unrestricted_broker_grants_everything()
     {

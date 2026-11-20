@@ -481,16 +481,62 @@ public class EditorViewModelTests : LanguageTestBase
         Assert.Empty(native.Calls);
     }
 
+    [AvaloniaFact]
+    public async Task Failed_metadata_copy_does_not_stop_the_save()
+    {
+        var fs = new InMemoryFileSystem(VfsPath.LocalProviderId);
+        fs.AddFile(Path, "text");
+        var providers = new ProviderRegistry();
+        providers.Register(fs);
+        var native = new RecordingMetadataCopy(fs) { Failure = new IOException("Operation not supported") };
+        var editor = await EditorViewModel.OpenAsync(providers, VfsPath.Local(Path), CancellationToken.None, native);
+
+        editor.Document.Insert(0, "more ");
+        Assert.True(await editor.SaveAsync());
+
+        Assert.Equal("more text", fs.ReadAllText(Path));
+        Assert.Null(editor.Error);
+        Assert.False(editor.IsModified);
+        Assert.Equal("Saved, but the file’s tags and other attributes could not be kept: Operation not supported",
+            editor.Notice);
+        Assert.Equal([Path], fs.AllPaths.Where(p => p.StartsWith("/dir/", StringComparison.Ordinal)));
+    }
+
+    [AvaloniaFact]
+    public async Task Failed_save_in_utf8_keeps_the_previous_encoding()
+    {
+        var original = Cp1251.GetBytes("Привет");
+        var (providers, fs) = Setup(original);
+        fs.FailWriteAfter(Part, 0, () => new IOException("disk full"));
+        var editor = await OpenAsync(providers);
+        var asked = Answer(editor, true, true);
+        editor.Document.Insert(editor.Document.TextLength, " 😀");
+
+        Assert.False(await editor.SaveAsync());
+        Assert.Equal("windows-1251", editor.Encoding.Id);
+        Assert.Equal(original, Bytes(fs, Path));
+        Assert.NotNull(editor.Error);
+
+        fs.FailWriteAfter(Part, long.MaxValue, () => new IOException("never"));
+        Assert.True(await editor.SaveAsync());
+        Assert.Equal([EditorSaveQuestion.SaveAsUtf8, EditorSaveQuestion.SaveAsUtf8], asked);
+        Assert.Equal("utf-8", editor.Encoding.Id);
+        Assert.Equal(Encoding.UTF8.GetBytes("Привет 😀"), Bytes(fs, Path));
+    }
+
     /// <summary>Records the file metadata copies asked for, with whether the part file existed then (and the
     /// original was still in place); the other copies are not used.</summary>
     private sealed class RecordingMetadataCopy(InMemoryFileSystem fs) : INativeCopy
     {
         public List<(string Source, string Destination, bool BothExist)> Calls { get; } = [];
 
+        /// <summary>When set, every metadata copy fails with it (after being recorded).</summary>
+        public Exception? Failure { get; init; }
+
         public Task CopyFileMetadataAsync(string sourcePath, string destinationPath, CancellationToken ct)
         {
             lock (Calls) Calls.Add((sourcePath, destinationPath, fs.Exists(sourcePath) && fs.Exists(destinationPath)));
-            return Task.CompletedTask;
+            return Failure is { } failure ? Task.FromException(failure) : Task.CompletedTask;
         }
 
         public Task CopyFileAsync(string sourcePath, string destinationPath, IProgress<long> bytesCopied,

@@ -983,4 +983,7 @@
   <data name="Button_SaveInUtf8" xml:space="preserve">
     <value>Сохранить в UTF-8</value>
   </data>
+  <data name="Editor_MetadataNotKept" xml:space="preserve">
+    <value>Файл сохранён, но его метки и другие атрибуты сохранить не удалось: {0}</value>
+  </data>
 </root>

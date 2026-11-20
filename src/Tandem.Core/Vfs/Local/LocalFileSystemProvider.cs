@@ -16,7 +16,7 @@ namespace Tandem.Core.Vfs.Local;
 /// destination is checked first and then renamed, which leaves a moment for another process to create it.</para>
 /// </summary>
 public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusiveRename? exclusiveRename = null)
-    : IFileSystemProvider
+    : IFileSystemProvider, ILinkResolver
 {
     private const int EnumerationBatchSize = 256;
     private const int StreamBufferSize = 81920;
@@ -68,6 +68,39 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusive
     {
         var info = new FileInfo(p);
         return Exists(info) ? ToEntry(path, info) : null;
+    });
+
+    private const int MaxLinkHops = 40;
+
+    /// <summary>As realpath(3) does, without needing the end to exist: walks the path name by name from the root,
+    /// replacing every link met by its target, so ".." always steps out of a real folder.</summary>
+    public Task<VfsPath> ResolveLinksAsync(VfsPath path, CancellationToken ct) => RunAsync(path, ct, p =>
+    {
+        var pending = new Stack<string>(p.Split('/', StringSplitOptions.RemoveEmptyEntries).Reverse());
+        var current = "/";
+        var hops = 0;
+        while (pending.TryPop(out var name))
+        {
+            ct.ThrowIfCancellationRequested();
+            if (name == ".") continue;
+            if (name == "..")
+            {
+                current = Path.GetDirectoryName(current) ?? "/";
+                continue;
+            }
+            var next = current == "/" ? "/" + name : current + "/" + name;
+            string? target;
+            using (_broker.Access(next)) target = new FileInfo(next).LinkTarget;
+            if (target is null)
+            {
+                current = next;
+                continue;
+            }
+            if (++hops > MaxLinkHops) throw new VfsException($"Too many levels of symbolic links at '{p}'.");
+            foreach (var part in target.Split('/', StringSplitOptions.RemoveEmptyEntries).Reverse()) pending.Push(part);
+            if (target.StartsWith('/')) current = "/";
+        }
+        return VfsPath.Local(current);
     });
 
     public Task<Stream> OpenReadAsync(VfsPath path, CancellationToken ct) => RunAsync<Stream>(path, ct, p =>

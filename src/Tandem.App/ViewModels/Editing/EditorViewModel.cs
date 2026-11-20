@@ -33,7 +33,8 @@ public sealed class EditorRefusedException(EditorRefusal reason)
 /// </summary>
 /// <remarks>
 /// <para>Created (by <see cref="OpenAsync"/>) and used on the UI thread; reading, decoding, encoding and writing run
-/// off it. A symbolic link is followed to the file it leads to (on the same provider): that file is read and
+/// off it. A symbolic link is followed to the file it really leads to (on the same provider; on the local disk as the
+/// system resolves it): that file is read and
 /// written, so the link stays a link; <see cref="File"/> and <see cref="Title"/> keep the path that was opened.</para>
 /// <para>The text is decoded with the encoding <see cref="TextEncodingDetector"/> guesses, without the byte order
 /// mark; saving encodes it with the same encoding and puts the same mark back, so a file saved unchanged keeps its
@@ -41,7 +42,8 @@ public sealed class EditorRefusedException(EditorRefusal reason)
 /// on Enter.</para>
 /// <para>Nothing is ever changed silently. A save asks (<see cref="ConfirmSave"/>; no answerer means no) when the file
 /// changed on disk since it was read or saved, when its bytes do not survive decoding (see <see cref="Notice"/>),
-/// and when the text has characters its encoding cannot hold (then UTF-8 is offered, and kept for later saves).</para>
+/// and when the text has characters its encoding cannot hold (then UTF-8 is offered; once a save in it succeeds, it
+/// is kept for later saves).</para>
 /// <para>Saving writes through the provider's batch (<see cref="BatchScope"/>) and <see cref="SafeReplace"/>: the new
 /// text goes to a part file, which gets the original's Unix mode (where the provider has modes) and, on the local
 /// disk, its extended attributes, ACL and flags (<see cref="INativeCopy.CopyFileMetadataAsync"/>), and only then
@@ -138,7 +140,8 @@ public sealed partial class EditorViewModel : ObservableObject
     public partial string? Error { get; private set; }
 
     /// <summary>A lasting remark on the file, in words: its bytes do not survive decoding in its encoding, so saving
-    /// would change them (a save asks first). Null otherwise, and after a save.</summary>
+    /// would change them (a save asks first); or, after a save, that the file's tags and other attributes could not
+    /// be kept. Null otherwise.</summary>
     [ObservableProperty]
     public partial string? Notice { get; private set; }
 
@@ -173,6 +176,7 @@ public sealed partial class EditorViewModel : ObservableObject
             return false;
         }
         var changes = _changes;
+        string? notice;
         var snapshot = Document.CreateSnapshot();
         var (providers, target, nativeCopy) = (_providers, _target, _nativeCopy);
         try
@@ -190,9 +194,7 @@ public sealed partial class EditorViewModel : ObservableObject
             if (content is null)
             {
                 if (!await ConfirmAsync(EditorSaveQuestion.SaveAsUtf8)) return false;
-                _bom = [];
-                Encoding = TextEncodings.Utf8;
-                (encoding, bom) = (Encoding, _bom);
+                (encoding, bom) = (TextEncodings.Utf8, []);
                 content = await Task.Run(() => Encode(snapshot, encoding, bom, replaceUnsavable));
                 if (content is null)
                 {
@@ -204,9 +206,13 @@ public sealed partial class EditorViewModel : ObservableObject
             var mode = provider.Capabilities.HasFlag(ProviderCapabilities.UnixPermissions)
                 ? current?.Mode ?? _openedMode
                 : null;
-            var saved = await Task.Run(() => WriteAsync(providers, target, content, mode, current is not null,
-                nativeCopy));
+            var (saved, metadataFailure) = await Task.Run(() => WriteAsync(providers, target, content, mode,
+                current is not null, nativeCopy));
             if (saved is not null) _onDisk = (saved.Size, saved.Modified);
+            // Only a written file takes the encoding it was written in (UTF-8, when the user chose it).
+            _bom = bom;
+            Encoding = encoding;
+            notice = metadataFailure is null ? null : Loc.Format("Editor_MetadataNotKept", metadataFailure.Message);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
@@ -215,7 +221,7 @@ public sealed partial class EditorViewModel : ObservableObject
         }
         Error = null;
         _roundTrips = true;
-        Notice = null;
+        Notice = notice;
         if (changes == _changes) Document.UndoStack.MarkAsOriginalFile();
         return true;
     }
@@ -261,11 +267,20 @@ public sealed partial class EditorViewModel : ObservableObject
     }
 
     /// <summary>The file <paramref name="file"/> leads to on its own provider, through any symbolic links, with its
-    /// entry.</summary>
+    /// entry: resolved by the provider itself where it can (<see cref="ILinkResolver"/>: the local disk, where ".."
+    /// in a link is relative to the real folder), otherwise by following each link's target as path text.</summary>
     /// <exception cref="VfsNotFoundException">The file, or a link's target, does not exist.</exception>
     private static async Task<(VfsPath Target, FileEntry Entry)> ResolveAsync(IFileSystemProvider provider,
         VfsPath file, CancellationToken ct)
     {
+        if (provider is ILinkResolver resolver)
+        {
+            var resolved = await resolver.ResolveLinksAsync(file, ct).ConfigureAwait(false);
+            var entry = await provider.GetEntryAsync(resolved, ct).ConfigureAwait(false);
+            return entry is { Kind: not EntryKind.Symlink }
+                ? (resolved, entry)
+                : throw new VfsNotFoundException($"'{file.Path}' does not exist or its link leads nowhere.");
+        }
         var path = file;
         for (var hop = 0; hop < MaxLinkHops; hop++)
         {
@@ -326,13 +341,15 @@ public sealed partial class EditorViewModel : ObservableObject
 
     /// <summary>One batch on the file's provider, the safe replace inside it, then the commit; the batch is disposed
     /// (discarding what was not committed) whatever happens. The part file gets <paramref name="mode"/>, and on the
-    /// local disk the original's metadata, before it replaces the original. The file's entry once written (null
-    /// if it cannot be seen yet).</summary>
-    private static async Task<FileEntry?> WriteAsync(ProviderRegistry providers, VfsPath target, byte[] content,
+    /// local disk the original's metadata, before it replaces the original; that copy is best effort (a volume may
+    /// not support extended attributes): its failure does not stop the save and is returned. Also returns the file's
+    /// entry once written (null if it cannot be seen yet).</summary>
+    private static async Task<(FileEntry? Saved, Exception? MetadataFailure)> WriteAsync(ProviderRegistry providers, VfsPath target, byte[] content,
         UnixFileMode? mode, bool exists, INativeCopy? nativeCopy)
     {
         var ct = CancellationToken.None;
         var provider = providers.For(target);
+        Exception? metadataFailure = null;
         await using var batch = await BatchScope.BeginAsync(providers, [target], ct).ConfigureAwait(false);
         // A file deleted meanwhile is written anew rather than failing on the missing original.
         await SafeReplace.WriteAsync(provider, target, replace: exists, async part =>
@@ -341,9 +358,18 @@ public sealed partial class EditorViewModel : ObservableObject
                 await stream.WriteAsync(content, ct).ConfigureAwait(false);
             if (mode is { } m) await provider.SetModeAsync(part, m, ct).ConfigureAwait(false);
             if (exists && nativeCopy is not null && target.ProviderId == VfsPath.LocalProviderId)
-                await nativeCopy.CopyFileMetadataAsync(target.Path, part.Path, ct).ConfigureAwait(false);
+            {
+                try
+                {
+                    await nativeCopy.CopyFileMetadataAsync(target.Path, part.Path, ct).ConfigureAwait(false);
+                }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+                {
+                    metadataFailure = e;
+                }
+            }
         }).ConfigureAwait(false);
         await batch.CommitAsync(ct).ConfigureAwait(false);
-        return await provider.GetEntryAsync(target, ct).ConfigureAwait(false);
+        return (await provider.GetEntryAsync(target, ct).ConfigureAwait(false), metadataFailure);
     }
 }

@@ -992,4 +992,7 @@ Details were written to {1}.</value>
   <data name="Button_SaveInUtf8" xml:space="preserve">
     <value>Save in UTF-8</value>
   </data>
+  <data name="Editor_MetadataNotKept" xml:space="preserve">
+    <value>Saved, but the file’s tags and other attributes could not be kept: {0}</value>
+  </data>
 </root>
