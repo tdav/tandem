@@ -1023,4 +1023,10 @@
   <data name="QuickView_OpenFailed" xml:space="preserve">
     <value>Не удалось открыть «{0}»: {1}</value>
   </data>
+  <!-- Settings track -->
+  <data name="Settings_SaveFailed" xml:space="preserve">
+    <value>Не удалось сохранить настройки. Они действуют до выхода из Tandem.
+
+{0}</value>
+  </data>
 </root>

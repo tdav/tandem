@@ -37,6 +37,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private bool[] _tabAvailable = [];
     private volatile bool _disposed;
     private KeyMap _keyMap;
+    private readonly (string CommandId, string Label)[] _fKeyLabels;
+    private IReadOnlyList<FKeyItem> _fKeys;
 
     /// <param name="progressWindowDelay">Waits before the progress window may appear; the real delay when null.</param>
     /// <param name="quickLookDelay">Waits before an open Quick Look or quick-view panel follows the cursor; the real
@@ -59,15 +61,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         RunCommand = new RunCommand(Commands, ExecuteCommandAsync);
         Left = new SideViewModel(this, PanelSide.Left, workspace.Left);
         Right = new SideViewModel(this, PanelSide.Right, workspace.Right);
-        FKeys =
+        _fKeyLabels =
         [
-            new("F3", Loc.Get("FKey_View"), CommandIds.FileView),
-            new("F4", Loc.Get("FKey_Edit"), CommandIds.FileEdit),
-            new("F5", Loc.Get("FKey_Copy"), CommandIds.FileCopy),
-            new("F6", Loc.Get("FKey_Move"), CommandIds.FileMove),
-            new("F7", Loc.Get("FKey_NewFolder"), CommandIds.FileMkdir),
-            new("F8", Loc.Get("FKey_Delete"), CommandIds.FileDelete),
+            (CommandIds.FileView, Loc.Get("FKey_View")),
+            (CommandIds.FileEdit, Loc.Get("FKey_Edit")),
+            (CommandIds.FileCopy, Loc.Get("FKey_Copy")),
+            (CommandIds.FileMove, Loc.Get("FKey_Move")),
+            (CommandIds.FileMkdir, Loc.Get("FKey_NewFolder")),
+            (CommandIds.FileDelete, Loc.Get("FKey_Delete")),
         ];
+        _fKeys = BuildFKeys();
 
         Interaction = new DialogOperationInteraction(services.Dialogs, e => services.Log.Write(e, "dialog"));
         Operations = new OperationsViewModel(services.Operations, progressWindowDelay);
@@ -88,6 +91,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _volumeService.Changed += OnVolumesChanged;
         services.Operations.Changed += OnOperationsChanged;
         settings.Changed += OnSettingsChanged;
+        settings.SaveFailed += OnSettingsSaveFailed;
         _ = ReadVolumesAsync();
     }
 
@@ -142,8 +146,18 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public SideViewModel Side(PanelSide side) => side == PanelSide.Left ? Left : Right;
 
-    /// <summary>F3–F8 of the F-key bar.</summary>
-    public IReadOnlyList<FKeyItem> FKeys { get; }
+    /// <summary>The F-key bar: view, edit, copy, move, new folder, delete, each with its command's first chord in
+    /// <see cref="KeyMap"/> (F3–F8 by default; empty when unbound). Replaced when the key map changes.</summary>
+    public IReadOnlyList<FKeyItem> FKeys
+    {
+        get => _fKeys;
+        private set => SetProperty(ref _fKeys, value);
+    }
+
+    private FKeyItem[] BuildFKeys() => _fKeyLabels
+        .Select(k => new FKeyItem(KeyMap.ChordsFor(k.CommandId) is [var chord, ..] ? chord.ToString() : "", k.Label,
+            k.CommandId))
+        .ToArray();
 
     /// <summary>The mounted volumes; read again when <see cref="IVolumeService.Changed"/> reports a change, on Cmd+R,
     /// and when a file operation ends (free space).</summary>
@@ -266,8 +280,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private void OnSettingsChanged(object? sender, EventArgs e)
     {
         var keyMap = KeyMap.Default.WithOverrides(Settings.Current.KeyBindings);
-        if (!keyMap.Bindings.SequenceEqual(KeyMap.Bindings)) KeyMap = keyMap;
+        if (keyMap.Bindings.SequenceEqual(KeyMap.Bindings)) return;
+        KeyMap = keyMap;
+        FKeys = BuildFKeys();
     }
+
+    private void OnSettingsSaveFailed(object? sender, Exception failure) =>
+        NoticeRequested?.Invoke(this, Loc.Format("Settings_SaveFailed", failure.Message));
 
     public void Dispose()
     {
@@ -276,6 +295,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _volumeService.Changed -= OnVolumesChanged;
         Services.Operations.Changed -= OnOperationsChanged;
         Settings.Changed -= OnSettingsChanged;
+        Settings.SaveFailed -= OnSettingsSaveFailed;
         Workspace.PropertyChanged -= OnWorkspacePropertyChanged;
         QuickView.PropertyChanged -= OnQuickViewPropertyChanged;
         Workspace.Left.StateChanged -= OnTabsStateChanged;

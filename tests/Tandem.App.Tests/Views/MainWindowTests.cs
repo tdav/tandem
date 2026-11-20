@@ -481,6 +481,39 @@ public class MainWindowTests : LanguageTestBase
     }
 
     [AvaloniaFact]
+    public async Task New_shortcuts_update_the_same_menu_without_building_another()
+    {
+        await using var app = await TestApp.StartAsync();
+        var menu = NativeMenu.GetMenu(app.Window)!;
+        var items = AllItems(menu).ToList();
+        NativeMenuItem Item(string id) => items.Single(i => i.CommandParameter as string == id);
+
+        for (var i = 0; i < 5; i++)
+        {
+            app.Main.Settings.Update(app.Main.Settings.Current with
+            {
+                KeyBindings = [new KeyBindingOverride(CommandIds.FileCopy, [$"Ctrl+Cmd+{i}"])],
+            });
+            app.Pump();
+        }
+
+        // One menu, its items still in place: nothing new subscribed to the model.
+        Assert.Same(menu, NativeMenu.GetMenu(app.Window));
+        Assert.Equal(items, AllItems(NativeMenu.GetMenu(app.Window)!));
+        Assert.Equal(new KeyGesture(Key.D4, KeyModifiers.Control | KeyModifiers.Meta), Item(CommandIds.FileCopy).Gesture);
+        // Ctrl+Cmd+4 was sort.byDate's; it lost it.
+        Assert.Null(Item(CommandIds.SortByDate).Gesture);
+
+        // Back to no overrides: the default map and the default shortcuts again.
+        app.Main.Settings.Update(app.Main.Settings.Current with { KeyBindings = [] });
+        app.Pump();
+
+        Assert.Equal(KeyMap.Default.Bindings, app.Main.KeyMap.Bindings);
+        Assert.Equal(new KeyGesture(Key.F5), Item(CommandIds.FileCopy).Gesture);
+        Assert.Equal(new KeyGesture(Key.D4, KeyModifiers.Control | KeyModifiers.Meta), Item(CommandIds.SortByDate).Gesture);
+    }
+
+    [AvaloniaFact]
     public async Task Menu_lists_later_commands_disabled_and_shows_shortcuts()
     {
         await using var app = await TestApp.StartAsync();

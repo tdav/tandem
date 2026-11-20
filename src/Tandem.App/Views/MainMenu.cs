@@ -98,9 +98,26 @@ public static class MainMenu
             Command = main.RunCommand,
             CommandParameter = id,
         };
-        if (main.KeyMap.ChordsFor(id) is [var chord, ..]) item.Gesture = new KeyGesture(chord.Key, chord.Modifiers);
+        SetGesture(item, main.KeyMap, id);
         return item;
     }
+
+    /// <summary>Gives every command item of <paramref name="menu"/> (submenus included) its first chord in
+    /// <paramref name="keyMap"/>, or none. The items stay as they are otherwise, so nothing is built or subscribed
+    /// again when the key map changes.</summary>
+    public static void ApplyShortcuts(NativeMenu menu, KeyMap keyMap)
+    {
+        ArgumentNullException.ThrowIfNull(menu);
+        ArgumentNullException.ThrowIfNull(keyMap);
+        foreach (var item in menu.Items.OfType<NativeMenuItem>())
+        {
+            if (item.CommandParameter is string id) SetGesture(item, keyMap, id);
+            if (item.Menu is { } submenu) ApplyShortcuts(submenu, keyMap);
+        }
+    }
+
+    private static void SetGesture(NativeMenuItem item, KeyMap keyMap, string id) =>
+        item.Gesture = keyMap.ChordsFor(id) is [var chord, ..] ? new KeyGesture(chord.Key, chord.Modifiers) : null;
 
     private static IEnumerable<NativeMenuItemBase> ViewItems(MainViewModel main)
     {

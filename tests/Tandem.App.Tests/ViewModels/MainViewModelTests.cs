@@ -84,6 +84,64 @@ public class MainViewModelTests : LanguageTestBase
     }
 
     [AvaloniaFact]
+    public async Task Failed_settings_save_is_told_to_the_user()
+    {
+        await using var app = await TestApp.StartAsync(show: false);
+        // A folder where settings.json should be: writing the file fails.
+        Directory.CreateDirectory(Path.Combine(app.StateDirectory, "settings.json"));
+        var notices = new List<string>();
+        app.Main.NoticeRequested += (_, text) => notices.Add(text);
+
+        app.Main.Settings.Update(app.Main.Settings.Current with { FontSize = 18 });
+
+        var notice = Assert.Single(notices);
+        Assert.StartsWith("The settings could not be saved", notice);
+        Assert.Equal(18, app.Main.Settings.Current.FontSize);
+        Assert.Empty(app.Failures);
+        Assert.Contains("settings", File.ReadAllText(app.LogFile));
+    }
+
+    [AvaloniaFact]
+    public async Task Unusable_chords_from_the_settings_file_leave_the_default()
+    {
+        await using var app = await TestApp.StartAsync(show: false, settings: AppSettings.Default with
+        {
+            KeyBindings = [new KeyBindingOverride(CommandIds.FileCopy, ["K", "Cmd+Q"])],
+        });
+
+        Assert.Equal(KeyMap.Default.ChordsFor(CommandIds.FileCopy), app.Main.KeyMap.ChordsFor(CommandIds.FileCopy));
+        Assert.Equal(CommandIds.FileCopy, app.Main.KeyMap.Find(KeyChord.Parse("F5")));
+    }
+
+    [AvaloniaFact]
+    public async Task F_key_bar_shows_the_current_chord_of_each_command()
+    {
+        await using var app = await TestApp.StartAsync(show: false);
+        Assert.Equal(["F3", "F4", "F5", "F6", "F7", "F8"], app.Main.FKeys.Select(k => k.Key));
+        var changes = 0;
+        app.Main.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainViewModel.FKeys)) changes++;
+        };
+
+        app.Main.Settings.Update(app.Main.Settings.Current with
+        {
+            KeyBindings =
+            [
+                new KeyBindingOverride(CommandIds.FileCopy, ["Ctrl+Cmd+K"]),
+                new KeyBindingOverride(CommandIds.FileMkdir, []),
+            ],
+        });
+
+        Assert.Equal(1, changes);
+        var copy = app.Main.FKeys.Single(k => k.CommandId == CommandIds.FileCopy);
+        Assert.Equal("Ctrl+Cmd+K", copy.Key);
+        Assert.Equal("Copy", copy.Label);
+        Assert.Equal("", app.Main.FKeys.Single(k => k.CommandId == CommandIds.FileMkdir).Key);
+        Assert.Equal("F6", app.Main.FKeys.Single(k => k.CommandId == CommandIds.FileMove).Key);
+    }
+
+    [AvaloniaFact]
     public async Task Unbound_chords_are_not_handled()
     {
         await using var app = await TestApp.StartAsync(show: false);

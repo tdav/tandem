@@ -76,6 +76,36 @@ public sealed class SettingsServiceTests : IDisposable
     }
 
     [Fact]
+    public void Failed_save_raises_SaveFailed()
+    {
+        File.WriteAllText(_directory, "a file where the folder should be");
+        var logged = new List<Exception>();
+        var service = new SettingsService(Store(), logged.Add);
+        var raised = new List<Exception>();
+        service.SaveFailed += (_, e) => raised.Add(e);
+
+        service.Update(AppSettings.Default with { Theme = ThemeChoice.Dark });
+
+        Assert.IsAssignableFrom<IOException>(Assert.Single(raised));
+        Assert.Same(raised[0], Assert.Single(logged));
+    }
+
+    [Fact]
+    public void A_throwing_Changed_handler_does_not_skip_the_save()
+    {
+        var service = new SettingsService(Store());
+        var failure = new InvalidOperationException("handler");
+        service.Changed += (_, _) => throw failure;
+
+        var thrown = Assert.Throws<InvalidOperationException>(
+            () => service.Update(AppSettings.Default with { Theme = ThemeChoice.Light }));
+
+        Assert.Same(failure, thrown);
+        Assert.Equal(ThemeChoice.Light, service.Current.Theme);
+        Assert.Equal(ThemeChoice.Light, Store().Load().Theme);
+    }
+
+    [Fact]
     public void Failed_save_without_a_handler_does_not_throw()
     {
         File.WriteAllText(_directory, "a file where the folder should be");

@@ -1032,4 +1032,10 @@ Folder</value>
   <data name="QuickView_OpenFailed" xml:space="preserve">
     <value>Could not open “{0}”: {1}</value>
   </data>
+  <!-- Settings track -->
+  <data name="Settings_SaveFailed" xml:space="preserve">
+    <value>The settings could not be saved. They stay in effect until Tandem quits.
+
+{0}</value>
+  </data>
 </root>

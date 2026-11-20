@@ -209,9 +209,10 @@ public partial class MainWindow : Window
     {
         if (e.PropertyName == nameof(MainViewModel.ActiveSide) && !KeyRouting.IsTextEditor(FocusManager?.GetFocusedElement()))
             FocusActivePanel();
-        // The menu shows each command's first chord: build it again for the new key map.
-        else if (e.PropertyName == nameof(MainViewModel.KeyMap) && _main is { } main)
-            NativeMenu.SetMenu(this, MainMenu.Build(main));
+        // The menu shows each command's first chord: its items take the new key map's.
+        else if (e.PropertyName == nameof(MainViewModel.KeyMap) && _main is { } main &&
+                 NativeMenu.GetMenu(this) is { } menu)
+            MainMenu.ApplyShortcuts(menu, main.KeyMap);
     }
 
     private void FocusActivePanel()
