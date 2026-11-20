@@ -69,8 +69,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Files = new FileCommands(workspace, services.Providers, services.Operations, services.Dialogs, services.Trash,
             services.NativeCopy, Commands, Operations, Interaction, ReportFailure);
         Drops = new DropHandler(workspace, Files);
-        Shell = new ShellCommands(workspace, services.Shell, services.QuickLook, services.Dialogs, Commands,
-            services.Providers, services.Metadata, services.Temp, ReportFailure, quickLookDelay);
+        Shell = new ShellCommands(workspace, services.Shell, services.QuickLook, services.Dialogs, services.Windows,
+            Commands, services.Providers, services.Metadata, services.Temp, ReportFailure, quickLookDelay);
         CommandLine = new CommandLineViewModel(workspace, services.Processes, workspace.HomeDirectory);
         Commands.RaiseCanExecuteChanged();
         workspace.PropertyChanged += OnWorkspacePropertyChanged;
@@ -267,13 +267,18 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>True while file operations are running or waiting in the queue.</summary>
     public bool HasOperations => Services.Operations.Operations.Count > 0;
 
-    /// <summary>The window (or the app) is asked to close. With no file operation running or waiting, true at once.
-    /// Otherwise the user is asked whether to stop them and quit: on "stay", false; on "stop", every operation is
+    /// <summary>True while an editor (or another window of <see cref="AppServices.Windows"/>) is open.</summary>
+    public bool HasOpenWindows => Services.Windows.HasOpenWindows;
+
+    /// <summary>The window (or the app) is asked to close. First every window of <see cref="AppServices.Windows"/> is
+    /// closed, an editor with unsaved changes asking: if the user keeps one open, false. Then, with no file operation
+    /// running or waiting, true. Otherwise the user is asked whether to stop them and quit: on "stay", false; on "stop", every operation is
     /// cancelled, their open questions are answered as cancelled, and their ends are awaited (at most
     /// <paramref name="timeout"/>, <see cref="StopOperationsTimeout"/> by default) so each removes its unfinished part
     /// file; then true.</summary>
     public async Task<bool> ConfirmCloseAsync(TimeSpan? timeout = null)
     {
+        if (!await Services.Windows.CloseAllAsync()) return false;
         var operations = Services.Operations.Operations;
         if (operations.Count == 0) return true;
         if (!await Services.Dialogs.ConfirmQuitAsync(operations.Count)) return false;

@@ -1,0 +1,24 @@
+using Tandem.App.ViewModels.Editing;
+using Tandem.Core.Vfs;
+
+namespace Tandem.App.Services;
+
+/// <summary>
+/// The app's windows besides the main one and its dialogs: the editor windows (later the viewer and search
+/// windows). They are not modal; the main window waits for them when the app quits. Called on the UI thread.
+/// </summary>
+public interface IWindowService
+{
+    /// <summary>Shows <paramref name="editor"/> in a window of its own.</summary>
+    void ShowEditor(EditorViewModel editor);
+
+    /// <summary>Brings the editor window of <paramref name="path"/> to the front; false when none is open.</summary>
+    bool TryActivateEditor(VfsPath path);
+
+    /// <summary>True while any window of this service is open.</summary>
+    bool HasOpenWindows { get; }
+
+    /// <summary>Closes every window of this service; an editor with unsaved changes asks first. False when the user
+    /// kept one open (or its save failed): the windows from there on stay open.</summary>
+    Task<bool> CloseAllAsync();
+}

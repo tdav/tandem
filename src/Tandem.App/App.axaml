@@ -56,6 +56,8 @@
 
     <Application.Styles>
         <FluentTheme />
+        <!-- The built-in text editor's own look (AvaloniaEdit's Fluent theme). -->
+        <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
 
         <!-- Flat buttons of the bars (volumes, tabs, headers, F-keys, sidebar): they never take the focus, so the
              keyboard stays with the file list. -->

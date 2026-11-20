@@ -938,4 +938,34 @@ Details were written to {1}.</value>
   <data name="Menu_sort_byMode" xml:space="preserve">
     <value>By Permissions</value>
   </data>
+  <data name="Editor_TooLarge" xml:space="preserve">
+    <value>“{0}” is larger than 32 MB and cannot be opened in the editor. Use View (F3) instead.</value>
+  </data>
+  <data name="Editor_Binary" xml:space="preserve">
+    <value>“{0}” looks like a binary file, not text, and cannot be opened in the editor. Use View (F3) instead.</value>
+  </data>
+  <data name="Editor_SaveFailed" xml:space="preserve">
+    <value>Could not save “{0}”: {1}</value>
+  </data>
+  <data name="Editor_ReadOnly" xml:space="preserve">
+    <value>This file is read-only here and cannot be saved.</value>
+  </data>
+  <data name="Editor_ReadOnlyStatus" xml:space="preserve">
+    <value>Read-only</value>
+  </data>
+  <data name="Editor_EncodingWithBom" xml:space="preserve">
+    <value>{0} with BOM</value>
+  </data>
+  <data name="SaveChanges_Title" xml:space="preserve">
+    <value>Unsaved changes</value>
+  </data>
+  <data name="SaveChanges_Message" xml:space="preserve">
+    <value>Save the changes to “{0}”?</value>
+  </data>
+  <data name="Button_Save" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="Button_DontSave" xml:space="preserve">
+    <value>Don’t Save</value>
+  </data>
 </root>

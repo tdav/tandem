@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Tandem.App.Resources;
+using Tandem.App.Services;
 using Tandem.App.ViewModels.Dialogs;
 using Tandem.Core.Operations;
 
@@ -34,6 +35,22 @@ public sealed class ConfirmQuitDialog : DialogWindow
         stay.Click += (_, _) => Close(false);
         SetContent(stay, [Text(Loc.Format("Quit_Message", Loc.Count("Count_Operations", operationCount)),
             name: "Message")], quit, stay);
+    }
+}
+
+/// <summary>An editor with unsaved changes is closing: Save (the default button), Don't Save, or Cancel (also Esc and
+/// closing the dialog), which keeps the editor open.</summary>
+public sealed class SaveChangesDialog : DialogWindow
+{
+    public SaveChangesDialog(string fileName) : base(Loc.Get("SaveChanges_Title"))
+    {
+        var save = MakeButton(Loc.Get("Button_Save"), isDefault: true, name: "Save");
+        save.Click += (_, _) => Close(SaveChangesAnswer.Save);
+        var discard = MakeButton(Loc.Get("Button_DontSave"), name: "Discard");
+        discard.Click += (_, _) => Close(SaveChangesAnswer.Discard);
+        var cancel = CancelButton();
+        cancel.Click += (_, _) => Close(SaveChangesAnswer.Cancel);
+        SetContent(save, [Text(Loc.Format("SaveChanges_Message", fileName), name: "Message")], discard, cancel, save);
     }
 }
 

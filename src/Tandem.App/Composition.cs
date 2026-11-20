@@ -16,7 +16,8 @@ namespace Tandem.App;
 /// queue, the error log. The app gets the real ones from <see cref="Composition.CreatePlatformServices"/>; tests pass in-memory and
 /// fake ones. Without <see cref="Metadata"/> the properties dialog shows tags and owner as unavailable.
 /// <see cref="Temp"/> holds the copies of files opened from providers that are not the local disk; it is emptied when
-/// it is created (at start) and when the services are disposed (at exit).</summary>
+/// it is created (at start) and when the services are disposed (at exit). <see cref="Windows"/> shows the editor windows
+/// (and later the other non-modal windows).</summary>
 public sealed record AppServices(
     ProviderRegistry Providers,
     IVolumeService Volumes,
@@ -30,7 +31,8 @@ public sealed record AppServices(
     IFileAccessBroker AccessBroker,
     ErrorLog Log,
     IDialogService Dialogs,
-    TempFileStore Temp) : IDisposable
+    TempFileStore Temp,
+    IWindowService Windows) : IDisposable
 {
     /// <summary>Disposes the services that hold resources (the volume watch) and empties <see cref="Temp"/>.</summary>
     public void Dispose()
@@ -53,10 +55,11 @@ public static class Composition
         var providers = new ProviderRegistry();
         providers.Register(new LocalFileSystemProvider(broker, new MacExclusiveRename()));
         var processes = new ProcessRunner();
+        var dialogs = new DialogService();
         return new AppServices(providers, new MacVolumeService(), new MacShellIntegration(processes),
             new MacQuickLook(processes), new MacFileMetadataService(broker), new MacTrash(broker),
-            new MacNativeCopy(broker), processes, new OperationQueue(), broker, log, new DialogService(),
-            new TempFileStore(TempFileStore.DefaultDirectory(homeDirectory)));
+            new MacNativeCopy(broker), processes, new OperationQueue(), broker, log, dialogs,
+            new TempFileStore(TempFileStore.DefaultDirectory(homeDirectory)), new WindowService(dialogs));
     }
 
     /// <summary>Where the app writes unexpected errors: <c>~/Library/Logs/Tandem/tandem.log</c>.</summary>

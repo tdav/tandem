@@ -1,0 +1,23 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Tandem.App.ViewModels.Editing"
+        xmlns:ae="using:AvaloniaEdit"
+        x:Class="Tandem.App.Views.Editing.EditorWindow"
+        x:DataType="vm:EditorViewModel"
+        Title="{Binding Title}"
+        Width="900" Height="640" MinWidth="320" MinHeight="200">
+    <!-- The text with line numbers and the editor's own search panel (Cmd+F); below it, why the last save failed and
+         the file's encoding. -->
+    <DockPanel>
+        <Border DockPanel.Dock="Bottom" Background="{DynamicResource Tandem.BarBackground}"
+                BorderBrush="{DynamicResource Tandem.DividerBrush}" BorderThickness="0,1,0,0" Padding="8,3">
+            <DockPanel>
+                <TextBlock x:Name="EncodingText" DockPanel.Dock="Right" Classes="secondary" Margin="12,0,0,0" />
+                <TextBlock x:Name="ErrorText" Text="{Binding Error}" IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}"
+                           Foreground="{DynamicResource Tandem.ErrorForeground}" TextTrimming="CharacterEllipsis" />
+            </DockPanel>
+        </Border>
+        <ae:TextEditor x:Name="TextEditor" ShowLineNumbers="True" IsReadOnly="{Binding IsReadOnly}"
+                       FontFamily="Menlo, Monaco, Courier New, monospace" FontSize="13" />
+    </DockPanel>
+</Window>

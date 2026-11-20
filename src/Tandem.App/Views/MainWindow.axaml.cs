@@ -82,13 +82,13 @@ public partial class MainWindow : Window
     }
 
     /// <summary>Closing the window, by the user or by quitting the app (Cmd+Q, the Dock, the system: the app's
-    /// shutdown closes this window first). While file operations run, the close is held back and the user asked
-    /// (<see cref="MainViewModel.ConfirmCloseAsync"/>); once the operations are stopped the window closes again for
-    /// real. Then the placement and the workspace are saved.</summary>
+    /// shutdown closes this window first). While file operations run or an editor window is open, the close is held
+    /// back and <see cref="MainViewModel.ConfirmCloseAsync"/> closes the editors (asking about unsaved changes) and asks
+    /// about the operations; once both are settled the window closes again for real; a "keep" anywhere keeps it. Then the placement and the workspace are saved.</summary>
     private void OnClosing(object? sender, WindowClosingEventArgs e)
     {
         if (_main is not { } main) return;
-        if (!_closeConfirmed && main.HasOperations)
+        if (!_closeConfirmed && (main.HasOperations || main.HasOpenWindows))
         {
             e.Cancel = true;
             if (!_confirmingClose) _ = ConfirmCloseAsync(main);

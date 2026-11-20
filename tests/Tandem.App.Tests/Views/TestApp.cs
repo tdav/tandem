@@ -56,6 +56,9 @@ internal sealed class TestApp : IAsyncDisposable
     public MainWindow Window { get; private set; } = null!;
     public List<Exception> Failures { get; } = [];
 
+    /// <summary>The app's real window service: its editor windows open without a screen.</summary>
+    public WindowService Windows => (WindowService)Main.Services.Windows;
+
     /// <summary>The app's temporary files, in this app's temporary state folder.</summary>
     public TempFileStore Temp => Main.Services.Temp;
 
@@ -87,8 +90,9 @@ internal sealed class TestApp : IAsyncDisposable
         ProviderCapabilities removedCapabilities = ProviderCapabilities.None, IShellIntegration? shell = null,
         IQuickLook? quickLook = null, IFileMetadataService? metadata = null,
         IReadOnlyList<IFileSystemProvider>? extraProviders = null, IProcessRunner? processes = null,
-        IReadOnlyList<IFileMounter>? mounters = null)
+        IReadOnlyList<IFileMounter>? mounters = null, IWindowService? windows = null)
     {
+        dialogs ??= new ScriptedDialogs();
         var providers = new ProviderRegistry();
         var added = trashCapable ? ProviderCapabilities.Trash : ProviderCapabilities.None;
         providers.Register(added == ProviderCapabilities.None && removedCapabilities == ProviderCapabilities.None
@@ -100,7 +104,8 @@ internal sealed class TestApp : IAsyncDisposable
         return new AppServices(providers, volumes, shell ?? platform, quickLook ?? platform, metadata,
             trash ?? platform,
             new InMemoryNativeCopy(fs), processes ?? platform, new OperationQueue(), new UnrestrictedAccessBroker(),
-            new ErrorLog(logFile), dialogs ?? new ScriptedDialogs(), new TempFileStore(tempDirectory));
+            new ErrorLog(logFile), dialogs, new TempFileStore(tempDirectory),
+            windows ?? new WindowService(dialogs));
     }
 
     /// <param name="progressWindowDelay">How long before the progress window appears; never, when null.</param>
@@ -133,12 +138,20 @@ internal sealed class TestApp : IAsyncDisposable
     public void ShowWindow()
     {
         Window = new MainWindow(Main, screens: null);
+        Windows.Owner = Window;
         Window.Show();
         Pump();
     }
 
     public async ValueTask DisposeAsync()
     {
+        // Editors a test left modified close without saving, so nothing holds the main window open.
+        if (Main.Services.Windows is WindowService windows)
+        {
+            Dialogs.SaveChangesAnswers.Clear();
+            foreach (var _ in windows.Open) Dialogs.SaveChangesAnswers.Enqueue(SaveChangesAnswer.Discard);
+            await windows.CloseAllAsync();
+        }
         if (Window is { } window) window.Close();
         Main.Dispose();
         Main.Services.Dispose();

@@ -929,4 +929,34 @@
   <data name="Menu_sort_byMode" xml:space="preserve">
     <value>По правам</value>
   </data>
+  <data name="Editor_TooLarge" xml:space="preserve">
+    <value>Файл «{0}» больше 32 МБ, его нельзя открыть в редакторе. Откройте его для просмотра (F3).</value>
+  </data>
+  <data name="Editor_Binary" xml:space="preserve">
+    <value>Файл «{0}» похож на двоичный, а не на текст, его нельзя открыть в редакторе. Откройте его для просмотра (F3).</value>
+  </data>
+  <data name="Editor_SaveFailed" xml:space="preserve">
+    <value>Не удалось сохранить «{0}»: {1}</value>
+  </data>
+  <data name="Editor_ReadOnly" xml:space="preserve">
+    <value>Здесь файл доступен только для чтения, сохранить его нельзя.</value>
+  </data>
+  <data name="Editor_ReadOnlyStatus" xml:space="preserve">
+    <value>Только чтение</value>
+  </data>
+  <data name="Editor_EncodingWithBom" xml:space="preserve">
+    <value>{0} с меткой BOM</value>
+  </data>
+  <data name="SaveChanges_Title" xml:space="preserve">
+    <value>Несохранённые изменения</value>
+  </data>
+  <data name="SaveChanges_Message" xml:space="preserve">
+    <value>Сохранить изменения в файле «{0}»?</value>
+  </data>
+  <data name="Button_Save" xml:space="preserve">
+    <value>Сохранить</value>
+  </data>
+  <data name="Button_DontSave" xml:space="preserve">
+    <value>Не сохранять</value>
+  </data>
 </root>

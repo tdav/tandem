@@ -19,6 +19,9 @@ public sealed record CopyMoveRequest(bool IsMove, int ItemCount, string? SingleN
 /// the queue", and the action chosen (<paramref name="IsMove"/>; always the request's own for F5/F6).</summary>
 public sealed record CopyMoveAnswer(string Destination, bool VerifyContent, bool RunImmediately, bool IsMove = false);
 
+/// <summary>The answer to "save the changes?" when an editor with unsaved changes closes.</summary>
+public enum SaveChangesAnswer { Save, Discard, Cancel }
+
 /// <summary>
 /// The dialogs the file commands and running operations show. Called on the UI thread. Each completes when the
 /// dialog closes; a cancelled dialog answers null, false, <see cref="ConflictAction.Cancel"/> or
@@ -57,6 +60,10 @@ public interface IDialogService
     /// <summary>The app is asked to quit while <paramref name="operationCount"/> file operations are running or
     /// waiting: true to stop them and quit. "Stay" is the default button.</summary>
     Task<bool> ConfirmQuitAsync(int operationCount);
+
+    /// <summary>An editor with unsaved changes to <paramref name="fileName"/> is closing: save them, discard them, or
+    /// keep the editor open (<see cref="SaveChangesAnswer.Cancel"/>, also when the dialog is closed otherwise).</summary>
+    Task<SaveChangesAnswer> AskSaveChangesAsync(string fileName);
 
     /// <summary>A message; <paramref name="detail"/>, when given, is secondary (e.g. the system's own words).</summary>
     Task ShowMessageAsync(string text, string? detail = null);

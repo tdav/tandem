@@ -4,6 +4,7 @@ using Tandem.App.Commands;
 using Tandem.App.Resources;
 using Tandem.App.Tests.Views;
 using Tandem.App.ViewModels;
+using Tandem.App.Views.Editing;
 using Tandem.Core.Platform;
 using Tandem.Core.Vfs;
 using Tandem.Core.Vfs.InMemory;
@@ -53,8 +54,8 @@ public class ShellCommandsTests : LanguageTestBase
 
     private static readonly string[] LocalOnly =
     [
-        CommandIds.FileView, CommandIds.FileEdit, CommandIds.FileQuickLook, CommandIds.ShellReveal,
-        CommandIds.ShellOpenTerminal, CommandIds.ShellOpenWith,
+        CommandIds.FileView, CommandIds.FileQuickLook, CommandIds.ShellReveal, CommandIds.ShellOpenTerminal,
+        CommandIds.ShellOpenWith,
     ];
 
     // ---- Opening ----------------------------------------------------------------------------------------
@@ -167,7 +168,7 @@ public class ShellCommandsTests : LanguageTestBase
     }
 
     [AvaloniaFact]
-    public async Task Edit_opens_the_cursor_file_in_the_text_editor_and_is_off_on_a_folder()
+    public async Task Edit_opens_the_cursor_file_in_the_built_in_editor_and_is_off_on_a_folder()
     {
         await using var app = await StartAsync();
         Cursor(app.Left, "docs");
@@ -178,7 +179,41 @@ public class ShellCommandsTests : LanguageTestBase
         Cursor(app.Left, "README.md");
         Assert.True(await app.Main.Commands.ExecuteAsync(CommandIds.FileEdit));
 
-        Assert.Equal([("edit", "/home/README.md")], app.Shell.Calls);
+        var editor = Assert.IsType<EditorWindow>(Assert.Single(app.Windows.Open)).Editor;
+        Assert.Equal(VfsPath.Local("/home/README.md"), editor.File);
+        Assert.Equal("readme", editor.Document.Text);
+        Assert.Empty(app.Shell.Calls);
+    }
+
+    [AvaloniaFact]
+    public async Task Edit_opens_a_file_of_any_provider()
+    {
+        await using var app = await StartAsync();
+        await app.Left.NavigateToAsync(new VfsPath(Remote, "/shared"));
+        Cursor(app.Left, "a.txt");
+
+        Assert.True(app.Main.Commands.CanExecute(CommandIds.FileEdit));
+        Assert.True(await app.Main.Commands.ExecuteAsync(CommandIds.FileEdit));
+
+        var editor = Assert.IsType<EditorWindow>(Assert.Single(app.Windows.Open)).Editor;
+        Assert.Equal(new VfsPath(Remote, "/shared/a.txt"), editor.File);
+        Assert.Empty(app.Shell.Calls);
+    }
+
+    [AvaloniaFact]
+    public async Task Edit_of_a_file_that_cannot_be_read_is_told()
+    {
+        var remote = RemoteFileSystem();
+        remote.FailOn((op, path) => op == "OpenRead" && path.Path == "/shared/a.txt", () => new IOException("gone"));
+        await using var app = await TestApp.StartAsync(show: false, extraProviders: [remote]);
+        await app.Left.NavigateToAsync(new VfsPath(Remote, "/shared"));
+        Cursor(app.Left, "a.txt");
+
+        Assert.True(await app.Main.Commands.ExecuteAsync(CommandIds.FileEdit));
+
+        Assert.Equal([("Could not open “a.txt”.", "gone")], app.Dialogs.MessagesWithDetail);
+        Assert.Empty(app.Windows.Open);
+        Assert.Empty(app.Failures);
     }
 
     [AvaloniaFact]
@@ -211,8 +246,9 @@ public class ShellCommandsTests : LanguageTestBase
         Assert.Empty(app.Shell.Calls);
         Assert.Empty(app.QuickLook.Toggles);
         Assert.Empty(app.Shell.AppQueries);
-        // Properties still work, without the local-only parts.
+        // Properties and the built-in editor still work, without the local-only parts.
         Assert.True(app.Main.Commands.CanExecute(CommandIds.FileProperties));
+        Assert.True(app.Main.Commands.CanExecute(CommandIds.FileEdit));
     }
 
     [AvaloniaFact]

@@ -2,6 +2,7 @@ using System.ComponentModel;
 using Tandem.App.Commands;
 using Tandem.App.Resources;
 using Tandem.App.Services;
+using Tandem.App.ViewModels.Editing;
 using Tandem.Core.Platform;
 using Tandem.Core.Vfs;
 
@@ -11,13 +12,14 @@ namespace Tandem.App.ViewModels;
 public sealed record OpenWithApps(FileEntry Entry, IReadOnlyList<AppInfo> Apps);
 
 /// <summary>
-/// The commands that hand items to macOS: Quick Look (F3, Cmd+Y), the text editor (F4), the properties dialog
-/// (Cmd+I), Reveal in Finder, a terminal in the current folder, and "Open With" (menu only); Enter on a file opens it
-/// with its default application. Also tells the user when a panel's file cannot be opened as a folder, or is not one.
+/// The commands that hand items to macOS: Quick Look (F3, Cmd+Y), Reveal in Finder, a terminal in the current folder,
+/// and "Open With" (menu only); Enter on a file opens it with its default application. Also the built-in text editor
+/// (F4) and the properties dialog (Cmd+I). Also tells the user when a panel's file cannot be opened as a folder, or is not one.
 /// </summary>
 /// <remarks>
-/// Created and used on the UI thread. Everything but the properties dialog works for the local provider only and is
-/// disabled elsewhere; Enter on a file elsewhere opens a copy of it made in the <see cref="TempFileStore"/> (off the UI
+/// Created and used on the UI thread. Everything but the editor and the properties dialog works for the local provider
+/// only and is disabled elsewhere. The editor opens a file of any provider off the UI thread, in a window of
+/// <see cref="IWindowService"/>; F4 on a file already open there brings its window forward; Enter on a file elsewhere opens a copy of it made in the <see cref="TempFileStore"/> (off the UI
 /// thread): changes to the copy do not go back. Only the panels shown (active and passive) are listened to: what a
 /// panel no longer shown reports (a file activated, not a folder, a failed open) is dropped on purpose, since the user
 /// has moved on, and a copy still being made for such a panel is removed instead of opened. A launch that fails
@@ -42,6 +44,7 @@ public sealed class ShellCommands : IDisposable
     private readonly IShellIntegration _shell;
     private readonly IQuickLook _quickLook;
     private readonly IDialogService _dialogs;
+    private readonly IWindowService _windows;
     private readonly CommandRegistry _commands;
     private readonly ProviderRegistry _providers;
     private readonly IFileMetadataService? _metadata;
@@ -59,7 +62,7 @@ public sealed class ShellCommands : IDisposable
     /// <param name="quickLookDelay">Waits <see cref="QuickLookFollowDelay"/> before an open preview follows the
     /// cursor; <see cref="Task.Delay(TimeSpan, CancellationToken)"/> when null.</param>
     public ShellCommands(WorkspaceViewModel workspace, IShellIntegration shell, IQuickLook quickLook,
-        IDialogService dialogs, CommandRegistry commands, ProviderRegistry providers, IFileMetadataService? metadata,
+        IDialogService dialogs, IWindowService windows, CommandRegistry commands, ProviderRegistry providers, IFileMetadataService? metadata,
         TempFileStore temp, Action<Exception> reportFailure,
         Func<TimeSpan, CancellationToken, Task>? quickLookDelay = null)
     {
@@ -67,6 +70,7 @@ public sealed class ShellCommands : IDisposable
         _shell = shell ?? throw new ArgumentNullException(nameof(shell));
         _quickLook = quickLook ?? throw new ArgumentNullException(nameof(quickLook));
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
+        _windows = windows ?? throw new ArgumentNullException(nameof(windows));
         _commands = commands ?? throw new ArgumentNullException(nameof(commands));
         _providers = providers ?? throw new ArgumentNullException(nameof(providers));
         _metadata = metadata;
@@ -76,7 +80,7 @@ public sealed class ShellCommands : IDisposable
 
         commands.Register(CommandIds.FileView, ToggleQuickLookAsync, IsActiveLocal);
         commands.Register(CommandIds.FileQuickLook, ToggleQuickLookAsync, IsActiveLocal);
-        commands.Register(CommandIds.FileEdit, EditAsync, () => LocalCursorEntry() is { IsDirectoryLike: false });
+        commands.Register(CommandIds.FileEdit, EditAsync, () => CursorEntry() is { IsDirectoryLike: false });
         commands.Register(CommandIds.FileProperties, ShowPropertiesAsync, () => CursorEntry() is not null);
         commands.Register(CommandIds.ShellReveal, RevealAsync, () => LocalCursorEntry() is not null);
         commands.Register(CommandIds.ShellOpenTerminal, OpenTerminalAsync, IsActiveLocal);
@@ -301,10 +305,31 @@ public sealed class ShellCommands : IDisposable
     private void OnOpenFailed(object? sender, Exception error) =>
         _ = TellAsync(OperationTexts.ForFailure(error), error.Message);
 
-    private Task EditAsync() =>
-        LocalCursorEntry() is { IsDirectoryLike: false } entry
-            ? RunAsync(() => _shell.OpenInTextEditor(entry.Path.Path), Loc.Format("Shell_OpenFailed", entry.Name))
-            : Task.CompletedTask;
+    /// <summary>F4: the file under the cursor in the built-in editor, read off the UI thread; its window comes forward
+    /// instead when it is open already. A file the editor refuses (too large, binary) or cannot read is told to the
+    /// user.</summary>
+    private async Task EditAsync()
+    {
+        if (CursorEntry() is not { IsDirectoryLike: false } entry || _windows.TryActivateEditor(entry.Path)) return;
+        EditorViewModel editor;
+        try
+        {
+            editor = await EditorViewModel.OpenAsync(_providers, entry.Path, CancellationToken.None);
+        }
+        catch (EditorRefusedException e)
+        {
+            var key = e.Reason == EditorRefusal.TooLarge ? "Editor_TooLarge" : "Editor_Binary";
+            if (!_disposed) await TellAsync(Loc.Format(key, entry.Name), detail: null);
+            return;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            if (!_disposed) await TellAsync(Loc.Format("Shell_OpenFailed", entry.Name), e);
+            return;
+        }
+        if (_disposed || _windows.TryActivateEditor(entry.Path)) return;
+        _windows.ShowEditor(editor);
+    }
 
     private Task RevealAsync() =>
         LocalCursorEntry() is { } entry

@@ -42,9 +42,12 @@ internal class ScriptedDialogs : IDialogService
     public List<string> Unscripted { get; } = [];
     public Queue<bool> QuitAnswers { get; } = new();
     public List<int> QuitRequests { get; } = [];
+    public Queue<SaveChangesAnswer> SaveChangesAnswers { get; } = new();
+    /// <summary>The file name of each "save changes?" question.</summary>
+    public List<string> SaveChangesRequests { get; } = [];
 
     /// <summary>Every dialog asked for, in order, by kind ("copyMove", "name", "delete", "mask", "conflict", "error",
-    /// "summary", "message", "properties").</summary>
+    /// "summary", "message", "properties", "quit", "saveChanges").</summary>
     public List<string> Log { get; } = [];
 
     /// <summary>As a scripted destination: accept the text the dialog proposed.</summary>
@@ -142,6 +145,15 @@ internal class ScriptedDialogs : IDialogService
     {
         Record("quit", () => QuitRequests.Add(operationCount));
         return Task.FromResult(TryTake(QuitAnswers, "quit", out var answer) && answer);
+    }
+
+    /// <summary>Unscripted, it cancels (as closing the dialog does).</summary>
+    public virtual Task<SaveChangesAnswer> AskSaveChangesAsync(string fileName)
+    {
+        Record("saveChanges", () => SaveChangesRequests.Add(fileName));
+        return Task.FromResult(TryTake(SaveChangesAnswers, "saveChanges", out var answer)
+            ? answer
+            : SaveChangesAnswer.Cancel);
     }
 
     public virtual Task ShowMessageAsync(string text, string? detail = null)

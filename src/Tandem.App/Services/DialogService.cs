@@ -55,6 +55,11 @@ public sealed class DialogService : IDialogService
     public async Task<bool> ConfirmQuitAsync(int operationCount) =>
         await ShowAsync<object>(new ConfirmQuitDialog(operationCount)) is true;
 
+    public async Task<SaveChangesAnswer> AskSaveChangesAsync(string fileName) =>
+        await ShowAsync<object>(new SaveChangesDialog(fileName)) is SaveChangesAnswer answer
+            ? answer
+            : SaveChangesAnswer.Cancel;
+
     public Task ShowMessageAsync(string text, string? detail = null) =>
         MessageDialog.ShowAsync(Owner, "Tandem", string.IsNullOrWhiteSpace(detail) ? text : text + "\n\n" + detail);
 

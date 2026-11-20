@@ -55,6 +55,7 @@ public partial class App : Application
             _main.CommandFailed += (_, e) => ReportUnexpected(e, "command");
             _window = new MainWindow(_main);
             if (_services.Dialogs is DialogService dialogs) dialogs.Owner = _window;
+            if (_services.Windows is WindowService windows) windows.Owner = _window;
             desktop.MainWindow = _window;
             _window.Show();
         }
