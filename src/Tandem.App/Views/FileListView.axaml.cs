@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -8,6 +9,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Tandem.App.Input;
 using Tandem.App.ViewModels;
+using Tandem.Core.Settings;
 using Tandem.Core.Vfs;
 
 namespace Tandem.App.Views;
@@ -18,16 +20,19 @@ namespace Tandem.App.Views;
 /// Drag and drop: pressing a row of a local panel and moving past a few pixels drags its items (the marked ones when
 /// the row is marked) to the other panel or to Finder, offering copy and move; files dragged onto the list from
 /// Finder or the other panel go, through the copy/move dialog, into the folder row under the pointer or the panel's
-/// folder; the dialog asks whether to copy or move. The target is highlighted while the drag is over it.</summary>
+/// folder; the dialog asks whether to copy or move. The target is highlighted while the drag is over it.
+/// Look: the side's list layout (font, row height, columns) and the window's colour rules for file rows.</summary>
 public partial class FileListView : UserControl
 {
     private const string DropTargetClass = "dropTarget";
+    private const string FileColorClassPrefix = "file";
 
     private readonly DragGesture _gesture = new();
     private PointerPressedEventArgs? _pressed;
     private int _pressedIndex = -1;
     private IDataTransfer? _draggedData;
     private IReadOnlyList<string>? _draggedPaths;
+    private SideViewModel? _side;
 
     public FileListView()
     {
@@ -59,8 +64,65 @@ public partial class FileListView : UserControl
                     if (OwnsFocus()) FocusCursorRow();
                 }, DispatcherPriority.Loaded);
         };
-        Rows.SizeChanged += (_, e) => PageSizeChanged?.Invoke(this,
-            Math.Max(1, (int)(e.NewSize.Height / FileListColumns.RowHeightValue) - 1));
+        Rows.SizeChanged += (_, _) => RaisePageSize();
+        // Rows matching a colour rule: set when a container takes a row, and on every shown row when the rules change.
+        Rows.ContainerPrepared += (_, e) => PaintRow(e.Container);
+    }
+
+    protected override void OnDataContextChanged(EventArgs e)
+    {
+        base.OnDataContextChanged(e);
+        if (_side is not null)
+        {
+            _side.PropertyChanged -= OnSidePropertyChanged;
+            _side.Layout.PropertyChanged -= OnLayoutPropertyChanged;
+        }
+        _side = DataContext as SideViewModel;
+        if (_side is not null)
+        {
+            _side.PropertyChanged += OnSidePropertyChanged;
+            _side.Layout.PropertyChanged += OnLayoutPropertyChanged;
+        }
+        PaintRows();
+    }
+
+    private void OnSidePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(SideViewModel.FileColors)) PaintRows();
+    }
+
+    private void OnLayoutPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ListLayoutViewModel.RowHeight)) RaisePageSize();
+    }
+
+    /// <summary>The rows that fit in the list, less one, by the layout's row height.</summary>
+    private void RaisePageSize()
+    {
+        var rowHeight = _side?.Layout.RowHeight ?? AppSettings.DefaultRowHeight;
+        if (Rows.Bounds.Height <= 0 || rowHeight <= 0) return;
+        PageSizeChanged?.Invoke(this, Math.Max(1, (int)(Rows.Bounds.Height / rowHeight) - 1));
+    }
+
+    private void PaintRows()
+    {
+        foreach (var container in Rows.GetRealizedContainers()) PaintRow(container);
+    }
+
+    /// <summary>Gives the row's container the class of its colour rule ("file" + colour name), or none; the styles
+    /// take the brush from the theme, so a change of theme needs no repaint.</summary>
+    private void PaintRow(Control container)
+    {
+        var colorName = _side is not null && container.DataContext is EntryRowViewModel { Entry: { } entry }
+            ? _side.FileColors.ColorNameFor(entry)
+            : null;
+        var wanted = colorName is null ? null : FileColorClassPrefix + colorName;
+        foreach (var name in AppSettings.ColorNames)
+        {
+            var cls = FileColorClassPrefix + name;
+            if (cls != wanted) container.Classes.Remove(cls);
+        }
+        if (wanted is not null && !container.Classes.Contains(wanted)) container.Classes.Add(wanted);
     }
 
     /// <summary>Hands the dragged items to the system's drag and drop, for the press that started it; tests replace

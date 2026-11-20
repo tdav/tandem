@@ -6,6 +6,7 @@
              xmlns:loc="using:Tandem.App.Resources"
              xmlns:platform="using:Tandem.Core.Platform"
              xmlns:listing="using:Tandem.Core.Listing"
+             xmlns:settings="using:Tandem.Core.Settings"
              x:Class="Tandem.App.Views.PanelView"
              x:DataType="vm:SideViewModel">
     <UserControl.Styles>
@@ -133,16 +134,11 @@
         </Border>
 
         <!-- Column headers: a click sorts by the column, a second click reverses the order. -->
+        <!-- This side's columns, in its order and widths (the rows use the same layout); the last cell is the
+             scroll bar's. -->
         <Grid x:Name="Headers" DockPanel.Dock="Top" Background="{DynamicResource Tandem.HeaderBackground}"
-              IsVisible="{Binding !ShowsQuickView}">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="{x:Static v:FileListColumns.Name}" />
-                <ColumnDefinition Width="{x:Static v:FileListColumns.Extension}" />
-                <ColumnDefinition Width="{x:Static v:FileListColumns.Size}" />
-                <ColumnDefinition Width="{x:Static v:FileListColumns.Date}" />
-                <ColumnDefinition Width="{x:Static v:FileListColumns.Mode}" />
-                <ColumnDefinition Width="14" />
-            </Grid.ColumnDefinitions>
+              IsVisible="{Binding !ShowsQuickView}" ColumnDefinitions="*,0,0,0,0,14"
+              v:ListLayoutColumns.Layout="{Binding Layout}">
             <Button x:Name="SortByName" Classes="flat" Command="{Binding SortByCommand}"
                     CommandParameter="{x:Static listing:SortColumn.Name}">
                 <StackPanel Orientation="Horizontal" Spacing="4">
@@ -150,28 +146,28 @@
                     <TextBlock Text="{Binding NameSortMark}" />
                 </StackPanel>
             </Button>
-            <Button x:Name="SortByExtension" Grid.Column="1" Classes="flat" Command="{Binding SortByCommand}"
+            <Button x:Name="SortByExtension" v:ListLayoutColumns.Cell="{x:Static settings:ColumnId.Extension}" Classes="flat" Command="{Binding SortByCommand}"
                     CommandParameter="{x:Static listing:SortColumn.Extension}">
                 <StackPanel Orientation="Horizontal" Spacing="4">
                     <TextBlock Text="{loc:Tr Key=Column_Ext}" />
                     <TextBlock Text="{Binding ExtensionSortMark}" />
                 </StackPanel>
             </Button>
-            <Button x:Name="SortBySize" Grid.Column="2" Classes="flat" Command="{Binding SortByCommand}"
+            <Button x:Name="SortBySize" v:ListLayoutColumns.Cell="{x:Static settings:ColumnId.Size}" Classes="flat" Command="{Binding SortByCommand}"
                     CommandParameter="{x:Static listing:SortColumn.Size}" HorizontalContentAlignment="Right">
                 <StackPanel Orientation="Horizontal" Spacing="4">
                     <TextBlock Text="{loc:Tr Key=Column_Size}" />
                     <TextBlock Text="{Binding SizeSortMark}" />
                 </StackPanel>
             </Button>
-            <Button x:Name="SortByDate" Grid.Column="3" Classes="flat" Command="{Binding SortByCommand}"
+            <Button x:Name="SortByDate" v:ListLayoutColumns.Cell="{x:Static settings:ColumnId.Modified}" Classes="flat" Command="{Binding SortByCommand}"
                     CommandParameter="{x:Static listing:SortColumn.Modified}">
                 <StackPanel Orientation="Horizontal" Spacing="4">
                     <TextBlock Text="{loc:Tr Key=Column_Date}" />
                     <TextBlock Text="{Binding DateSortMark}" />
                 </StackPanel>
             </Button>
-            <Button x:Name="SortByMode" Grid.Column="4" Classes="flat" Command="{Binding SortByCommand}"
+            <Button x:Name="SortByMode" v:ListLayoutColumns.Cell="{x:Static settings:ColumnId.Mode}" Classes="flat" Command="{Binding SortByCommand}"
                     CommandParameter="{x:Static listing:SortColumn.Mode}">
                 <StackPanel Orientation="Horizontal" Spacing="4">
                     <TextBlock Text="{loc:Tr Key=Column_Mode}" />

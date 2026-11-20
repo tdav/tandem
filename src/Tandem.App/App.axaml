@@ -28,6 +28,15 @@
                     <SolidColorBrush x:Key="Tandem.ViewerBackground" Color="#FFFFFFFF" />
                     <SolidColorBrush x:Key="Tandem.ViewerForeground" Color="#FF18181B" />
                     <SolidColorBrush x:Key="Tandem.ViewerSelection" Color="#FFBFD7FF" />
+                    <!-- File colours: the palette colour rules name (AppSettings.ColorNames). -->
+                    <SolidColorBrush x:Key="Tandem.FileColor.Red" Color="#FFC62828" />
+                    <SolidColorBrush x:Key="Tandem.FileColor.Orange" Color="#FFC2570C" />
+                    <SolidColorBrush x:Key="Tandem.FileColor.Yellow" Color="#FF8A6D00" />
+                    <SolidColorBrush x:Key="Tandem.FileColor.Green" Color="#FF2E7D32" />
+                    <SolidColorBrush x:Key="Tandem.FileColor.Teal" Color="#FF00796B" />
+                    <SolidColorBrush x:Key="Tandem.FileColor.Blue" Color="#FF1565C0" />
+                    <SolidColorBrush x:Key="Tandem.FileColor.Purple" Color="#FF6A1B9A" />
+                    <SolidColorBrush x:Key="Tandem.FileColor.Gray" Color="#FF6B6B73" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <SolidColorBrush x:Key="Tandem.BarBackground" Color="#FF232326" />
@@ -49,6 +58,15 @@
                     <SolidColorBrush x:Key="Tandem.ViewerBackground" Color="#FF1C1C1E" />
                     <SolidColorBrush x:Key="Tandem.ViewerForeground" Color="#FFE4E4E7" />
                     <SolidColorBrush x:Key="Tandem.ViewerSelection" Color="#FF264F78" />
+                    <!-- File colours: the palette colour rules name (AppSettings.ColorNames). -->
+                    <SolidColorBrush x:Key="Tandem.FileColor.Red" Color="#FFFF8A80" />
+                    <SolidColorBrush x:Key="Tandem.FileColor.Orange" Color="#FFFFB74D" />
+                    <SolidColorBrush x:Key="Tandem.FileColor.Yellow" Color="#FFFFE082" />
+                    <SolidColorBrush x:Key="Tandem.FileColor.Green" Color="#FF81C784" />
+                    <SolidColorBrush x:Key="Tandem.FileColor.Teal" Color="#FF4DB6AC" />
+                    <SolidColorBrush x:Key="Tandem.FileColor.Blue" Color="#FF64B5F6" />
+                    <SolidColorBrush x:Key="Tandem.FileColor.Purple" Color="#FFCE93D8" />
+                    <SolidColorBrush x:Key="Tandem.FileColor.Gray" Color="#FFA1A1AA" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
 

@@ -6,6 +6,7 @@ using Tandem.App.Services;
 using Tandem.App.ViewModels.Viewing;
 using Tandem.Core.Listing;
 using Tandem.Core.Platform;
+using Tandem.Core.Settings;
 using Tandem.Core.Vfs;
 
 namespace Tandem.App.ViewModels;
@@ -69,6 +70,13 @@ public sealed partial class SideViewModel : ObservableObject
     public ViewerViewModel? QuickViewer => ShowsQuickView ? _main.QuickView.Viewer : null;
 
     public bool ShowVolumeBar => _main.Workspace.View.VolumeBars;
+
+    /// <summary>The file list's font, row height and columns: the settings' font and row height, and this side's own
+    /// columns (<see cref="AppSettings.LeftColumns"/> or <c>RightColumns</c>).</summary>
+    public ListLayoutViewModel Layout { get; } = new();
+
+    /// <summary>The window's colour rules for file rows; PropertyChanged is raised when they are replaced.</summary>
+    public FileColors FileColors => _main.FileColors;
 
     public IReadOnlyList<VolumeInfo> Volumes => _main.Volumes;
 
@@ -365,6 +373,14 @@ public sealed partial class SideViewModel : ObservableObject
     }
 
     internal void OnViewChanged() => OnPropertyChanged(nameof(ShowVolumeBar));
+
+    /// <summary>Takes this side's part of the settings: the layout of its list and the colour rules.</summary>
+    internal void OnSettingsChanged(AppSettings settings, bool fileColorsChanged)
+    {
+        Layout.Apply(Side == PanelSide.Left ? settings.LeftColumns : settings.RightColumns, settings.FontSize,
+            settings.RowHeight);
+        if (fileColorsChanged) OnPropertyChanged(nameof(FileColors));
+    }
 
     internal void OnVolumesChanged()
     {

@@ -1038,4 +1038,16 @@ Folder</value>
 
 {0}</value>
   </data>
+  <data name="Menu_Theme" xml:space="preserve">
+    <value>Theme</value>
+  </data>
+  <data name="Menu_ThemeSystem" xml:space="preserve">
+    <value>As in System</value>
+  </data>
+  <data name="Menu_ThemeLight" xml:space="preserve">
+    <value>Light</value>
+  </data>
+  <data name="Menu_ThemeDark" xml:space="preserve">
+    <value>Dark</value>
+  </data>
 </root>

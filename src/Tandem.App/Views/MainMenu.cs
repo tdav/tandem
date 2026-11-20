@@ -6,6 +6,7 @@ using Tandem.App.Commands;
 using Tandem.App.Resources;
 using Tandem.App.ViewModels;
 using Tandem.Core.Listing;
+using Tandem.Core.Settings;
 
 namespace Tandem.App.Views;
 
@@ -139,6 +140,14 @@ public static class MainMenu
         ];
         var languageMenu = new NativeMenu();
         foreach (var (_, item) in languages) languageMenu.Items.Add(item);
+        (ThemeChoice Theme, NativeMenuItem Item)[] themes =
+        [
+            (ThemeChoice.System, Radio("Menu_ThemeSystem", () => main.SetTheme(ThemeChoice.System))),
+            (ThemeChoice.Light, Radio("Menu_ThemeLight", () => main.SetTheme(ThemeChoice.Light))),
+            (ThemeChoice.Dark, Radio("Menu_ThemeDark", () => main.SetTheme(ThemeChoice.Dark))),
+        ];
+        var themeMenu = new NativeMenu();
+        foreach (var (_, item) in themes) themeMenu.Items.Add(item);
 
         void Update()
         {
@@ -150,6 +159,7 @@ public static class MainMenu
             hidden.IsChecked = workspace.ShowHidden;
             quickView.IsChecked = main.QuickView.IsOpen;
             foreach (var (code, item) in languages) item.IsChecked = workspace.Language == code;
+            foreach (var (theme, item) in themes) item.IsChecked = main.Theme == theme;
         }
 
         Update();
@@ -162,6 +172,10 @@ public static class MainMenu
         {
             if (e.PropertyName == nameof(ViewModels.Viewing.QuickViewViewModel.IsOpen)) Update();
         };
+        main.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainViewModel.Theme)) Update();
+        };
 
         return
         [
@@ -170,6 +184,7 @@ public static class MainMenu
             new NativeMenuItemSeparator(),
             Submenu("Menu_Sort", SortItems(main)),
             new NativeMenuItemSeparator(),
+            new NativeMenuItem(Loc.Get("Menu_Theme")) { Menu = themeMenu },
             new NativeMenuItem(Loc.Get("Menu_Language")) { Menu = languageMenu },
         ];
     }

@@ -50,6 +50,7 @@ public partial class MainWindow : Window
         _main = main;
         _screens = screens;
         DataContext = main;
+        App.ApplyTheme(main.Theme);
         NativeMenu.SetMenu(this, MainMenu.Build(main));
         ApplyPlacement();
 
@@ -209,6 +210,8 @@ public partial class MainWindow : Window
     {
         if (e.PropertyName == nameof(MainViewModel.ActiveSide) && !KeyRouting.IsTextEditor(FocusManager?.GetFocusedElement()))
             FocusActivePanel();
+        else if (e.PropertyName == nameof(MainViewModel.Theme) && _main is { } themed)
+            App.ApplyTheme(themed.Theme);
         // The menu shows each command's first chord: its items take the new key map's.
         else if (e.PropertyName == nameof(MainViewModel.KeyMap) && _main is { } main &&
                  NativeMenu.GetMenu(this) is { } menu)

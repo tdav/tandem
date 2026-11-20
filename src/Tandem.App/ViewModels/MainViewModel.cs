@@ -9,6 +9,7 @@ using Tandem.App.Services;
 using Tandem.App.ViewModels.Viewing;
 using Tandem.Core.Listing;
 using Tandem.Core.Platform;
+using Tandem.Core.Settings;
 using Tandem.Core.Vfs;
 
 namespace Tandem.App.ViewModels;
@@ -39,6 +40,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private KeyMap _keyMap;
     private readonly (string CommandId, string Label)[] _fKeyLabels;
     private IReadOnlyList<FKeyItem> _fKeys;
+    private FileColors _fileColors;
+    private IReadOnlyList<FileColorRule> _fileColorRules;
+    private ThemeChoice _theme;
 
     /// <param name="progressWindowDelay">Waits before the progress window may appear; the real delay when null.</param>
     /// <param name="quickLookDelay">Waits before an open Quick Look or quick-view panel follows the cursor; the real
@@ -56,11 +60,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Services = services;
         Settings = settings;
         _keyMap = KeyMap.Default.WithOverrides(settings.Current.KeyBindings);
+        _fileColorRules = settings.Current.FileColors;
+        _fileColors = new FileColors(_fileColorRules);
+        _theme = settings.Current.Theme;
         QuickView = new QuickViewViewModel(workspace, services.Providers, services.Temp, quickLookDelay,
             ReportFailure);
         RunCommand = new RunCommand(Commands, ExecuteCommandAsync);
         Left = new SideViewModel(this, PanelSide.Left, workspace.Left);
         Right = new SideViewModel(this, PanelSide.Right, workspace.Right);
+        Left.OnSettingsChanged(settings.Current, fileColorsChanged: false);
+        Right.OnSettingsChanged(settings.Current, fileColorsChanged: false);
         _fKeyLabels =
         [
             (CommandIds.FileView, Loc.Get("FKey_View")),
@@ -110,6 +119,28 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     {
         get => _keyMap;
         private set => SetProperty(ref _keyMap, value);
+    }
+
+    /// <summary>The colour rules for file rows from <see cref="Settings"/>; replaced (and PropertyChanged raised, on
+    /// this and on both sides) when the rules change.</summary>
+    public FileColors FileColors
+    {
+        get => _fileColors;
+        private set => SetProperty(ref _fileColors, value);
+    }
+
+    /// <summary>The colour scheme chosen in <see cref="Settings"/>; the window applies it to the application.</summary>
+    public ThemeChoice Theme
+    {
+        get => _theme;
+        private set => SetProperty(ref _theme, value);
+    }
+
+    /// <summary>View → Theme: keeps <paramref name="theme"/> in the settings, which applies it at once.</summary>
+    public void SetTheme(ThemeChoice theme)
+    {
+        if (Settings.Current.Theme == theme) return;
+        Settings.Update(Settings.Current with { Theme = theme });
     }
 
     /// <summary>The running and waiting file operations, for the progress window and the status indicator.</summary>
@@ -279,7 +310,19 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private void OnSettingsChanged(object? sender, EventArgs e)
     {
-        var keyMap = KeyMap.Default.WithOverrides(Settings.Current.KeyBindings);
+        var settings = Settings.Current;
+        Theme = settings.Theme;
+        var rules = settings.FileColors;
+        var fileColorsChanged = !rules.SequenceEqual(_fileColorRules);
+        if (fileColorsChanged)
+        {
+            _fileColorRules = rules;
+            FileColors = new FileColors(rules);
+        }
+        Left.OnSettingsChanged(settings, fileColorsChanged);
+        Right.OnSettingsChanged(settings, fileColorsChanged);
+
+        var keyMap = KeyMap.Default.WithOverrides(settings.KeyBindings);
         if (keyMap.Bindings.SequenceEqual(KeyMap.Bindings)) return;
         KeyMap = keyMap;
         FKeys = BuildFKeys();

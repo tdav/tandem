@@ -2,12 +2,14 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Tandem.App.ViewModels"
              xmlns:v="using:Tandem.App.Views"
+             xmlns:settings="using:Tandem.Core.Settings"
              x:Class="Tandem.App.Views.FileListView"
              x:DataType="vm:SideViewModel">
     <UserControl.Styles>
-        <!-- Fixed row height: the virtualizing panel never measures rows one by one. -->
+        <!-- Fixed row height (from the settings, the same for every row): the virtualizing panel never measures rows
+             one by one. -->
         <Style Selector="ListBox#Rows ListBoxItem">
-            <Setter Property="Height" Value="{x:Static v:FileListColumns.RowHeight}" />
+            <Setter Property="Height" Value="{Binding $parent[v:FileListView].((vm:SideViewModel)DataContext).Layout.RowHeight}" />
             <Setter Property="MinHeight" Value="0" />
             <Setter Property="Padding" Value="6,0" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
@@ -23,6 +25,32 @@
             <Setter Property="Background" Value="{DynamicResource Tandem.Transparent}" />
             <Setter Property="BorderBrush" Value="{DynamicResource Tandem.CursorBorder}" />
             <Setter Property="BorderThickness" Value="1" />
+        </Style>
+        <!-- Files matching a colour rule: the rule's palette colour (FileListView sets the class "file" + colour name
+             on the row). Marked rows below win over these. -->
+        <Style Selector="ListBox#Rows ListBoxItem.fileRed TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Tandem.FileColor.Red}" />
+        </Style>
+        <Style Selector="ListBox#Rows ListBoxItem.fileOrange TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Tandem.FileColor.Orange}" />
+        </Style>
+        <Style Selector="ListBox#Rows ListBoxItem.fileYellow TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Tandem.FileColor.Yellow}" />
+        </Style>
+        <Style Selector="ListBox#Rows ListBoxItem.fileGreen TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Tandem.FileColor.Green}" />
+        </Style>
+        <Style Selector="ListBox#Rows ListBoxItem.fileTeal TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Tandem.FileColor.Teal}" />
+        </Style>
+        <Style Selector="ListBox#Rows ListBoxItem.fileBlue TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Tandem.FileColor.Blue}" />
+        </Style>
+        <Style Selector="ListBox#Rows ListBoxItem.filePurple TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Tandem.FileColor.Purple}" />
+        </Style>
+        <Style Selector="ListBox#Rows ListBoxItem.fileGray TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource Tandem.FileColor.Gray}" />
         </Style>
         <!-- Marked rows: coloured text. -->
         <Style Selector="Grid.marked TextBlock">
@@ -58,6 +86,7 @@
              SelectedIndex="{Binding Panel.CursorIndex, Mode=OneWay}"
              SelectionMode="Single"
              IsTextSearchEnabled="False"
+             FontSize="{Binding Layout.FontSize}"
              AutoScrollToSelectedItem="True"
              Classes.inactive="{Binding !IsActive}"
              DragDrop.AllowDrop="True"
@@ -69,16 +98,12 @@
         </v:PanelListBox.ItemsPanel>
         <v:PanelListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:EntryRowViewModel">
-                <Grid Classes.marked="{Binding IsSelected}" Classes.folder="{Binding IsDirectoryLike}">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="{x:Static v:FileListColumns.Name}" />
-                        <ColumnDefinition Width="{x:Static v:FileListColumns.Extension}" />
-                        <ColumnDefinition Width="{x:Static v:FileListColumns.Size}" />
-                        <ColumnDefinition Width="{x:Static v:FileListColumns.Date}" />
-                        <ColumnDefinition Width="{x:Static v:FileListColumns.Mode}" />
-                    </Grid.ColumnDefinitions>
+                <!-- Cells laid out by the side's list layout, as the column headers are. -->
+                <Grid Classes.marked="{Binding IsSelected}" Classes.folder="{Binding IsDirectoryLike}"
+                      ColumnDefinitions="*,0,0,0,0"
+                      v:ListLayoutColumns.Layout="{Binding $parent[v:FileListView].((vm:SideViewModel)DataContext).Layout}">
                     <Panel>
-                        <TextBlock Classes="name" Text="{Binding Name}" TextTrimming="CharacterEllipsis"
+                        <TextBlock x:Name="RowName" Classes="name" Text="{Binding Name}" TextTrimming="CharacterEllipsis"
                                    IsVisible="{Binding !IsRenaming}" />
                         <!-- The inline rename editor, created only while the row is being renamed. -->
                         <ContentControl Content="{Binding Rename}" IsVisible="{Binding IsRenaming}">
@@ -89,10 +114,14 @@
                             </ContentControl.ContentTemplate>
                         </ContentControl>
                     </Panel>
-                    <TextBlock Grid.Column="1" Text="{Binding Extension}" TextTrimming="CharacterEllipsis" Margin="6,0,0,0" />
-                    <TextBlock Grid.Column="2" Text="{Binding SizeText}" TextAlignment="Right" Margin="0,0,8,0" />
-                    <TextBlock Grid.Column="3" Text="{Binding DateText}" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Grid.Column="4" Text="{Binding ModeText}" />
+                    <TextBlock x:Name="RowExtension" v:ListLayoutColumns.Cell="{x:Static settings:ColumnId.Extension}"
+                               Text="{Binding Extension}" TextTrimming="CharacterEllipsis" Margin="6,0,0,0" />
+                    <TextBlock x:Name="RowSize" v:ListLayoutColumns.Cell="{x:Static settings:ColumnId.Size}"
+                               Text="{Binding SizeText}" TextAlignment="Right" TextTrimming="CharacterEllipsis" Margin="0,0,8,0" />
+                    <TextBlock x:Name="RowModified" v:ListLayoutColumns.Cell="{x:Static settings:ColumnId.Modified}"
+                               Text="{Binding DateText}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock x:Name="RowMode" v:ListLayoutColumns.Cell="{x:Static settings:ColumnId.Mode}"
+                               Text="{Binding ModeText}" TextTrimming="CharacterEllipsis" />
                 </Grid>
             </DataTemplate>
         </v:PanelListBox.ItemTemplate>

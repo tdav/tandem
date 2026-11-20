@@ -2,11 +2,13 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using Tandem.App.Resources;
 using Tandem.App.Services;
 using Tandem.App.ViewModels;
 using Tandem.App.Views;
+using Tandem.Core.Settings;
 
 namespace Tandem.App;
 
@@ -17,6 +19,21 @@ public partial class App : Application
     private MainViewModel? _main;
     private MainWindow? _window;
     private bool _showingError;
+
+    /// <summary>The application theme variant of a theme choice: the system's appearance (Default), light or
+    /// dark.</summary>
+    public static ThemeVariant ThemeVariantFor(ThemeChoice theme) => theme switch
+    {
+        ThemeChoice.Light => ThemeVariant.Light,
+        ThemeChoice.Dark => ThemeVariant.Dark,
+        _ => ThemeVariant.Default,
+    };
+
+    /// <summary>Applies the theme choice to the whole application at once; no restart needed.</summary>
+    public static void ApplyTheme(ThemeChoice theme)
+    {
+        if (Current is { } app) app.RequestedThemeVariant = ThemeVariantFor(theme);
+    }
 
     public override void Initialize()
     {

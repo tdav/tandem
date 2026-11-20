@@ -1,0 +1,262 @@
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Headless.XUnit;
+using Avalonia.Media;
+using Avalonia.Styling;
+using Avalonia.VisualTree;
+using Tandem.App.Resources;
+using Tandem.App.Services;
+using Tandem.App.Tests.ViewModels;
+using Tandem.App.ViewModels;
+using Tandem.App.Views;
+using Tandem.Core.Settings;
+using Tandem.Core.Vfs;
+using Tandem.Core.Vfs.InMemory;
+
+namespace Tandem.App.Tests.Views;
+
+// The theme is process-wide, as is the language start-up applies: these tests run in the language collection and
+// put the theme back when they end.
+[Collection(LanguageCollection.Name)]
+public class AppearanceWindowTests : LanguageTestBase, IDisposable
+{
+    void IDisposable.Dispose()
+    {
+        Application.Current!.RequestedThemeVariant = ThemeVariant.Default;
+        Dispose();
+    }
+
+    private static ColumnSetting[] Columns(params (ColumnId Column, bool Visible, double Width)[] columns) =>
+        columns.Select(c => new ColumnSetting(c.Column, c.Visible, c.Width)).ToArray();
+
+    private static Button Header(TestApp app, PanelSide side, string name) =>
+        app.PanelView(side).GetVisualDescendants().OfType<Button>().Single(b => b.Name == name);
+
+    private static Control RowOf(TestApp app, PanelSide side, string name)
+    {
+        var list = app.FileList(side);
+        var panel = side == PanelSide.Left ? app.Left : app.Right;
+        var index = panel.Rows.ToList().FindIndex(r => r.Name == name);
+        return list.ContainerFromIndex(index) ?? throw new InvalidOperationException($"Row {name} is not shown.");
+    }
+
+    private static TextBlock Cell(Control row, string name) =>
+        row.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Name == name);
+
+    private static object Resource(TestApp app, string key) =>
+        app.Window.TryFindResource(key, app.Window.ActualThemeVariant, out var value)
+            ? value!
+            : throw new InvalidOperationException($"No resource {key}.");
+
+    [AvaloniaFact]
+    public async Task Left_and_right_panels_use_their_own_columns()
+    {
+        var settings = AppSettings.Default with
+        {
+            RightColumns = Columns((ColumnId.Mode, true, 70), (ColumnId.Size, true, 150), (ColumnId.Extension, true, 40),
+                (ColumnId.Modified, true, 120)),
+        };
+        await using var app = await TestApp.StartAsync(settings: settings);
+
+        Assert.Equal(84, Header(app, PanelSide.Left, "SortBySize").Bounds.Width, 1);
+        Assert.Equal(150, Header(app, PanelSide.Right, "SortBySize").Bounds.Width, 1);
+        Assert.Equal(1, Grid.GetColumn(Header(app, PanelSide.Left, "SortByExtension")));
+        Assert.Equal(1, Grid.GetColumn(Header(app, PanelSide.Right, "SortByMode")));
+        // The size cell keeps an 8-pixel margin on its right.
+        Assert.Equal(150 - 8, Cell(RowOf(app, PanelSide.Right, "notes.txt"), "RowSize").Bounds.Width, 1);
+        Assert.Equal(84 - 8, Cell(RowOf(app, PanelSide.Left, "notes.txt"), "RowSize").Bounds.Width, 1);
+        // The right panel's rows show its cells in its order: mode, size, extension, date.
+        var rightRow = RowOf(app, PanelSide.Right, "notes.txt");
+        double X(string cell) => Cell(rightRow, cell).TranslatePoint(default, rightRow)!.Value.X;
+        Assert.True(X("RowMode") < X("RowSize") && X("RowSize") < X("RowExtension") &&
+                    X("RowExtension") < X("RowModified"));
+        var leftRow = RowOf(app, PanelSide.Left, "notes.txt");
+        Assert.True(Cell(leftRow, "RowExtension").TranslatePoint(default, leftRow)!.Value.X <
+                    Cell(leftRow, "RowMode").TranslatePoint(default, leftRow)!.Value.X);
+    }
+
+    [AvaloniaFact]
+    public async Task Hidden_column_is_absent_from_header_and_rows()
+    {
+        var settings = AppSettings.Default with
+        {
+            LeftColumns = Columns((ColumnId.Extension, true, 56), (ColumnId.Size, true, 84),
+                (ColumnId.Modified, false, 124), (ColumnId.Mode, true, 84)),
+        };
+        await using var app = await TestApp.StartAsync(settings: settings);
+
+        Assert.False(Header(app, PanelSide.Left, "SortByDate").IsEffectivelyVisible);
+        Assert.True(Header(app, PanelSide.Right, "SortByDate").IsEffectivelyVisible);
+        var row = RowOf(app, PanelSide.Left, "notes.txt");
+        Assert.False(Cell(row, "RowModified").IsEffectivelyVisible);
+        Assert.True(Cell(row, "RowSize").IsEffectivelyVisible);
+
+        // Shown again without restart.
+        app.Main.Settings.Update(app.Main.Settings.Current with { LeftColumns = AppSettings.DefaultColumns });
+        app.Pump();
+
+        Assert.True(Header(app, PanelSide.Left, "SortByDate").IsEffectivelyVisible);
+        Assert.True(Cell(RowOf(app, PanelSide.Left, "notes.txt"), "RowModified").IsEffectivelyVisible);
+        Assert.Equal(124, Header(app, PanelSide.Left, "SortByDate").Bounds.Width, 1);
+    }
+
+    [AvaloniaFact]
+    public async Task Row_height_and_font_follow_settings_without_restart()
+    {
+        await using var app = await TestApp.StartAsync();
+        Assert.Equal(AppSettings.DefaultRowHeight, RowOf(app, PanelSide.Left, "notes.txt").Bounds.Height, 1);
+
+        app.Main.Settings.Update(app.Main.Settings.Current with { FontSize = 18, RowHeight = 30 });
+        app.Pump();
+
+        foreach (var side in new[] { PanelSide.Left, PanelSide.Right })
+        {
+            var row = RowOf(app, side, "notes.txt");
+            Assert.Equal(30, row.Bounds.Height, 1);
+            Assert.Equal(18, Cell(row, "RowName").FontSize);
+            Assert.Equal(18, Cell(row, "RowSize").FontSize);
+        }
+        var list = app.FileList(PanelSide.Left);
+        Assert.Equal(Math.Max(1, (int)(list.Bounds.Height / 30) - 1), app.Main.PageSize);
+    }
+
+    [AvaloniaFact]
+    public async Task Row_matching_a_rule_gets_the_palette_brush_and_marked_row_keeps_marked_colour()
+    {
+        var settings = AppSettings.Default with
+        {
+            FileColors = [new FileColorRule("*.pdf", "Red"), new FileColorRule("*", "Gray")],
+        };
+        await using var app = await TestApp.StartAsync(settings: settings);
+        app.Main.SetTheme(ThemeChoice.Light);
+        app.Pump();
+
+        var pdf = Cell(RowOf(app, PanelSide.Left, "report.pdf"), "RowName");
+        Assert.Same(Resource(app, FileColors.ResourceKey("Red")), pdf.Foreground);
+        Assert.Same(Resource(app, FileColors.ResourceKey("Red")), Cell(RowOf(app, PanelSide.Left, "report.pdf"), "RowSize").Foreground);
+        Assert.Same(Resource(app, FileColors.ResourceKey("Gray")), Cell(RowOf(app, PanelSide.Left, "notes.txt"), "RowName").Foreground);
+        var folder = Cell(RowOf(app, PanelSide.Left, "docs"), "RowName").Foreground;
+        Assert.NotSame(Resource(app, FileColors.ResourceKey("Gray")), folder);
+        Assert.NotSame(Resource(app, FileColors.ResourceKey("Red")), folder);
+
+        // The theme's own variant of the colour, without reading the folder again.
+        var lightRed = ((ISolidColorBrush)pdf.Foreground!).Color;
+        app.Main.SetTheme(ThemeChoice.Dark);
+        app.Pump();
+        pdf = Cell(RowOf(app, PanelSide.Left, "report.pdf"), "RowName");
+        Assert.Same(Resource(app, FileColors.ResourceKey("Red")), pdf.Foreground);
+        Assert.NotEqual(lightRed, ((ISolidColorBrush)pdf.Foreground!).Color);
+
+        // A marked row shows the marked colour, whatever its rule.
+        app.Left.Rows.Single(r => r.Name == "report.pdf").IsSelected = true;
+        app.Pump();
+        Assert.Same(Resource(app, "Tandem.MarkedForeground"), Cell(RowOf(app, PanelSide.Left, "report.pdf"), "RowName").Foreground);
+        Assert.Same(Resource(app, "Tandem.MarkedForeground"), Cell(RowOf(app, PanelSide.Left, "report.pdf"), "RowSize").Foreground);
+    }
+
+    [AvaloniaFact]
+    public async Task Changing_rules_recolours_rows_without_reading_the_folder_again()
+    {
+        var other = new InMemoryFileSystem("observed");
+        other.AddFile("/f/a.txt", "a");
+        other.AddFile("/f/b.md", "b");
+        var observed = new ObservedProvider(other);
+        await using var app = await TestApp.StartAsync(extraProviders: [observed]);
+        await app.Left.NavigateToAsync(new VfsPath("observed", "/f"));
+        app.Pump();
+        var reads = observed.ReadsOf("/f");
+        var before = Cell(RowOf(app, PanelSide.Left, "a.txt"), "RowName").Foreground;
+        Assert.NotSame(Resource(app, FileColors.ResourceKey("Blue")), before);
+        var colors = app.Main.FileColors;
+
+        app.Main.Settings.Update(app.Main.Settings.Current with { FileColors = [new FileColorRule("*.TXT", "Blue")] });
+        app.Pump();
+
+        Assert.NotSame(colors, app.Main.FileColors);
+        Assert.Same(Resource(app, FileColors.ResourceKey("Blue")), Cell(RowOf(app, PanelSide.Left, "a.txt"), "RowName").Foreground);
+        Assert.NotSame(Resource(app, FileColors.ResourceKey("Blue")), Cell(RowOf(app, PanelSide.Left, "b.md"), "RowName").Foreground);
+
+        app.Main.Settings.Update(app.Main.Settings.Current with { FileColors = [] });
+        app.Pump();
+
+        Assert.NotSame(Resource(app, FileColors.ResourceKey("Blue")), Cell(RowOf(app, PanelSide.Left, "a.txt"), "RowName").Foreground);
+        Assert.Equal(reads, observed.ReadsOf("/f"));
+    }
+
+    [AvaloniaFact]
+    public async Task Theme_choice_sets_requested_theme_variant_and_survives_restart()
+    {
+        AppSettings saved;
+        await using (var app = await TestApp.StartAsync())
+        {
+            Assert.Equal(ThemeVariant.Default, Application.Current!.RequestedThemeVariant);
+            var dark = ThemeItem(app, "Menu_ThemeDark");
+            Assert.False(dark.IsChecked);
+            Assert.True(ThemeItem(app, "Menu_ThemeSystem").IsChecked);
+
+            dark.Command!.Execute(null);
+            app.Pump();
+
+            Assert.Equal(ThemeVariant.Dark, Application.Current.RequestedThemeVariant);
+            Assert.Equal(ThemeChoice.Dark, app.Main.Settings.Current.Theme);
+            Assert.True(dark.IsChecked);
+            Assert.False(ThemeItem(app, "Menu_ThemeSystem").IsChecked);
+
+            app.Main.SetTheme(ThemeChoice.Light);
+            app.Pump();
+            Assert.Equal(ThemeVariant.Light, Application.Current.RequestedThemeVariant);
+            app.Main.SetTheme(ThemeChoice.System);
+            app.Pump();
+            Assert.Equal(ThemeVariant.Default, Application.Current.RequestedThemeVariant);
+            app.Main.SetTheme(ThemeChoice.Dark);
+            saved = new JsonSettingsStore(app.StateDirectory).Load();
+        }
+        Assert.Equal(ThemeChoice.Dark, saved.Theme);
+        Application.Current.RequestedThemeVariant = ThemeVariant.Default;
+
+        await using var restarted = await TestApp.StartAsync(settings: saved);
+
+        Assert.Equal(ThemeVariant.Dark, Application.Current.RequestedThemeVariant);
+        Assert.True(ThemeItem(restarted, "Menu_ThemeDark").IsChecked);
+    }
+
+    private static NativeMenuItem ThemeItem(TestApp app, string labelKey) =>
+        AllItems(NativeMenu.GetMenu(app.Window)!).Single(i => i.Header == Loc.Get("Menu_Theme")).Menu!.Items
+            .OfType<NativeMenuItem>().Single(i => i.Header == Loc.Get(labelKey));
+
+    private static IEnumerable<NativeMenuItem> AllItems(NativeMenu menu)
+    {
+        foreach (var item in menu.Items.OfType<NativeMenuItem>())
+        {
+            yield return item;
+            if (item.Menu is { } sub)
+                foreach (var inner in AllItems(sub))
+                    yield return inner;
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task Hundred_thousand_rows_still_virtualized_with_custom_row_height()
+    {
+        const int count = 100_000;
+        var fs = TestApp.DefaultFileSystem();
+        for (var i = 0; i < count; i++) fs.AddFile($"/big/file{i:D6}.txt");
+        await using var app = await TestApp.StartAsync(fs,
+            settings: AppSettings.Default with { RowHeight = 40, FileColors = [new FileColorRule("*.txt", "Teal")] });
+
+        await app.Left.NavigateToAsync(VfsPath.Local("/big"));
+        app.Pump();
+        var list = app.FileList(PanelSide.Left);
+        Assert.Equal(count + 1, list.ItemCount);
+        Assert.InRange(list.GetRealizedContainers().Count(), 1, 199);
+        Assert.Equal(40, list.ContainerFromIndex(1)!.Bounds.Height, 1);
+
+        app.Left.CursorIndex = count;
+        app.Pump();
+
+        Assert.InRange(list.GetRealizedContainers().Count(), 1, 199);
+        var last = list.ContainerFromIndex(count)!;
+        Assert.Equal(40, last.Bounds.Height, 1);
+        Assert.Same(Resource(app, FileColors.ResourceKey("Teal")), Cell(last, "RowName").Foreground);
+    }
+}
