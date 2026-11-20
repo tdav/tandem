@@ -55,6 +55,9 @@ public static class CommandIds
     public const string ViewToggleHidden = "view.toggleHidden";
     public const string ViewQuickView = "view.quickView";
 
+    // Settings track. Its handler and key binding (Cmd+,) come with the settings window.
+    public const string AppSettings = "app.settings";
+
     // Invoked from menus only; no default key binding.
     public const string ShellReveal = "shell.reveal";
     public const string ShellOpenTerminal = "shell.openTerminal";

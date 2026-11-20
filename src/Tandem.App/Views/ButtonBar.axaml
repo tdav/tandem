@@ -1,0 +1,38 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Tandem.App.ViewModels"
+             xmlns:v="using:Tandem.App.Views"
+             xmlns:loc="using:Tandem.App.Resources"
+             xmlns:settings="using:Tandem.Core.Settings"
+             xmlns:c="using:Tandem.App.Commands"
+             x:Class="Tandem.App.Views.ButtonBar"
+             x:DataType="vm:MainViewModel">
+    <!-- The user's commands, left to right; a button is off while the active panel is not on the local disk.
+         Without any, one button leads to the settings. -->
+    <Border Background="{DynamicResource Tandem.BarBackground}" BorderBrush="{DynamicResource Tandem.DividerBrush}"
+            BorderThickness="0,0,0,1">
+        <StackPanel Orientation="Horizontal">
+            <ItemsControl x:Name="UserButtons" ItemsSource="{Binding ButtonBar.Buttons}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="settings:UserButton">
+                        <!-- A text block, not string content: a "_" in a title is no access key. -->
+                        <Button Classes="flat" ToolTip.Tip="{Binding Program}"
+                                Command="{Binding $parent[v:ButtonBar].((vm:MainViewModel)DataContext).ButtonBar.RunCommand}"
+                                CommandParameter="{Binding}">
+                            <TextBlock Text="{Binding Title}" />
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <Button x:Name="ConfigureButtons" Classes="flat" IsVisible="{Binding !ButtonBar.HasButtons}"
+                    Command="{Binding RunCommand}" CommandParameter="{x:Static c:CommandIds.AppSettings}">
+                <TextBlock Text="{loc:Tr Key=ButtonBar_Configure}" />
+            </Button>
+        </StackPanel>
+    </Border>
+</UserControl>

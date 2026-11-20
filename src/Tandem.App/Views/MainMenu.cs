@@ -124,6 +124,7 @@ public static class MainMenu
     {
         var workspace = main.Workspace;
         var sidebar = Toggle("Menu_Sidebar", main.ToggleSidebar);
+        var buttonBar = Toggle("Menu_ButtonBar", main.ToggleButtonBar);
         var volumeBars = Toggle("Menu_VolumeBars", main.ToggleVolumeBars);
         var commandLine = Toggle("Menu_CommandLine", main.ToggleCommandLine);
         var fkeyBar = Toggle("Menu_FKeyBar", main.ToggleFKeyBar);
@@ -153,6 +154,7 @@ public static class MainMenu
         {
             var view = workspace.View;
             sidebar.IsChecked = view.Sidebar;
+            buttonBar.IsChecked = view.ButtonBar;
             volumeBars.IsChecked = view.VolumeBars;
             commandLine.IsChecked = view.CommandLine;
             fkeyBar.IsChecked = view.FKeyBar;
@@ -179,13 +181,15 @@ public static class MainMenu
 
         return
         [
-            sidebar, volumeBars, commandLine, fkeyBar, new NativeMenuItemSeparator(), hidden,
+            sidebar, buttonBar, volumeBars, commandLine, fkeyBar, new NativeMenuItemSeparator(), hidden,
             new NativeMenuItemSeparator(), quickView,
             new NativeMenuItemSeparator(),
             Submenu("Menu_Sort", SortItems(main)),
             new NativeMenuItemSeparator(),
             new NativeMenuItem(Loc.Get("Menu_Theme")) { Menu = themeMenu },
             new NativeMenuItem(Loc.Get("Menu_Language")) { Menu = languageMenu },
+            new NativeMenuItemSeparator(),
+            CommandItem(main, CommandIds.AppSettings),
         ];
     }
 

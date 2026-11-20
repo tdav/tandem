@@ -1050,4 +1050,16 @@ Folder</value>
   <data name="Menu_ThemeDark" xml:space="preserve">
     <value>Dark</value>
   </data>
+  <data name="Menu_app_settings" xml:space="preserve">
+    <value>Settings…</value>
+  </data>
+  <data name="Menu_ButtonBar" xml:space="preserve">
+    <value>Button Bar</value>
+  </data>
+  <data name="ButtonBar_Configure" xml:space="preserve">
+    <value>Set Up Buttons…</value>
+  </data>
+  <data name="UserCommand_StartFailed" xml:space="preserve">
+    <value>Could not start “{0}”.</value>
+  </data>
 </root>

@@ -15,7 +15,7 @@ public sealed record OpenWithApps(FileEntry Entry, IReadOnlyList<AppInfo> Apps);
 /// <summary>
 /// The commands that hand items to macOS: Quick Look (Cmd+Y), Reveal in Finder, a terminal in the current folder,
 /// and "Open With" (menu only); Enter on a file opens it with its default application. Also the built-in viewer (F3),
-/// the built-in text editor (F4) and the properties dialog (Cmd+I). Also tells the user when a panel's file cannot be opened as a folder, or is not one.
+/// the text editor (F4: the external editor of the settings for a local file when one is set, else the built-in one) and the properties dialog (Cmd+I). Also tells the user when a panel's file cannot be opened as a folder, or is not one.
 /// </summary>
 /// <remarks>
 /// Created and used on the UI thread. Everything but the viewer, the editor and the properties dialog works for the
@@ -48,6 +48,8 @@ public sealed class ShellCommands : IDisposable
     private readonly IDialogService _dialogs;
     private readonly IWindowService _windows;
     private readonly INativeCopy? _nativeCopy;
+    private readonly SettingsService? _settings;
+    private readonly IProcessRunner? _processes;
     private readonly CommandRegistry _commands;
     private readonly ProviderRegistry _providers;
     private readonly IFileMetadataService? _metadata;
@@ -67,12 +69,17 @@ public sealed class ShellCommands : IDisposable
     /// cursor; <see cref="Task.Delay(TimeSpan, CancellationToken)"/> when null.</param>
     /// <param name="nativeCopy">Gives a local file saved by the editor the original's metadata (tags, extended
     /// attributes); none is copied when null.</param>
+    /// <param name="settings">Names the external editor F4 starts (with <paramref name="processes"/>) for a local
+    /// file; the built-in editor always when either is null.</param>
     public ShellCommands(WorkspaceViewModel workspace, IShellIntegration shell, IQuickLook quickLook,
         IDialogService dialogs, IWindowService windows, CommandRegistry commands, ProviderRegistry providers, IFileMetadataService? metadata,
         TempFileStore temp, Action<Exception> reportFailure,
-        Func<TimeSpan, CancellationToken, Task>? quickLookDelay = null, INativeCopy? nativeCopy = null)
+        Func<TimeSpan, CancellationToken, Task>? quickLookDelay = null, INativeCopy? nativeCopy = null,
+        SettingsService? settings = null, IProcessRunner? processes = null)
     {
         _nativeCopy = nativeCopy;
+        _settings = settings;
+        _processes = processes;
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
         _shell = shell ?? throw new ArgumentNullException(nameof(shell));
         _quickLook = quickLook ?? throw new ArgumentNullException(nameof(quickLook));
@@ -314,13 +321,20 @@ public sealed class ShellCommands : IDisposable
     private void OnOpenFailed(object? sender, Exception error) =>
         _ = TellAsync(OperationTexts.ForFailure(error), error.Message);
 
-    /// <summary>F4: the file under the cursor in the built-in editor, read off the UI thread; its window comes forward
-    /// instead when it is open already. A file the editor refuses (too large, binary) or cannot read is told to the
-    /// user.</summary>
+    /// <summary>F4: a local file goes to the external editor when the settings name one (started in the file's
+    /// folder, the file its one argument; a start that fails is told to the user). Otherwise the file under the
+    /// cursor opens in the built-in editor, read off the UI thread; its window comes forward instead when it is open
+    /// already. A file the editor refuses (too large, binary) or cannot read is told to the user.</summary>
     private async Task EditAsync()
     {
-        if (CursorEntry() is not { IsDirectoryLike: false } entry || await _windows.TryActivateEditorAsync(entry.Path))
+        if (CursorEntry() is not { IsDirectoryLike: false } entry) return;
+        if (entry.Path.ProviderId == VfsPath.LocalProviderId && _settings?.Current.ExternalEditor is { } program &&
+            _processes is not null)
+        {
+            await EditExternallyAsync(program, entry.Path.Path);
             return;
+        }
+        if (await _windows.TryActivateEditorAsync(entry.Path)) return;
         EditorViewModel editor;
         try
         {
@@ -340,6 +354,19 @@ public sealed class ShellCommands : IDisposable
         // No await between this check and showing: an editor of the same file opened meanwhile is reused.
         if (_disposed || _windows.TryActivateEditorFor(editor.Target)) return;
         _windows.ShowEditor(editor);
+    }
+
+    private async Task EditExternallyAsync(string program, string path)
+    {
+        try
+        {
+            var folder = Path.GetDirectoryName(path) ?? "/";
+            ProgramLauncher.Start(_processes!, ProgramLauncher.Build(program, [path], folder, _workspace.HomeDirectory));
+        }
+        catch (Exception e) when (ProgramLauncher.IsStartFailure(e))
+        {
+            await TellAsync(Loc.Format("UserCommand_StartFailed", program), e);
+        }
     }
 
     /// <summary>F3: the file under the cursor in the built-in viewer, opened off the UI thread. A file that cannot be

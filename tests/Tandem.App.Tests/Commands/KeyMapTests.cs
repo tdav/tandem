@@ -134,7 +134,8 @@ public class KeyMapTests
     public void Every_command_except_menu_only_ones_has_a_default_chord()
     {
         var bound = KeyMap.Default.Bindings.Select(b => b.CommandId).ToHashSet();
-        var unbound = ConstantIds().Where(id => !bound.Contains(id)).Order();
+        // app.settings gets its chord (Cmd+,) with the settings window, in Task 16.
+        var unbound = ConstantIds().Where(id => !bound.Contains(id) && id != CommandIds.AppSettings).Order();
 
         Assert.Equal(
             [CommandIds.ShellOpenTerminal, CommandIds.ShellOpenWith, CommandIds.ShellReveal, CommandIds.TabCloseOthers,

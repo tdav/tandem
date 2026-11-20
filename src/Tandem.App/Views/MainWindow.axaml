@@ -6,8 +6,12 @@
         x:DataType="vm:MainViewModel"
         Title="Tandem"
         MinWidth="640" MinHeight="400">
-    <!-- Top to bottom: the two panels (with the sidebar on the left), the command line, the F-key bar. -->
+    <!-- Top to bottom: the button bar, the two panels (with the sidebar on the left), the command line, the F-key
+         bar. -->
     <DockPanel>
+        <Panel x:Name="ButtonBarHost" DockPanel.Dock="Top" IsVisible="{Binding Workspace.View.ButtonBar}">
+            <v:ButtonBar x:Name="ButtonBar" />
+        </Panel>
         <v:FKeyBar x:Name="FKeyBar" DockPanel.Dock="Bottom" IsVisible="{Binding Workspace.View.FKeyBar}" />
 
         <!-- Operations still running or waiting: a click shows the progress window again. -->

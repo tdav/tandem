@@ -185,6 +185,97 @@ public class ShellCommandsTests : LanguageTestBase
         Assert.Empty(app.Shell.Calls);
     }
 
+    [AvaloniaFact]
+    public async Task F4_uses_external_editor_for_local_file_when_configured()
+    {
+        var processes = new FakeProcessRunner();
+        await using var app = await TestApp.StartAsync(show: false, processes: processes,
+            settings: Tandem.Core.Settings.AppSettings.Default with { ExternalEditor = "/Applications/My Editor.app" });
+        await app.Left.NavigateToAsync(VfsPath.Local("/home/docs"));
+        app.Main.Workspace.SwitchPanel(); // the right panel, still at /home, is active
+        Cursor(app.Right, "README.md");
+
+        Assert.True(await app.Main.Commands.ExecuteAsync(CommandIds.FileEdit));
+
+        var spec = Assert.Single(processes.Started);
+        Assert.Equal("/usr/bin/open", spec.FileName);
+        Assert.Equal(["-a", "/Applications/My Editor.app", "/home/README.md"], spec.Arguments);
+        Assert.Equal("/home", spec.WorkingDirectory);
+        Assert.Empty(app.Windows.Open);
+        processes.Last.Exit(0);
+        await TestApp.WaitUntil(() => processes.Last.IsDisposed);
+        Assert.Equal(0, processes.Last.Kills);
+        Assert.Empty(app.Dialogs.Messages);
+        Assert.Empty(app.Failures);
+    }
+
+    [AvaloniaFact]
+    public async Task F4_with_a_plain_external_program_passes_the_file_as_its_argument()
+    {
+        var processes = new FakeProcessRunner();
+        await using var app = await TestApp.StartAsync(show: false, processes: processes,
+            settings: Tandem.Core.Settings.AppSettings.Default with { ExternalEditor = "~/bin/ed it" });
+        await app.Left.NavigateToAsync(VfsPath.Local("/home/docs"));
+        app.Fs.AddFile("/home/docs/my \"file\".txt", "x");
+        await app.Left.RefreshAsync();
+        Cursor(app.Left, "my \"file\".txt");
+
+        Assert.True(await app.Main.Commands.ExecuteAsync(CommandIds.FileEdit));
+
+        var spec = Assert.Single(processes.Started);
+        Assert.Equal("/home/bin/ed it", spec.FileName);
+        Assert.Equal(["/home/docs/my \"file\".txt"], spec.Arguments);
+        Assert.Equal("/home/docs", spec.WorkingDirectory);
+    }
+
+    [AvaloniaFact]
+    public async Task External_editor_that_cannot_start_is_told()
+    {
+        var processes = new FakeProcessRunner { StartFailure = new System.ComponentModel.Win32Exception("not found") };
+        await using var app = await TestApp.StartAsync(show: false, processes: processes,
+            settings: Tandem.Core.Settings.AppSettings.Default with { ExternalEditor = "/opt/missing" });
+        Cursor(app.Left, "notes.txt");
+
+        Assert.True(await app.Main.Commands.ExecuteAsync(CommandIds.FileEdit));
+
+        Assert.Equal([(Loc.Format("UserCommand_StartFailed", "/opt/missing"), "not found")],
+            app.Dialogs.MessagesWithDetail);
+        Assert.Empty(app.Windows.Open);
+        Assert.Empty(app.Failures);
+    }
+
+    [AvaloniaFact]
+    public async Task F4_uses_built_in_editor_for_non_local_file_even_when_external_is_configured()
+    {
+        var processes = new FakeProcessRunner();
+        await using var app = await TestApp.StartAsync(show: false, processes: processes,
+            extraProviders: [RemoteFileSystem()],
+            settings: Tandem.Core.Settings.AppSettings.Default with { ExternalEditor = "/Applications/Ed.app" });
+        await app.Left.NavigateToAsync(new VfsPath(Remote, "/shared"));
+        Cursor(app.Left, "a.txt");
+
+        Assert.True(await app.Main.Commands.ExecuteAsync(CommandIds.FileEdit));
+
+        var editor = Assert.IsType<EditorWindow>(Assert.Single(app.Windows.Open)).Editor;
+        Assert.Equal(new VfsPath(Remote, "/shared/a.txt"), editor.File);
+        Assert.Empty(processes.Started);
+    }
+
+    [AvaloniaFact]
+    public async Task Clearing_the_external_editor_brings_back_the_built_in_one()
+    {
+        var processes = new FakeProcessRunner();
+        await using var app = await TestApp.StartAsync(show: false, processes: processes,
+            settings: Tandem.Core.Settings.AppSettings.Default with { ExternalEditor = "/Applications/Ed.app" });
+        app.Main.Settings.Update(app.Main.Settings.Current with { ExternalEditor = null });
+        Cursor(app.Left, "README.md");
+
+        Assert.True(await app.Main.Commands.ExecuteAsync(CommandIds.FileEdit));
+
+        Assert.Single(app.Windows.Open);
+        Assert.Empty(processes.Started);
+    }
+
     /// <summary>While F4 reads a file, an editor of the same file appears (another F4 that got there first): the
     /// check after the read and the showing are one step, so that editor is brought forward and no second one
     /// opens.</summary>

@@ -89,7 +89,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Drops = new DropHandler(workspace, Files);
         Shell = new ShellCommands(workspace, services.Shell, services.QuickLook, services.Dialogs, services.Windows,
             Commands, services.Providers, services.Metadata, services.Temp, ReportFailure, quickLookDelay,
-            services.NativeCopy);
+            services.NativeCopy, settings, services.Processes);
+        ButtonBar = new ButtonBarViewModel(workspace, settings, services.Processes, services.Dialogs, ReportFailure);
         CommandLine = new CommandLineViewModel(workspace, services.Processes, workspace.HomeDirectory);
         Commands.RaiseCanExecuteChanged();
         workspace.PropertyChanged += OnWorkspacePropertyChanged;
@@ -154,6 +155,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     /// <summary>Opening files, Quick Look, Reveal in Finder, the terminal, "Open With" and the properties dialog.</summary>
     public ShellCommands Shell { get; }
+
+    /// <summary>The user's commands at the top of the window.</summary>
+    public ButtonBarViewModel ButtonBar { get; }
 
     /// <summary>The quick-view panel (Ctrl+Q): the passive side shows the file under the cursor.</summary>
     public QuickViewViewModel QuickView { get; }
@@ -276,6 +280,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public void ToggleFKeyBar() => Workspace.View = Workspace.View with { FKeyBar = !Workspace.View.FKeyBar };
 
+    public void ToggleButtonBar() => Workspace.View = Workspace.View with { ButtonBar = !Workspace.View.ButtonBar };
+
     /// <summary>Chooses the language for the next start ("en", "ru", or null for the system's) and tells the user
     /// it applies after a restart.</summary>
     public void SetLanguage(string? code)
@@ -347,6 +353,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Shell.CloseQuickLook();
         QuickView.Dispose();
         CommandLine.Dispose();
+        ButtonBar.Dispose();
         Shell.Dispose();
         Files.Dispose();
         Operations.Dispose();
