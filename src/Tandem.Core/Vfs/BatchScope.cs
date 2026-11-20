@@ -3,21 +3,29 @@ using System.Runtime.ExceptionServices;
 namespace Tandem.Core.Vfs;
 
 /// <summary>
-/// The batches one operation holds: one per <see cref="IBatchProvider"/> among the providers of its paths, begun in
-/// <see cref="IFileSystemProvider.Id"/> order (ordinal), the same order in every operation, so that two operations do
-/// not take each other's batches in opposite orders. Providers that take no batches are simply not covered; with none,
-/// the scope is empty.
-/// <para>Re-entrant and nested: while the scope calls into a provider's batch (begin, prepare-read, commit, dispose),
-/// a <see cref="BeginAsync"/> made from that call — a hosted provider reaching its host — joins this scope instead of
-/// beginning a second batch, which would wait on the first forever. Batches it needs that the scope does not hold yet
-/// are begun into this scope. A joined scope commits and disposes nothing; the scope that owns the batches does.</para>
-/// <para>Commit runs from the last begun batch to the first. A hosted provider begins its host's batch while
-/// beginning its own, so its own begin completes later and it commits first, while its host's batch is still open to
-/// take what it writes back; batches begun during a commit commit after it. Disposal runs in the same order.</para>
+/// The batches one operation holds: one per <see cref="IBatchProvider"/> among the providers of its paths, plus one
+/// per provider on their <see cref="IBatchProvider.BatchHost"/> chains (a hosted provider's changes end up in its
+/// host, so the host is batched too). Providers that take no batches are simply not covered; with none, the scope is
+/// empty.
+/// <para><b>Lock order.</b> Batches are begun in one total order, the same in every scope: by the sequence of ids from
+/// the root host down to the provider, compared id by id (ordinal), a shorter sequence first. So every host is begun
+/// before what it hosts, and two scopes never take two batches in opposite orders, which could leave each waiting for
+/// the other's. Commit and disposal run in exactly the reverse order: what is hosted commits before its host, while
+/// the host's batch is still open to take what it writes back.</para>
+/// <para><b>Re-entrant.</b> While the scope calls into a provider's batch (begin, prepare-read, commit, dispose), a
+/// <see cref="BeginAsync"/> made from that call — a hosted provider writing back into its host — joins this scope:
+/// it reuses the batches this scope holds instead of beginning second ones, which would wait on the first forever.
+/// A joined scope commits and disposes nothing; the owning scope does. A joined scope may only ask for batches the
+/// owning scope holds and has not committed yet; anything else is refused with
+/// <see cref="InvalidOperationException"/>, since beginning it then would break the lock order.</para>
 /// <para>A scope belongs to one operation and is used from its flow only; it is not thread-safe.</para>
 /// </summary>
 public sealed class BatchScope : IAsyncDisposable
 {
+    /// <summary>The key in <see cref="Exception.Data"/> under which an error of disposing the batches is attached to
+    /// the error that was already the outcome (a failed begin, commit or operation).</summary>
+    public const string DisposeErrorKey = "Tandem.BatchDisposeError";
+
     /// <summary>The owning scope whose call into a provider batch is running in this flow.</summary>
     private static readonly AsyncLocal<BatchScope?> Calling = new();
 
@@ -26,7 +34,7 @@ public sealed class BatchScope : IAsyncDisposable
 
     // Owner only.
     private readonly Dictionary<string, Held> _held = new(StringComparer.Ordinal);
-    private readonly List<Held> _order = []; // by completed begin
+    private readonly List<Held> _order = []; // in lock order
     private readonly HashSet<string> _beginning = new(StringComparer.Ordinal);
     private bool _committed, _disposed;
 
@@ -36,35 +44,41 @@ public sealed class BatchScope : IAsyncDisposable
         _requested = requested;
     }
 
-    /// <summary>Begins one batch on every <see cref="IBatchProvider"/> among the providers of
-    /// <paramref name="paths"/>, in id order (or joins the calling scope, see the class remarks). If a begin fails or
-    /// is cancelled, the batches already begun by this call are disposed.</summary>
+    /// <summary>Begins a batch on every <see cref="IBatchProvider"/> among the providers of <paramref name="paths"/>
+    /// and on their hosts, in lock order (or joins the calling scope; see the class remarks). If a begin fails or is
+    /// cancelled, the batches already begun by this call are disposed.</summary>
     /// <exception cref="KeyNotFoundException">A path's provider is not registered.</exception>
+    /// <exception cref="InvalidOperationException">The hosts form a cycle, or a provider is not an
+    /// <see cref="IFileSystemProvider"/>; or, joining, a batch is needed that the calling scope does not hold, has
+    /// committed or is beginning.</exception>
     public static async Task<BatchScope> BeginAsync(ProviderRegistry providers, IEnumerable<VfsPath> paths,
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(providers);
         ArgumentNullException.ThrowIfNull(paths);
-        var batching = paths
+        var requested = paths
             .Select(path => path.ProviderId)
             .Distinct(StringComparer.Ordinal)
             .Select(providers.Get)
             .OfType<IBatchProvider>()
-            .Select(provider => (Id: ((IFileSystemProvider)provider).Id, Provider: provider))
-            .OrderBy(p => p.Id, StringComparer.Ordinal)
             .ToList();
+        var plan = LockOrder(requested);
 
         var owner = Calling.Value;
-        var scope = new BatchScope(owner, batching.Select(p => p.Id).ToHashSet(StringComparer.Ordinal));
-        var holder = owner ?? scope;
+        var scope = new BatchScope(owner, requested.Select(IdOf).ToHashSet(StringComparer.Ordinal));
+        if (owner is not null)
+        {
+            foreach (var (id, _) in plan) owner.Reuse(id);
+            return scope;
+        }
         try
         {
-            foreach (var (id, provider) in batching)
-                await holder.HoldAsync(id, provider, ct).ConfigureAwait(false);
+            foreach (var (id, provider) in plan)
+                await scope.BeginOneAsync(id, provider, ct).ConfigureAwait(false);
         }
-        catch
+        catch (Exception e)
         {
-            if (owner is null) await scope.DisposeAsync().ConfigureAwait(false);
+            await scope.DisposeKeepingAsync(e).ConfigureAwait(false);
             throw;
         }
         return scope;
@@ -88,8 +102,9 @@ public sealed class BatchScope : IAsyncDisposable
                 .ConfigureAwait(false);
     }
 
-    /// <summary>Commits every batch, the last begun first (see the class remarks), stopping at the first failure;
-    /// what is left uncommitted is discarded on disposal. A joined scope commits nothing: its owner does.</summary>
+    /// <summary>Commits every batch in the reverse of the lock order (hosted before host), stopping at the first
+    /// failure; what is left uncommitted is discarded on disposal. A joined scope commits nothing: its owner
+    /// does.</summary>
     /// <exception cref="InvalidOperationException">The scope was committed already.</exception>
     public async Task CommitAsync(CancellationToken ct)
     {
@@ -97,16 +112,16 @@ public sealed class BatchScope : IAsyncDisposable
         ThrowIfDisposed();
         if (_committed) throw new InvalidOperationException("The batch scope was committed already.");
         _committed = true;
-        // A commit may begin further batches (a hosted provider reaching a host not held yet): they commit next.
-        while (_order.LastOrDefault(h => !h.Committed) is { } held)
+        for (var i = _order.Count - 1; i >= 0; i--)
         {
-            held.Committed = true;
+            var held = _order[i];
+            held.Committed = true; // a commit reaching back into its own batch is refused
             await CallAsync(() => held.Batch.CommitAsync(ct)).ConfigureAwait(false);
         }
     }
 
-    /// <summary>Disposes every batch, the last begun first; uncommitted changes are discarded. All batches are
-    /// disposed even if one fails; the first failure is then rethrown. A joined scope disposes nothing.</summary>
+    /// <summary>Disposes every batch in the reverse of the lock order; uncommitted changes are discarded. All batches
+    /// are disposed even if one fails; the first failure is then rethrown. A joined scope disposes nothing.</summary>
     public async ValueTask DisposeAsync()
     {
         if (_owner is not null || _disposed) return;
@@ -127,21 +142,53 @@ public sealed class BatchScope : IAsyncDisposable
         failure?.Throw();
     }
 
-    /// <summary>Makes sure this (owning) scope holds a batch of <paramref name="provider"/>, beginning one if it
-    /// does not.</summary>
-    private async Task HoldAsync(string id, IBatchProvider provider, CancellationToken ct)
+    /// <summary>Disposes the scope after <paramref name="outcome"/> has already gone wrong: an error of the disposal
+    /// does not replace it, but is attached to it under <see cref="DisposeErrorKey"/>.</summary>
+    internal async ValueTask DisposeKeepingAsync(Exception outcome)
     {
-        ThrowIfDisposed();
-        if (_held.TryGetValue(id, out var existing))
+        ArgumentNullException.ThrowIfNull(outcome);
+        try
         {
-            if (existing.Committed)
-                throw new InvalidOperationException(
-                    $"The batch of '{id}' was committed already; a hosted provider must begin its host's batch while " +
-                    "beginning its own.");
-            return;
+            await DisposeAsync().ConfigureAwait(false);
         }
-        if (!_beginning.Add(id))
-            throw new InvalidOperationException($"The batch of '{id}' is needed while it is being begun.");
+        catch (Exception e)
+        {
+            outcome.Data[DisposeErrorKey] = e;
+        }
+    }
+
+    /// <summary>The providers to batch — the requested ones and their hosts — in lock order: by the ids from the root
+    /// host down to the provider, id by id, a prefix (a host) first.</summary>
+    private static List<(string Id, IBatchProvider Provider)> LockOrder(IEnumerable<IBatchProvider> requested)
+    {
+        var chains = new Dictionary<string, (IBatchProvider Provider, string[] Chain)>(StringComparer.Ordinal);
+        foreach (var provider in requested)
+        {
+            var line = new List<IBatchProvider>(); // the provider, then its host, its host's host...
+            for (var p = provider; p is not null; p = p.BatchHost)
+            {
+                if (line.Contains(p))
+                    throw new InvalidOperationException($"The batch hosts of '{IdOf(provider)}' form a cycle.");
+                line.Add(p);
+            }
+            line.Reverse(); // root host first
+            var ids = line.Select(IdOf).ToArray();
+            for (var depth = 0; depth < line.Count; depth++)
+                chains.TryAdd(ids[depth], (line[depth], ids[..(depth + 1)]));
+        }
+        return chains
+            .OrderBy(kv => kv.Value.Chain, ChainComparer.Instance)
+            .Select(kv => (kv.Key, kv.Value.Provider))
+            .ToList();
+    }
+
+    private static string IdOf(IBatchProvider provider) =>
+        (provider as IFileSystemProvider)?.Id ??
+        throw new InvalidOperationException($"'{provider}' takes batches but is not a file-system provider.");
+
+    private async Task BeginOneAsync(string id, IBatchProvider provider, CancellationToken ct)
+    {
+        _beginning.Add(id);
         try
         {
             var batch = await CallAsync(() => provider.BeginBatchAsync(ct)).ConfigureAwait(false);
@@ -153,6 +200,21 @@ public sealed class BatchScope : IAsyncDisposable
         {
             _beginning.Remove(id);
         }
+    }
+
+    /// <summary>A joined scope's request for the batch of <paramref name="id"/>: it must be held and still
+    /// open.</summary>
+    private void Reuse(string id)
+    {
+        ThrowIfDisposed();
+        if (_beginning.Contains(id))
+            throw new InvalidOperationException($"The batch of '{id}' is needed while it is being begun.");
+        if (!_held.TryGetValue(id, out var held))
+            throw new InvalidOperationException(
+                $"The batch of '{id}' is not held by the scope being called; a provider whose changes reach another " +
+                "names it as its batch host.");
+        if (held.Committed)
+            throw new InvalidOperationException($"The batch of '{id}' was committed already.");
     }
 
     /// <summary>Runs a call into a provider batch with this scope as the calling scope of the flow, so that a
@@ -176,5 +238,23 @@ public sealed class BatchScope : IAsyncDisposable
         public IProviderBatch Batch { get; } = batch;
 
         public bool Committed { get; set; }
+    }
+
+    /// <summary>Id by id (ordinal); when one sequence is a prefix of the other, the shorter first.</summary>
+    private sealed class ChainComparer : IComparer<string[]>
+    {
+        public static readonly ChainComparer Instance = new();
+
+        public int Compare(string[]? x, string[]? y)
+        {
+            ArgumentNullException.ThrowIfNull(x);
+            ArgumentNullException.ThrowIfNull(y);
+            for (var i = 0; i < Math.Min(x.Length, y.Length); i++)
+            {
+                var order = string.CompareOrdinal(x[i], y[i]);
+                if (order != 0) return order;
+            }
+            return x.Length.CompareTo(y.Length);
+        }
     }
 }

@@ -39,8 +39,8 @@ public sealed class BatchJournal
 /// written to <paramref name="journal"/>. One batch at a time: a second <see cref="BeginBatchAsync"/> waits for the
 /// first batch to be disposed.
 /// <para>With <see cref="HostedIn"/> it behaves like a provider that lives in a file of another provider (an archive
-/// inside an archive): its batch begins a batch on the host for as long as it lasts, and its commit writes the
-/// container file into the host — from a second batch scope on the host, begun inside the commit.</para>
+/// inside an archive): <see cref="BatchHost"/> names the host, and its commit writes the container file into the
+/// host — through a batch scope on the host begun inside the commit, which joins the scope that holds both.</para>
 /// </summary>
 public sealed class BatchingProvider(string id, BatchJournal journal) : IFileSystemProvider, IBatchProvider
 {
@@ -51,15 +51,32 @@ public sealed class BatchingProvider(string id, BatchJournal journal) : IFileSys
 
     public BatchJournal Journal => journal;
 
+    /// <summary>The provider of the container file, after <see cref="HostedIn"/>; or one set directly.</summary>
+    public IBatchProvider? BatchHost { get; set; }
+
+    /// <summary>When set, a begin runs this after taking the gate (and journaling "Begin").</summary>
+    public Func<CancellationToken, Task>? OnBegin { get; set; }
+
+    /// <summary>When set, a commit runs this after its own work, before journaling "Commit".</summary>
+    public Func<CancellationToken, Task>? OnCommit { get; set; }
+
     /// <summary>When set, a commit throws what it returns (after the commit gate, before anything is
     /// committed).</summary>
     public Func<Exception>? FailCommit { get; set; }
 
+    /// <summary>When set, a dispose throws what it returns (after releasing the gate).</summary>
+    public Func<Exception>? FailDispose { get; set; }
+
     /// <summary>When set, a commit waits for this task first.</summary>
     public Task? CommitGate { get; set; }
 
-    /// <summary>Makes this provider live in <paramref name="container"/>, a file of another provider.</summary>
-    public void HostedIn(ProviderRegistry providers, VfsPath container) => _host = (providers, container);
+    /// <summary>Makes this provider live in <paramref name="container"/>, a file of another (batching)
+    /// provider.</summary>
+    public void HostedIn(ProviderRegistry providers, VfsPath container)
+    {
+        _host = (providers, container);
+        BatchHost = (IBatchProvider)providers.For(container);
+    }
 
     public async Task<IProviderBatch> BeginBatchAsync(CancellationToken ct)
     {
@@ -67,10 +84,8 @@ public sealed class BatchingProvider(string id, BatchJournal journal) : IFileSys
         try
         {
             journal.Add($"{Id}:Begin");
-            var hostScope = _host is { } host
-                ? await BatchScope.BeginAsync(host.Providers, [host.Container], ct).ConfigureAwait(false)
-                : null;
-            return new Batch(this, hostScope);
+            if (OnBegin is { } onBegin) await onBegin(ct).ConfigureAwait(false);
+            return new Batch(this);
         }
         catch
         {
@@ -79,7 +94,7 @@ public sealed class BatchingProvider(string id, BatchJournal journal) : IFileSys
         }
     }
 
-    private sealed class Batch(BatchingProvider owner, BatchScope? hostScope) : IProviderBatch
+    private sealed class Batch(BatchingProvider owner) : IProviderBatch
     {
         private bool _disposed;
 
@@ -95,31 +110,26 @@ public sealed class BatchingProvider(string id, BatchJournal journal) : IFileSys
             if (owner.FailCommit is { } fail) throw fail();
             if (owner._host is { } host)
             {
-                // Writing the container back into the host, through a batch on the host begun right here.
+                // Writing the container back into the host, through a batch on the host begun right here: it joins
+                // the scope that holds this batch and its host's.
                 await using var scope = await BatchScope.BeginAsync(host.Providers, [host.Container], ct)
                     .ConfigureAwait(false);
                 await using (var stream = await host.Providers.For(host.Container).OpenWriteAsync(host.Container, ct)
                                  .ConfigureAwait(false))
                     await stream.WriteAsync(new byte[] { 1, 2, 3 }, ct).ConfigureAwait(false);
                 await scope.CommitAsync(ct).ConfigureAwait(false);
-                await hostScope!.CommitAsync(ct).ConfigureAwait(false);
             }
+            if (owner.OnCommit is { } onCommit) await onCommit(ct).ConfigureAwait(false);
             owner.Journal.Add($"{owner.Id}:Commit");
         }
 
-        public async ValueTask DisposeAsync()
+        public ValueTask DisposeAsync()
         {
-            if (_disposed) return;
+            if (_disposed) return ValueTask.CompletedTask;
             _disposed = true;
             owner.Journal.Add($"{owner.Id}:Dispose");
-            try
-            {
-                if (hostScope is not null) await hostScope.DisposeAsync().ConfigureAwait(false);
-            }
-            finally
-            {
-                owner._gate.Release();
-            }
+            owner._gate.Release();
+            return owner.FailDispose is { } fail ? ValueTask.FromException(fail()) : ValueTask.CompletedTask;
         }
     }
 

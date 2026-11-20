@@ -185,6 +185,30 @@ public sealed class MacExclusiveRenameTests : IDisposable
         Assert.Equal(["A"], Directory.GetFileSystemEntries(_temp.Combine("y")).Select(Path.GetFileName));
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task Local_provider_with_mac_rename_respells_through_a_linked_folder(bool hfs, bool normalization)
+    {
+        using var volume = hfs ? TinyVolume.Create(_temp.Combine("hfs.dmg"), _temp.Combine("hfs")) : null;
+        var root = volume?.MountPoint ?? _temp.Path;
+        var (from, to) = normalization ? Spellings() : ("a.txt", "A.txt");
+        var fs = new LocalFileSystemProvider(new UnrestrictedAccessBroker(), _rename);
+        Directory.CreateDirectory(Path.Combine(root, "real"));
+        File.CreateSymbolicLink(Path.Combine(root, "link"), "real");
+        File.WriteAllText(Path.Combine(root, "real", from), "a");
+        Assert.SkipUnless(File.Exists(Path.Combine(root, "real", to)), "The volume tells the spellings apart.");
+
+        // As from a panel in the linked folder: the source keeps the link, the destination directory is resolved.
+        await fs.MoveAsync(VfsPath.Local(Path.Combine(root, "link", from)),
+            VfsPath.Local(Path.Combine(root, "real", to)), Ct);
+
+        Assert.Equal([to], Directory.GetFileSystemEntries(Path.Combine(root, "real")).Select(Path.GetFileName));
+        Assert.Equal("a", File.ReadAllText(Path.Combine(root, "real", to)));
+    }
+
     [Fact]
     public async Task Local_provider_with_mac_rename_refuses_an_equivalent_name_of_another_file_on_a_case_sensitive_volume()
     {

@@ -271,7 +271,8 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusive
         attributes.HasFlag(FileAttributes.Directory) && !attributes.HasFlag(FileAttributes.ReparsePoint);
 
     /// <summary>True when <paramref name="destination"/> names the entry <paramref name="source"/> itself (same device
-    /// and inode, <c>lstat</c>) in the same directory (the parents compared the same way) by a name that differs from
+    /// and inode, <c>lstat</c>) in the same directory (the parents compared the same way, but with links to them
+    /// resolved) by a name that differs from
     /// its own, but only in letter case or Unicode normalization. The name and parent tests keep a hard link of the
     /// source — under another name, or under an equivalent name in another directory, where a plain <c>rename(2)</c>
     /// between two links of one file does nothing and reports success — from counting as the source, and a move onto
@@ -286,8 +287,13 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusive
                Identity(destination) is { } target && Identity(source) == target &&
                Path.GetDirectoryName(source) is { } sourceParent &&
                Path.GetDirectoryName(destination) is { } destinationParent &&
-               Identity(sourceParent) is { } parent && Identity(destinationParent) == parent;
+               Identity(Resolved(sourceParent)) is { } parent && Identity(Resolved(destinationParent)) == parent;
     }
+
+    /// <summary>The directory path with a trailing '/', so that <c>lstat</c> resolves a linked folder to the folder
+    /// itself (a panel in "/tmp" names "/tmp/a" where the resolved destination is "/private/tmp/A").</summary>
+    private static string Resolved(string directory) =>
+        directory.EndsWith('/') ? directory : directory + "/";
 
     private static FileEntry ToEntry(VfsPath path, FileSystemInfo info)
     {

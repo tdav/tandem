@@ -150,34 +150,42 @@ public abstract class FileOperation
     /// <summary>Runs <paramref name="body"/> inside a <see cref="BatchScope"/> on <paramref name="paths"/> and then
     /// commits it with <see cref="CancellationToken.None"/> — also after the body was cancelled or failed, so that
     /// the items already done are kept, as on a plain disk. A failed commit is the outcome when the body succeeded or
-    /// was cancelled; when the body failed, its own error stays the outcome. <paramref name="afterCommit"/> runs only
-    /// once the commit succeeded and the body did not fail (it may have been cancelled), after the scope is
-    /// disposed.</summary>
+    /// was cancelled; when the body failed, its own error stays the outcome. A failure to dispose the scope is the
+    /// outcome only when nothing else went wrong; otherwise it is attached to the outcome under
+    /// <see cref="BatchScope.DisposeErrorKey"/>. <paramref name="afterCommit"/> runs only once the commit and the
+    /// disposal succeeded and the body did not fail (it may have been cancelled).</summary>
     private protected static async Task RunInBatchAsync(ProviderRegistry providers, IEnumerable<VfsPath> paths,
         Func<BatchScope, Task> body, Func<Task>? afterCommit, CancellationToken ct)
     {
-        ExceptionDispatchInfo? bodyError = null;
-        await using (var scope = await BatchScope.BeginAsync(providers, paths, ct).ConfigureAwait(false))
+        var scope = await BatchScope.BeginAsync(providers, paths, ct).ConfigureAwait(false);
+        ExceptionDispatchInfo? bodyError = null, commitError = null;
+        try
         {
-            try
-            {
-                await body(scope).ConfigureAwait(false);
-            }
-            catch (Exception e)
-            {
-                bodyError = ExceptionDispatchInfo.Capture(e);
-            }
-            try
-            {
-                await scope.CommitAsync(CancellationToken.None).ConfigureAwait(false);
-            }
-            catch when (bodyError is { SourceException: not OperationCanceledException })
-            {
-                // The body's error is the outcome; the batch is discarded on disposal.
-            }
+            await body(scope).ConfigureAwait(false);
         }
-        if (bodyError is null or { SourceException: OperationCanceledException } && afterCommit is not null)
-            await afterCommit().ConfigureAwait(false);
+        catch (Exception e)
+        {
+            bodyError = ExceptionDispatchInfo.Capture(e);
+        }
+        var bodyFailed = bodyError is { SourceException: not OperationCanceledException };
+        try
+        {
+            await scope.CommitAsync(CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception e) when (!bodyFailed)
+        {
+            commitError = ExceptionDispatchInfo.Capture(e);
+        }
+        catch
+        {
+            // The body's error is the outcome; the batch is discarded on disposal.
+        }
+        if ((commitError ?? bodyError) is { } outcome)
+            await scope.DisposeKeepingAsync(outcome.SourceException).ConfigureAwait(false);
+        else
+            await scope.DisposeAsync().ConfigureAwait(false);
+        commitError?.Throw();
+        if (!bodyFailed && afterCommit is not null) await afterCommit().ConfigureAwait(false);
         bodyError?.Throw();
     }
 

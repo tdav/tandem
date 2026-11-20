@@ -328,9 +328,9 @@ public sealed class BatchOperationTests
     {
         var host = new BatchingProvider(hostId, _journal);
         inner = new BatchingProvider(innerId, _journal);
-        inner.HostedIn(_providers, new VfsPath(hostId, "/container.bin"));
         _providers.Register(host);
         _providers.Register(inner);
+        inner.HostedIn(_providers, new VfsPath(hostId, "/container.bin"));
         host.Files.AddFile("/container.bin", "old content");
         host.Files.AddFile("/src/a.txt", "a");
         inner.Files.AddDirectory("/dst");
@@ -371,7 +371,188 @@ public sealed class BatchOperationTests
         var hostCommit = _journal.IndexOf($"{hostId}:Commit");
         Assert.True(containerWrite >= 0 && containerWrite < innerCommit && innerCommit < hostCommit,
             string.Join(" | ", _journal.Events));
+        Assert.True(_journal.IndexOf($"{hostId}:Begin") < _journal.IndexOf($"{innerId}:Begin"));
         Assert.True(_journal.IndexOf($"{innerId}:Dispose") < _journal.IndexOf($"{hostId}:Dispose"));
+    }
+
+    // ---- Lock order: hosts before what they host, the same in every scope ---------------------------
+
+    private BatchingProvider Batching(string id, string? hostedIn = null)
+    {
+        var provider = new BatchingProvider(id, _journal);
+        _providers.Register(provider);
+        if (hostedIn is not null)
+        {
+            ((BatchingProvider)_providers.Get(hostedIn)).Files.AddFile($"/{id}.bin", "old content");
+            provider.HostedIn(_providers, new VfsPath(hostedIn, $"/{id}.bin"));
+        }
+        // Each begin holds its gate a while, so that two scopes taking batches in opposite orders would each hold
+        // the batch the other one waits for.
+        provider.OnBegin = ct => Task.Delay(50, ct);
+        return provider;
+    }
+
+    private async Task RunScopeAsync(params string[] providerIds)
+    {
+        await using var scope = await BatchScope.BeginAsync(_providers, providerIds.Select(id => new VfsPath(id, "/")),
+            Ct);
+        await scope.CommitAsync(Ct);
+    }
+
+    [Theory]
+    [InlineData("a-host", "b-inner")]
+    [InlineData("b-host", "a-inner")]
+    public async Task Concurrent_scopes_on_a_hosted_provider_and_on_it_with_its_host_both_complete(string hostId,
+        string innerId)
+    {
+        Batching(hostId);
+        Batching(innerId, hostedIn: hostId);
+
+        await Task.WhenAll(RunScopeAsync(innerId), RunScopeAsync(hostId, innerId)).WaitAsync(Timeout, Ct);
+
+        Assert.Equal(2, _journal.Count($"{innerId}:Commit"));
+        Assert.Equal(2, _journal.Count($"{hostId}:Commit"));
+    }
+
+    [Fact]
+    public async Task Concurrent_scopes_on_providers_in_two_hosts_both_complete()
+    {
+        // i1 lives in h1, i2 in h2, and h2 < i1 < h1 < i2 by id.
+        Batching("h1-c");
+        Batching("h2-a");
+        Batching("i1-b", hostedIn: "h1-c");
+        Batching("i2-d", hostedIn: "h2-a");
+
+        await Task.WhenAll(RunScopeAsync("i1-b", "i2-d"), RunScopeAsync("h2-a", "i1-b")).WaitAsync(Timeout, Ct);
+
+        Assert.Equal(2, _journal.Count("i1-b:Commit"));
+        Assert.Equal(2, _journal.Count("h2-a:Commit"));
+    }
+
+    [Fact]
+    public async Task Scope_on_a_hosted_provider_begins_its_host_first_and_commits_it_last()
+    {
+        Batching("z-host");
+        Batching("m-inner", hostedIn: "z-host");
+        Batching("a-leaf", hostedIn: "m-inner");
+
+        await RunScopeAsync("a-leaf");
+
+        Assert.Equal(["z-host:Begin", "m-inner:Begin", "a-leaf:Begin", "a-leaf:Commit", "m-inner:Commit",
+            "z-host:Commit", "a-leaf:Dispose", "m-inner:Dispose", "z-host:Dispose"],
+            _journal.Events.Where(e => !e.Contains(":Write ", StringComparison.Ordinal)));
+    }
+
+    // ---- Guards --------------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Commit_reaching_a_batch_already_committed_is_refused()
+    {
+        var host = Batching("host");
+        Batching("inner", hostedIn: "host");
+        host.OnCommit = async ct =>
+        {
+            await using var _ = await BatchScope.BeginAsync(_providers, [new VfsPath("inner", "/")], ct);
+        };
+        await using var scope = await BatchScope.BeginAsync(_providers, [new VfsPath("inner", "/")], Ct);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => scope.CommitAsync(Ct));
+    }
+
+    [Fact]
+    public async Task Joining_for_a_batch_the_scope_does_not_hold_is_refused()
+    {
+        Batching("alpha");
+        _arc.OnCommit = async ct =>
+        {
+            await using var _ = await BatchScope.BeginAsync(_providers, [new VfsPath("alpha", "/")], ct);
+        };
+        await using var scope = await BatchScope.BeginAsync(_providers, [Arc("/")], Ct);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => scope.CommitAsync(Ct));
+        Assert.Equal(-1, _journal.IndexOf("alpha:Begin"));
+    }
+
+    [Fact]
+    public async Task Hosts_in_a_cycle_are_refused_before_any_batch_begins()
+    {
+        var a = Batching("a");
+        var b = Batching("b");
+        a.BatchHost = b;
+        b.BatchHost = a;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => BatchScope.BeginAsync(_providers, [new VfsPath("a", "/")], Ct));
+
+        Assert.Empty(_journal.Events);
+    }
+
+    [Fact]
+    public async Task Batch_needed_while_it_is_being_begun_is_refused()
+    {
+        _arc.OnBegin = async ct =>
+        {
+            await using var _ = await BatchScope.BeginAsync(_providers, [Arc("/")], ct);
+        };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => BatchScope.BeginAsync(_providers, [Arc("/")], Ct));
+
+        _arc.OnBegin = null;
+        await RunScopeAsync("arc").WaitAsync(Timeout, Ct); // the gate was released
+    }
+
+    [Fact]
+    public async Task Second_commit_is_refused()
+    {
+        await using var scope = await BatchScope.BeginAsync(_providers, [Arc("/")], Ct);
+        await scope.CommitAsync(Ct);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => scope.CommitAsync(Ct));
+        Assert.Equal(1, _journal.Count("arc:Commit"));
+    }
+
+    [Fact]
+    public async Task Failed_commit_stays_the_cause_when_dispose_fails_too()
+    {
+        Arrange();
+        _arc.FailCommit = () => new IOException("commit failed");
+        _arc.FailDispose = () => new IOException("dispose failed");
+        var op = Copy(Arc("/dst"), Mem("/src/a.txt"));
+
+        var error = await Assert.ThrowsAsync<IOException>(() => op.RunAsync().WaitAsync(Timeout, Ct));
+
+        Assert.Equal("commit failed", error.Message);
+        Assert.Equal("dispose failed",
+            Assert.IsType<IOException>(error.Data[BatchScope.DisposeErrorKey]).Message);
+    }
+
+    [Fact]
+    public async Task Failed_copy_stays_the_cause_when_dispose_fails()
+    {
+        Arrange();
+        _mem.FailOn((name, path) => name == "OpenRead" && path.Path == "/src/a.txt",
+            () => new VfsAccessDeniedException("denied"));
+        _interaction.OnError(ErrorAction.Abort);
+        _arc.FailDispose = () => new IOException("dispose failed");
+        var op = Copy(Arc("/dst"), Mem("/src/a.txt"));
+
+        var error = await Assert.ThrowsAsync<VfsAccessDeniedException>(() => op.RunAsync().WaitAsync(Timeout, Ct));
+
+        Assert.Equal("denied", error.Message);
+        Assert.IsType<IOException>(error.Data[BatchScope.DisposeErrorKey]);
+    }
+
+    [Fact]
+    public async Task Failed_dispose_fails_a_copy_that_otherwise_succeeded()
+    {
+        Arrange();
+        _arc.FailDispose = () => new IOException("dispose failed");
+        var op = Copy(Arc("/dst"), Mem("/src/a.txt"));
+
+        var error = await Assert.ThrowsAsync<IOException>(() => op.RunAsync().WaitAsync(Timeout, Ct));
+
+        Assert.Equal("dispose failed", error.Message);
+        Assert.Equal(1, _journal.Count("arc:Commit"));
     }
 
     [Fact]
@@ -384,7 +565,7 @@ public sealed class BatchOperationTests
 
         Assert.Equal(OperationState.Completed, result.State);
         Assert.Equal("a", inner.Files.ReadAllText("/dst/a.txt"));
-        Assert.Equal(["inner:Begin", "host:Begin", "host:Write /container.bin", "inner:Commit", "host:Commit",
+        Assert.Equal(["host:Begin", "inner:Begin", "host:Write /container.bin", "inner:Commit", "host:Commit",
             "inner:Dispose", "host:Dispose"],
             _journal.Events.Where(e => !e.StartsWith("inner:Write", StringComparison.Ordinal)));
     }
