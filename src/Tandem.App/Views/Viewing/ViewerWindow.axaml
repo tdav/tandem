@@ -1,0 +1,11 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Tandem.App.ViewModels.Viewing"
+        xmlns:v="using:Tandem.App.Views.Viewing"
+        x:Class="Tandem.App.Views.Viewing.ViewerWindow"
+        x:DataType="vm:ViewerViewModel"
+        Title="{Binding Title}"
+        Width="900" Height="640" MinWidth="320" MinHeight="200">
+    <!-- The viewer fills the window; the window adds only the keys that close it. -->
+    <v:ViewerView x:Name="View" />
+</Window>

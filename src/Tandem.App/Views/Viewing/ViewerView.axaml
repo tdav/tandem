@@ -1,0 +1,56 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Tandem.App.ViewModels.Viewing"
+             xmlns:core="using:Tandem.Core.Viewing"
+             xmlns:loc="using:Tandem.App.Resources"
+             x:Class="Tandem.App.Views.Viewing.ViewerView"
+             x:DataType="vm:ViewerViewModel"
+             Focusable="True">
+    <!-- A bar with the mode, the encoding and line wrapping; the page (selectable text, or the picture) with a scroll
+         bar over the whole file; below, a failed read and how far into the file the page reaches. The bar's controls
+         never take the focus, so the keys stay with the page. -->
+    <DockPanel Background="{DynamicResource Tandem.ViewerBackground}">
+        <Border DockPanel.Dock="Top" Background="{DynamicResource Tandem.BarBackground}"
+                BorderBrush="{DynamicResource Tandem.DividerBrush}" BorderThickness="0,0,0,1" Padding="6,3">
+            <StackPanel Orientation="Horizontal" Spacing="12">
+                <ComboBox x:Name="ModeBox" Focusable="False" MinWidth="110"
+                          ItemsSource="{Binding Modes}" SelectedItem="{Binding Mode}" />
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock Classes="secondary" VerticalAlignment="Center" Text="{loc:Tr Key=Viewer_Encoding}" />
+                    <ComboBox x:Name="EncodingBox" Focusable="False" MinWidth="140"
+                              ItemsSource="{Binding Encodings}" SelectedItem="{Binding Encoding}">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="core:TextEncodingInfo">
+                                <TextBlock Text="{Binding Id}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                </StackPanel>
+                <CheckBox x:Name="WrapBox" Focusable="False" IsChecked="{Binding WrapLines}"
+                          Content="{loc:Tr Key=Viewer_WrapLines}" />
+            </StackPanel>
+        </Border>
+        <Border DockPanel.Dock="Bottom" Background="{DynamicResource Tandem.BarBackground}"
+                BorderBrush="{DynamicResource Tandem.DividerBrush}" BorderThickness="0,1,0,0" Padding="8,3">
+            <DockPanel>
+                <TextBlock x:Name="StatusText" DockPanel.Dock="Right" Classes="secondary" Margin="12,0,0,0"
+                           Text="{Binding StatusText}" />
+                <TextBlock x:Name="ErrorText" Text="{Binding Error}" TextTrimming="CharacterEllipsis"
+                           Foreground="{DynamicResource Tandem.ErrorForeground}" />
+            </DockPanel>
+        </Border>
+        <ScrollBar x:Name="OffsetBar" DockPanel.Dock="Right" Orientation="Vertical" AllowAutoHide="False"
+                   Minimum="0" />
+        <Panel>
+            <ScrollViewer x:Name="TextArea" VerticalScrollBarVisibility="Disabled"
+                          HorizontalScrollBarVisibility="Auto">
+                <SelectableTextBlock x:Name="PageText" Margin="6,2"
+                                     FontFamily="Menlo, Monaco, Courier New, monospace" FontSize="13" LineHeight="17"
+                                     Foreground="{DynamicResource Tandem.ViewerForeground}"
+                                     SelectionBrush="{DynamicResource Tandem.ViewerSelection}" />
+            </ScrollViewer>
+            <Image x:Name="Picture" Source="{Binding Image}" Stretch="Uniform" StretchDirection="DownOnly"
+                   Margin="6" />
+        </Panel>
+    </DockPanel>
+</UserControl>

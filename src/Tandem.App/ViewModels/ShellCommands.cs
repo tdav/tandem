@@ -3,6 +3,7 @@ using Tandem.App.Commands;
 using Tandem.App.Resources;
 using Tandem.App.Services;
 using Tandem.App.ViewModels.Editing;
+using Tandem.App.ViewModels.Viewing;
 using Tandem.Core.Platform;
 using Tandem.Core.Vfs;
 
@@ -12,14 +13,15 @@ namespace Tandem.App.ViewModels;
 public sealed record OpenWithApps(FileEntry Entry, IReadOnlyList<AppInfo> Apps);
 
 /// <summary>
-/// The commands that hand items to macOS: Quick Look (F3, Cmd+Y), Reveal in Finder, a terminal in the current folder,
-/// and "Open With" (menu only); Enter on a file opens it with its default application. Also the built-in text editor
-/// (F4) and the properties dialog (Cmd+I). Also tells the user when a panel's file cannot be opened as a folder, or is not one.
+/// The commands that hand items to macOS: Quick Look (Cmd+Y), Reveal in Finder, a terminal in the current folder,
+/// and "Open With" (menu only); Enter on a file opens it with its default application. Also the built-in viewer (F3),
+/// the built-in text editor (F4) and the properties dialog (Cmd+I). Also tells the user when a panel's file cannot be opened as a folder, or is not one.
 /// </summary>
 /// <remarks>
-/// Created and used on the UI thread. Everything but the editor and the properties dialog works for the local provider
-/// only and is disabled elsewhere. The editor opens a file of any provider off the UI thread, in a window of
-/// <see cref="IWindowService"/>; F4 on a file already open there brings its window forward; Enter on a file elsewhere opens a copy of it made in the <see cref="TempFileStore"/> (off the UI
+/// Created and used on the UI thread. Everything but the viewer, the editor and the properties dialog works for the
+/// local provider only and is disabled elsewhere. The viewer and the editor open a file of any provider off the UI
+/// thread, in a window of <see cref="IWindowService"/> (a viewer still opening when the commands are disposed is
+/// closed); F4 on a file already open there brings its window forward; Enter on a file elsewhere opens a copy of it made in the <see cref="TempFileStore"/> (off the UI
 /// thread): changes to the copy do not go back. Only the panels shown (active and passive) are listened to: what a
 /// panel no longer shown reports (a file activated, not a folder, a failed open) is dropped on purpose, since the user
 /// has moved on, and a copy still being made for such a panel is removed instead of opened. A launch that fails
@@ -53,6 +55,7 @@ public sealed class ShellCommands : IDisposable
     private readonly Action<Exception> _reportFailure;
     private readonly Func<TimeSpan, CancellationToken, Task> _delay;
     private readonly List<PanelViewModel> _watched = [];
+    private readonly CancellationTokenSource _lifetime = new();
     private PanelViewModel? _activePanel;
     private bool[] _available = [];
     private IReadOnlyList<string> _previewed = [];
@@ -82,7 +85,7 @@ public sealed class ShellCommands : IDisposable
         _reportFailure = reportFailure ?? throw new ArgumentNullException(nameof(reportFailure));
         _delay = quickLookDelay ?? Task.Delay;
 
-        commands.Register(CommandIds.FileView, ToggleQuickLookAsync, IsActiveLocal);
+        commands.Register(CommandIds.FileView, ViewAsync, () => CursorEntry() is { IsDirectoryLike: false });
         commands.Register(CommandIds.FileQuickLook, ToggleQuickLookAsync, IsActiveLocal);
         commands.Register(CommandIds.FileEdit, EditAsync, () => CursorEntry() is { IsDirectoryLike: false });
         commands.Register(CommandIds.FileProperties, ShowPropertiesAsync, () => CursorEntry() is not null);
@@ -162,6 +165,8 @@ public sealed class ShellCommands : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _lifetime.Cancel();
+        _lifetime.Dispose();
         CancelFollow();
         _workspace.PropertyChanged -= OnWorkspacePropertyChanged;
         foreach (var panel in _watched)
@@ -334,6 +339,33 @@ public sealed class ShellCommands : IDisposable
         }
         if (_disposed || await _windows.TryActivateEditorAsync(editor.Target)) return;
         _windows.ShowEditor(editor);
+    }
+
+    /// <summary>F3: the file under the cursor in the built-in viewer, opened off the UI thread. A file that cannot be
+    /// read is told to the user.</summary>
+    private async Task ViewAsync()
+    {
+        if (_disposed || CursorEntry() is not { IsDirectoryLike: false } entry) return;
+        ViewerViewModel viewer;
+        try
+        {
+            viewer = await ViewerViewModel.OpenAsync(_providers, _temp, entry.Path, _lifetime.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return; // the app is closing
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            if (!_disposed) await TellAsync(Loc.Format("Shell_OpenFailed", entry.Name), e);
+            return;
+        }
+        if (_disposed)
+        {
+            await viewer.DisposeAsync();
+            return;
+        }
+        _windows.ShowViewer(viewer);
     }
 
     private Task RevealAsync() =>

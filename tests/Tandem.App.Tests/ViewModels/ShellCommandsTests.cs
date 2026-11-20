@@ -54,8 +54,7 @@ public class ShellCommandsTests : LanguageTestBase
 
     private static readonly string[] LocalOnly =
     [
-        CommandIds.FileView, CommandIds.FileQuickLook, CommandIds.ShellReveal, CommandIds.ShellOpenTerminal,
-        CommandIds.ShellOpenWith,
+        CommandIds.FileQuickLook, CommandIds.ShellReveal, CommandIds.ShellOpenTerminal, CommandIds.ShellOpenWith,
     ];
 
     // ---- Opening ----------------------------------------------------------------------------------------
@@ -246,8 +245,9 @@ public class ShellCommandsTests : LanguageTestBase
         Assert.Empty(app.Shell.Calls);
         Assert.Empty(app.QuickLook.Toggles);
         Assert.Empty(app.Shell.AppQueries);
-        // Properties and the built-in editor still work, without the local-only parts.
+        // Properties, the built-in viewer and the built-in editor still work, without the local-only parts.
         Assert.True(app.Main.Commands.CanExecute(CommandIds.FileProperties));
+        Assert.True(app.Main.Commands.CanExecute(CommandIds.FileView));
         Assert.True(app.Main.Commands.CanExecute(CommandIds.FileEdit));
     }
 
@@ -275,7 +275,7 @@ public class ShellCommandsTests : LanguageTestBase
 
         Assert.True(await app.Main.Commands.ExecuteAsync(CommandIds.FileQuickLook));
         Assert.True(app.QuickLook.IsOpen);
-        Assert.True(await app.Main.Commands.ExecuteAsync(CommandIds.FileView)); // F3 is the same toggle
+        Assert.True(await app.Main.Commands.ExecuteAsync(CommandIds.FileQuickLook));
 
         Assert.Equal([["/home/notes.txt"], ["/home/notes.txt"]], app.QuickLook.Toggles);
         Assert.False(app.QuickLook.IsOpen);

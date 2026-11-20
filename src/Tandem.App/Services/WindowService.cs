@@ -1,13 +1,15 @@
 using Avalonia;
 using Avalonia.Controls;
 using Tandem.App.ViewModels.Editing;
+using Tandem.App.ViewModels.Viewing;
 using Tandem.App.Views.Editing;
+using Tandem.App.Views.Viewing;
 using Tandem.Core.Vfs;
 
 namespace Tandem.App.Services;
 
 /// <summary>
-/// Shows the editor windows as independent windows (not owned, so each comes forward on its own), placed over
+/// Shows the editor and viewer windows as independent windows (not owned, so each comes forward on its own), placed over
 /// <see cref="Owner"/> (the main window) when it is shown. Their "save changes?" question goes through
 /// <paramref name="dialogs"/>; the files of <paramref name="providers"/> are told apart by what they really are, with
 /// links followed. UI thread only.
@@ -32,7 +34,17 @@ public sealed class WindowService(IDialogService dialogs, ProviderRegistry provi
     public void ShowEditor(EditorViewModel editor)
     {
         ArgumentNullException.ThrowIfNull(editor);
-        var window = new EditorWindow(editor, _dialogs);
+        Show(new EditorWindow(editor, _dialogs));
+    }
+
+    public void ShowViewer(ViewerViewModel viewer)
+    {
+        ArgumentNullException.ThrowIfNull(viewer);
+        Show(new ViewerWindow(viewer));
+    }
+
+    private void Show(Window window)
+    {
         if (Owner is { IsVisible: true } owner)
         {
             window.WindowStartupLocation = WindowStartupLocation.Manual;

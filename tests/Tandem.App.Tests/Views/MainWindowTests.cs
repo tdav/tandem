@@ -453,11 +453,13 @@ public class MainWindowTests : LanguageTestBase
         Assert.Equal(new KeyGesture(Key.F5), copy.Gesture);
 
         // Copy is off with the cursor on ".."; so are the commands that need an item.
-        foreach (var id in new[] { CommandIds.FileEdit, CommandIds.ShellReveal, CommandIds.FileProperties })
+        foreach (var id in new[]
+                 { CommandIds.FileView, CommandIds.FileEdit, CommandIds.ShellReveal, CommandIds.FileProperties })
             Assert.False(items.Single(i => i.CommandParameter as string == id).Command!.CanExecute(id));
         var view = items.Single(i => i.CommandParameter as string == CommandIds.FileView);
-        Assert.True(view.Command!.CanExecute(view.CommandParameter));
         Assert.Equal(new KeyGesture(Key.F3), view.Gesture);
+        var quickLook = items.Single(i => i.CommandParameter as string == CommandIds.FileQuickLook);
+        Assert.True(quickLook.Command!.CanExecute(quickLook.CommandParameter));
 
         var refresh = items.Single(i => i.CommandParameter as string == CommandIds.PanelRefresh);
         Assert.True(refresh.Command!.CanExecute(refresh.CommandParameter));

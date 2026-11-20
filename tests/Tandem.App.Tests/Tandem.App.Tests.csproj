@@ -17,6 +17,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Shared source: the counting stream of any declared size from the Core tests. -->
+    <Compile Include="..\Tandem.Core.Tests\Viewing\SparseStream.cs" Link="ViewModels\SparseStream.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Tandem.App\Tandem.App.csproj" />
   </ItemGroup>
 </Project>

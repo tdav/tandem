@@ -71,12 +71,12 @@ public class ShellWindowTests : LanguageTestBase
     }
 
     [AvaloniaFact]
-    public async Task F3_and_Cmd_Y_toggle_Quick_Look()
+    public async Task Cmd_Y_toggles_Quick_Look()
     {
         await using var app = await TestApp.StartAsync();
         app.Left.CursorIndex = IndexOf(app.Left, "notes.txt");
 
-        app.Press(Key.F3, physical: PhysicalKey.F3);
+        app.Press(Key.Y, RawInputModifiers.Meta, PhysicalKey.Y, "y");
         Assert.True(app.QuickLook.IsOpen);
         app.Press(Key.Y, RawInputModifiers.Meta, PhysicalKey.Y, "y");
 
@@ -91,7 +91,7 @@ public class ShellWindowTests : LanguageTestBase
         try
         {
             app.Left.CursorIndex = IndexOf(app.Left, "notes.txt");
-            app.Press(Key.F3, physical: PhysicalKey.F3);
+            app.Press(Key.Y, RawInputModifiers.Meta, PhysicalKey.Y, "y");
             Assert.True(app.QuickLook.IsOpen);
 
             app.Window.Close();

@@ -25,6 +25,9 @@
                     <SolidColorBrush x:Key="Tandem.Transparent" Color="#00FFFFFF" />
                     <SolidColorBrush x:Key="Tandem.DropTargetBackground" Color="#FFD9F2E0" />
                     <SolidColorBrush x:Key="Tandem.DropTargetBorder" Color="#FF16A34A" />
+                    <SolidColorBrush x:Key="Tandem.ViewerBackground" Color="#FFFFFFFF" />
+                    <SolidColorBrush x:Key="Tandem.ViewerForeground" Color="#FF18181B" />
+                    <SolidColorBrush x:Key="Tandem.ViewerSelection" Color="#FFBFD7FF" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <SolidColorBrush x:Key="Tandem.BarBackground" Color="#FF232326" />
@@ -43,6 +46,9 @@
                     <SolidColorBrush x:Key="Tandem.Transparent" Color="#00000000" />
                     <SolidColorBrush x:Key="Tandem.DropTargetBackground" Color="#FF1C4A2E" />
                     <SolidColorBrush x:Key="Tandem.DropTargetBorder" Color="#FF4ADE80" />
+                    <SolidColorBrush x:Key="Tandem.ViewerBackground" Color="#FF1C1C1E" />
+                    <SolidColorBrush x:Key="Tandem.ViewerForeground" Color="#FFE4E4E7" />
+                    <SolidColorBrush x:Key="Tandem.ViewerSelection" Color="#FF264F78" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
 
