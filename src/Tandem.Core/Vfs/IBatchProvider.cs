@@ -17,7 +17,9 @@ public interface IBatchProvider
     /// archive inside an archive) — or null for a provider that stands on its own. A <see cref="BatchScope"/> that
     /// batches this provider batches its host too, begins the host first and commits it last; the commit of this
     /// provider may write into the host (through <see cref="BatchScope.BeginAsync"/>, which then joins the scope that
-    /// holds both). The chain of hosts must not form a cycle.</summary>
+    /// holds both). The chain of hosts must not form a cycle.
+    /// <para>It is fixed for the provider's life, and a non-null value is the instance registered in the
+    /// <see cref="ProviderRegistry"/> under that host's id (not a wrapper or a copy).</para></summary>
     IBatchProvider? BatchHost { get; }
 }
 

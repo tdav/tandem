@@ -153,7 +153,8 @@ public abstract class FileOperation
     /// was cancelled; when the body failed, its own error stays the outcome. A failure to dispose the scope is the
     /// outcome only when nothing else went wrong; otherwise it is attached to the outcome under
     /// <see cref="BatchScope.DisposeErrorKey"/>. <paramref name="afterCommit"/> runs only once the commit and the
-    /// disposal succeeded and the body did not fail (it may have been cancelled).</summary>
+    /// disposal succeeded and the body did not fail (it may have been cancelled); a failed disposal skips it also when
+    /// its error was only attached to a cancellation.</summary>
     private protected static async Task RunInBatchAsync(ProviderRegistry providers, IEnumerable<VfsPath> paths,
         Func<BatchScope, Task> body, Func<Task>? afterCommit, CancellationToken ct)
     {
@@ -180,12 +181,18 @@ public abstract class FileOperation
         {
             // The body's error is the outcome; the batch is discarded on disposal.
         }
+        var disposeFailed = false;
         if ((commitError ?? bodyError) is { } outcome)
+        {
             await scope.DisposeKeepingAsync(outcome.SourceException).ConfigureAwait(false);
+            disposeFailed = outcome.SourceException.Data.Contains(BatchScope.DisposeErrorKey);
+        }
         else
+        {
             await scope.DisposeAsync().ConfigureAwait(false);
+        }
         commitError?.Throw();
-        if (!bodyFailed && afterCommit is not null) await afterCommit().ConfigureAwait(false);
+        if (!bodyFailed && !disposeFailed && afterCommit is not null) await afterCommit().ConfigureAwait(false);
         bodyError?.Throw();
     }
 

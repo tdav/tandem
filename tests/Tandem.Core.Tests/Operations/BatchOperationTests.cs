@@ -226,6 +226,29 @@ public sealed class BatchOperationTests
     }
 
     [Fact]
+    public async Task Cancelled_move_into_batching_provider_keeps_its_sources_when_dispose_fails()
+    {
+        Arrange();
+        _mem.AddFile("/src/c.txt", "c");
+        JournalSourceDeletes();
+        var op = Move(Arc("/dst"), Mem("/src/a.txt"), Mem("/src/c.txt"));
+        _arc.Files.FailOn((name, path) =>
+        {
+            if (name == "OpenWrite" && path.Path.Contains("c.txt", StringComparison.Ordinal)) op.Cancel();
+            return false;
+        }, () => new IOException("unused"));
+        _arc.FailDispose = () => new IOException("dispose failed");
+
+        var result = await op.RunAsync().WaitAsync(Timeout, Ct);
+
+        Assert.Equal(OperationState.Cancelled, result.State);
+        Assert.Equal("a", _mem.ReadAllText("/src/a.txt"));
+        Assert.Equal("c", _mem.ReadAllText("/src/c.txt"));
+        Assert.Equal(1, _journal.Count("arc:Commit"));
+        Assert.Equal(-1, _journal.IndexOf("mem:Delete"));
+    }
+
+    [Fact]
     public async Task Move_out_of_batching_provider_deletes_its_sources_in_the_batch()
     {
         _arc.Files.AddFile("/src/a.txt", "a");
