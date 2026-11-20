@@ -18,8 +18,10 @@ public interface IWindowService
     void ShowViewer(ViewerViewModel viewer);
 
     /// <summary>Shows the settings window for <paramref name="settings"/>, modal to the main window, and completes
-    /// when it closes: true when its settings were applied (OK or Apply). One at a time: while it is open, it is
-    /// brought to the front instead and the answer is false.</summary>
+    /// when it closes: true when its settings were applied (OK or Apply). One at a time: a call while one is open
+    /// brings that one to the front and answers false. (The app's settings command never makes such a call: the
+    /// command runs until the window closes, and the command registry does not start a running command again.)
+    /// </summary>
     Task<bool> ShowSettingsAsync(SettingsViewModel settings);
 
     /// <summary>Brings the editor window of <paramref name="path"/> to the front; false when none is open. The path

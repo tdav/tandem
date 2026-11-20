@@ -59,6 +59,12 @@ public class SettingsWindowTests : LanguageTestBase, IDisposable
         var recorder = Named<ShortcutRecorder>(window, "Recorder");
         recorder.Focus();
         Pump(window);
+        if (!recorder.IsRecording)
+        {
+            window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+            window.KeyRelease(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+            Pump(window);
+        }
         window.KeyPress(key, modifiers, physical, null);
         window.KeyRelease(key, modifiers, physical, null);
         Pump(window);
@@ -77,7 +83,8 @@ public class SettingsWindowTests : LanguageTestBase, IDisposable
         var tabs = Named<TabControl>(window, "Tabs");
         Assert.Equal(5, tabs.ItemCount);
 
-        // Cmd+, again (here: the command from the menu) brings the same window forward; no second one opens.
+        // The command again (from the menu) while the window is open does nothing: the command is still running,
+        // and the registry does not start it twice. No second window opens.
         await app.Main.ExecuteCommandAsync(CommandIds.AppSettings);
         Assert.Single(app.Windows.Open.OfType<SettingsWindow>());
 
@@ -126,14 +133,16 @@ public class SettingsWindowTests : LanguageTestBase, IDisposable
         Assert.Equal(3, mkdir.Chords.Count);
         Assert.True(message.IsVisible);
         Assert.False(string.IsNullOrEmpty(message.Text));
+        Record(window, mkdir, Key.Q, RawInputModifiers.Meta, PhysicalKey.Q);
+        Assert.Contains("⌘Q", message.Text); // the chord as the window shows it
 
         // A chord another command has: the question is asked; "no" leaves both, "yes" moves it.
         var move = Row(window, CommandIds.FileMove);
         app.Dialogs.ReassignAnswers.Enqueue(false);
-        Record(window, move, Key.F5, RawInputModifiers.None);
-        Assert.Equal([("F5", "Copy…")], app.Dialogs.ReassignRequests.Select(r => (r.Chord, r.Owner)));
+        Record(window, move, Key.D5, RawInputModifiers.Meta, PhysicalKey.Digit5);
+        Assert.Equal([("⌘5", "Copy…")], app.Dialogs.ReassignRequests.Select(r => (r.Chord, r.Owner)));
         Assert.Same(window, app.Dialogs.ReassignRequests[0].Window);
-        Assert.Equal(CommandIds.FileCopy, window.Settings.OwnerOf(KeyChord.Parse("F5"))!.CommandId);
+        Assert.Equal(CommandIds.FileCopy, window.Settings.OwnerOf(KeyChord.Parse("Cmd+5"))!.CommandId);
         app.Dialogs.ReassignAnswers.Enqueue(true);
         Record(window, move, Key.F5, RawInputModifiers.None);
         Assert.Equal(CommandIds.FileMove, window.Settings.OwnerOf(KeyChord.Parse("F5"))!.CommandId);
@@ -147,6 +156,77 @@ public class SettingsWindowTests : LanguageTestBase, IDisposable
 
         // Nothing reaches the settings before OK or Apply.
         Assert.Empty(app.Main.Settings.Current.KeyBindings);
+    }
+
+    [AvaloniaFact]
+    public async Task Recording_starts_on_click_or_Return_not_on_focus()
+    {
+        await using var app = await TestApp.StartAsync();
+        var window = await OpenAsync(app);
+        var mkdir = Row(window, CommandIds.FileMkdir);
+        window.Settings.SelectedShortcut = mkdir;
+        Pump(window);
+        var recorder = Named<ShortcutRecorder>(window, "Recorder");
+
+        void Key(Key key, RawInputModifiers modifiers = RawInputModifiers.None)
+        {
+            window.KeyPress(key, modifiers, PhysicalKey.None, null);
+            window.KeyRelease(key, modifiers, PhysicalKey.None, null);
+            Pump(window);
+        }
+
+        // Focus alone (as Tab gives it) records nothing: the next Shift+Tab moves the focus on.
+        recorder.Focus();
+        Pump(window);
+        Assert.False(recorder.IsRecording);
+        Key(Avalonia.Input.Key.Tab, RawInputModifiers.Shift);
+        Assert.Equal([KeyChord.Parse("F7"), KeyChord.Parse("Cmd+7")], mkdir.Chords);
+        Assert.NotSame(recorder, window.FocusManager?.GetFocusedElement());
+
+        // Return on the recorder starts recording (the window stays open); now Shift+Tab is recorded.
+        recorder.Focus();
+        Pump(window);
+        Key(Avalonia.Input.Key.Enter);
+        Assert.True(recorder.IsRecording);
+        Assert.True(window.IsVisible);
+        Key(Avalonia.Input.Key.Tab, RawInputModifiers.Shift);
+        Assert.Equal([KeyChord.Parse("F7"), KeyChord.Parse("Cmd+7"), KeyChord.Parse("Shift+Tab")], mkdir.Chords);
+        Assert.Same(recorder, window.FocusManager?.GetFocusedElement());
+
+        // Esc stops; Return starts again from the keyboard.
+        Key(Avalonia.Input.Key.Escape);
+        Assert.False(recorder.IsRecording);
+        Assert.True(window.IsVisible);
+        Key(Avalonia.Input.Key.Enter);
+        Assert.True(recorder.IsRecording);
+        Key(Avalonia.Input.Key.Escape);
+
+        // A click starts it too.
+        recorder.RaiseEvent(new PointerPressedEventArgs(recorder, new Pointer(1, PointerType.Mouse, true), window,
+            new Point(1, 1), 0, new PointerPointProperties(RawInputModifiers.LeftMouseButton,
+                PointerUpdateKind.LeftButtonPressed), KeyModifiers.None));
+        Assert.True(recorder.IsRecording);
+    }
+
+    [AvaloniaFact]
+    public async Task Edited_row_keeps_its_selection_under_a_filter()
+    {
+        await using var app = await TestApp.StartAsync();
+        var window = await OpenAsync(app);
+        Named<TextBox>(window, "ShortcutFilter").Text = "F7";
+        Pump(window);
+        var list = Named<ListBox>(window, "ShortcutList");
+        var mkdir = Row(window, CommandIds.FileMkdir);
+        list.SelectedItem = mkdir;
+        Pump(window);
+
+        window.Settings.RemoveChord(mkdir, KeyChord.Parse("F7"));
+        Record(window, mkdir, Key.N, RawInputModifiers.Control | RawInputModifiers.Meta, PhysicalKey.N);
+
+        Assert.Same(mkdir, list.SelectedItem);
+        Assert.Same(mkdir, window.Settings.SelectedShortcut);
+        Assert.True(Named<ShortcutRecorder>(window, "Recorder").IsEffectivelyEnabled);
+        Assert.Contains(KeyChord.Parse("Ctrl+Cmd+N"), mkdir.Chords);
     }
 
     [AvaloniaFact]
@@ -232,7 +312,21 @@ public class SettingsWindowTests : LanguageTestBase, IDisposable
         Assert.Equal(18, vm.FontSize);
         vm.RowHeight = 30;
         Pump(window);
-        Assert.Equal(30m, Named<NumericUpDown>(window, "RowHeightField").Value);
+        var rowHeight = Named<NumericUpDown>(window, "RowHeightField");
+        Assert.Equal(30m, rowHeight.Value);
+        Assert.Equal((decimal)AppSettings.MinRowHeight, rowHeight.Minimum);
+        Assert.Equal((decimal)AppSettings.MaxRowHeight, rowHeight.Maximum);
+        var fontSize = Named<NumericUpDown>(window, "FontSizeField");
+        Assert.Equal((decimal)AppSettings.MinFontSize, fontSize.Minimum);
+        Assert.Equal((decimal)AppSettings.MaxFontSize, fontSize.Maximum);
+        // A cleared field is an error, not the old number.
+        fontSize.Value = null;
+        Assert.True(double.IsNaN(vm.FontSize));
+        Assert.NotNull(vm.Validate());
+        Click(window, Named<Button>(window, "Ok"));
+        Assert.True(window.IsVisible);
+        Assert.True(Named<TextBlock>(window, "ErrorText").IsVisible);
+        fontSize.Value = 18;
         var colors = Named<ItemsControl>(window, "FileColors");
         var colorBox = colors.GetVisualDescendants().OfType<ComboBox>().Single();
         Assert.Equal("Green", ((ColorOption)colorBox.SelectedItem!).Value);
@@ -245,6 +339,13 @@ public class SettingsWindowTests : LanguageTestBase, IDisposable
         Pump(window);
         var left = Named<ItemsControl>(window, "LeftColumns");
         Assert.Equal(4, left.GetVisualDescendants().OfType<CheckBox>().Count());
+        var width = left.GetVisualDescendants().OfType<NumericUpDown>().First();
+        Assert.Equal((decimal)AppSettings.MinColumnWidth, width.Minimum);
+        Assert.Equal((decimal)AppSettings.MaxColumnWidth, width.Maximum);
+        width.Value = null;
+        Assert.True(double.IsNaN(vm.LeftColumns[0].Width));
+        width.Value = 60;
+        Assert.Equal(60, vm.LeftColumns[0].Width);
         Click(window, left.GetVisualDescendants().OfType<Button>().First(b => b.Classes.Contains("moveDown")));
         Assert.Equal(ColumnId.Size, vm.LeftColumns[0].Column);
         Assert.Equal(ColumnId.Extension, vm.RightColumns[0].Column);

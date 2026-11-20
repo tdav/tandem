@@ -135,7 +135,7 @@ public class MainViewModelTests : LanguageTestBase
 
         Assert.Equal(1, changes);
         var copy = app.Main.FKeys.Single(k => k.CommandId == CommandIds.FileCopy);
-        Assert.Equal("Ctrl+Cmd+K", copy.Key);
+        Assert.Equal("⌃⌘K", copy.Key);
         Assert.Equal("Copy", copy.Label);
         Assert.Equal("", app.Main.FKeys.Single(k => k.CommandId == CommandIds.FileMkdir).Key);
         Assert.Equal("F6", app.Main.FKeys.Single(k => k.CommandId == CommandIds.FileMove).Key);

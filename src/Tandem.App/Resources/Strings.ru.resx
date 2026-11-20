@@ -1078,7 +1078,7 @@
     <value>Поиск по командам и сочетаниям</value>
   </data>
   <data name="Settings_Recorder_Idle" xml:space="preserve">
-    <value>Щёлкните здесь и нажмите сочетание, чтобы добавить его</value>
+    <value>Щёлкните здесь или нажмите Return, чтобы записать сочетание</value>
   </data>
   <data name="Settings_Recorder_Recording" xml:space="preserve">
     <value>Нажмите сочетание… (Esc — закончить)</value>
@@ -1220,5 +1220,14 @@
   </data>
   <data name="Settings_Error_ColumnWidth" xml:space="preserve">
     <value>Ширина столбца должна быть от {0} до {1}.</value>
+  </data>
+  <data name="Key_Space" xml:space="preserve">
+    <value>Пробел</value>
+  </data>
+  <data name="Key_Insert" xml:space="preserve">
+    <value>Insert</value>
+  </data>
+  <data name="Settings_Error_RowTooLow" xml:space="preserve">
+    <value>При этом размере шрифта высота строки должна быть не меньше {0}.</value>
   </data>
 </root>

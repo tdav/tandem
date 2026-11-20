@@ -15,7 +15,10 @@
                 <CheckBox Content="{Binding Label}" IsChecked="{Binding Visible}" />
                 <TextBlock Grid.Column="1" Text="{loc:Tr Key=Settings_ColumnWidth}" VerticalAlignment="Center"
                            Classes="secondary" />
-                <NumericUpDown Grid.Column="2" Increment="2" FormatString="0" Value="{Binding Width}" />
+                <NumericUpDown Grid.Column="2" Increment="2" FormatString="0"
+                               Minimum="{x:Static vm:SettingsViewModel.MinColumnWidth}"
+                               Maximum="{x:Static vm:SettingsViewModel.MaxColumnWidth}"
+                               Value="{Binding Width, Converter={x:Static s:NumberFieldConverter.Instance}}" />
                 <Button Grid.Column="3" Classes="moveUp" Tag="{Binding}" Content="{loc:Tr Key=Settings_MoveUp}"
                         ToolTip.Tip="{loc:Tr Key=Settings_MoveUpTip}" />
                 <Button Grid.Column="4" Classes="moveDown" Tag="{Binding}" Content="{loc:Tr Key=Settings_MoveDown}"
@@ -48,19 +51,19 @@
                              PlaceholderText="{loc:Tr Key=Settings_Filter}" Text="{Binding ShortcutFilter}" />
                     <StackPanel DockPanel.Dock="Bottom" Spacing="8" Margin="0,8,0,0"
                                 IsEnabled="{Binding SelectedShortcut, Converter={x:Static ObjectConverters.IsNotNull}}">
-                        <ItemsControl x:Name="SelectedChords" ItemsSource="{Binding SelectedShortcut.Chords}">
+                        <ItemsControl x:Name="SelectedChords" ItemsSource="{Binding SelectedShortcut.ChordItems}">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
                                     <WrapPanel Orientation="Horizontal" />
                                 </ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="c:KeyChord">
+                                <DataTemplate x:DataType="vm:ChordItem">
                                     <Border BorderBrush="{DynamicResource Tandem.DividerBrush}" BorderThickness="1"
                                             CornerRadius="4" Padding="6,2" Margin="0,0,6,0">
                                         <StackPanel Orientation="Horizontal" Spacing="6">
-                                            <TextBlock Text="{Binding}" VerticalAlignment="Center" />
-                                            <Button Padding="2,0" Classes="flat removeChord" Tag="{Binding}"
+                                            <TextBlock Text="{Binding Text}" VerticalAlignment="Center" />
+                                            <Button Padding="2,0" Classes="flat removeChord" Tag="{Binding Chord}"
                                                     Content="{loc:Tr Key=Settings_Remove}"
                                                     ToolTip.Tip="{loc:Tr Key=Settings_RemoveTip}" />
                                         </StackPanel>
@@ -113,10 +116,16 @@
                             </ComboBox>
                             <TextBlock Grid.Row="1" Text="{loc:Tr Key=Settings_FontSize}" VerticalAlignment="Center" />
                             <NumericUpDown x:Name="FontSizeField" Grid.Row="1" Grid.Column="1" Increment="1"
-                                           FormatString="0" Value="{Binding FontSize}" />
+                                           FormatString="0"
+                                           Minimum="{x:Static vm:SettingsViewModel.MinFontSize}"
+                                           Maximum="{x:Static vm:SettingsViewModel.MaxFontSize}"
+                                           Value="{Binding FontSize, Converter={x:Static s:NumberFieldConverter.Instance}}" />
                             <TextBlock Grid.Row="2" Text="{loc:Tr Key=Settings_RowHeight}" VerticalAlignment="Center" />
                             <NumericUpDown x:Name="RowHeightField" Grid.Row="2" Grid.Column="1" Increment="1"
-                                           FormatString="0" Value="{Binding RowHeight}" />
+                                           FormatString="0"
+                                           Minimum="{x:Static vm:SettingsViewModel.MinRowHeight}"
+                                           Maximum="{x:Static vm:SettingsViewModel.MaxRowHeight}"
+                                           Value="{Binding RowHeight, Converter={x:Static s:NumberFieldConverter.Instance}}" />
                         </Grid>
                         <TextBlock Text="{loc:Tr Key=Settings_FileColors}" FontWeight="SemiBold" Margin="0,8,0,0" />
                         <ItemsControl x:Name="FileColors" ItemsSource="{Binding FileColors}">

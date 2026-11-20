@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Tandem.App.Commands;
@@ -10,10 +11,11 @@ using Tandem.App.Resources;
 namespace Tandem.App.Views.Settings;
 
 /// <summary>
-/// A field that records shortcuts: while it has the focus (or after a click on it) each key pressed, with its
-/// modifiers, becomes a <see cref="KeyChord"/> (<see cref="KeyRouting.ChordFor"/>, so a letter is its US-layout key on
+/// A field that records shortcuts. Recording starts on a click, or on Return or Space while it has the focus (focus
+/// alone, as Tab gives it, does not start it); while it records, each key pressed, with its modifiers, becomes a <see cref="KeyChord"/> (<see cref="KeyRouting.ChordFor"/>, so a letter is its US-layout key on
 /// any layout) and is told through <see cref="ChordRecorded"/>; no other control sees the key, Tab, Enter and Space
-/// included. A modifier pressed alone records nothing. Esc stops recording and records nothing.
+/// included. A modifier pressed alone records nothing. Esc, or the focus leaving, stops recording and records
+/// nothing; Return starts it again.
 /// </summary>
 public sealed class ShortcutRecorder : Border
 {
@@ -36,6 +38,8 @@ public sealed class ShortcutRecorder : Border
         Bind(BorderBrushProperty, this.GetResourceObservable("Tandem.DividerBrush"));
         Child = _text;
         ShowState();
+        // Before keyboard navigation and the window's default and cancel buttons see the key.
+        AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
     }
 
     /// <summary>A key was recorded.</summary>
@@ -59,12 +63,6 @@ public sealed class ShortcutRecorder : Border
         BorderThickness = new Thickness(_isRecording ? 2 : 1);
     }
 
-    protected override void OnGotFocus(FocusChangedEventArgs e)
-    {
-        base.OnGotFocus(e);
-        IsRecording = true;
-    }
-
     protected override void OnLostFocus(FocusChangedEventArgs e)
     {
         base.OnLostFocus(e);
@@ -79,11 +77,15 @@ public sealed class ShortcutRecorder : Border
         e.Handled = true;
     }
 
-    protected override void OnKeyDown(KeyEventArgs e)
+    private void OnPreviewKeyDown(object? sender, KeyEventArgs e)
     {
         if (!IsRecording)
         {
-            base.OnKeyDown(e);
+            if (e.Key is Key.Enter or Key.Space && e.KeyModifiers == KeyModifiers.None)
+            {
+                IsRecording = true;
+                e.Handled = true;
+            }
             return;
         }
         e.Handled = true;

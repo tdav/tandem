@@ -183,7 +183,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public SideViewModel Side(PanelSide side) => side == PanelSide.Left ? Left : Right;
 
     /// <summary>The F-key bar: view, edit, copy, move, new folder, delete, each with its command's first chord in
-    /// <see cref="KeyMap"/> (F3–F8 by default; empty when unbound). Replaced when the key map changes.</summary>
+    /// <see cref="KeyMap"/> as the Mac shows it (F3–F8 by default; empty when unbound). Replaced when the key map changes.</summary>
     public IReadOnlyList<FKeyItem> FKeys
     {
         get => _fKeys;
@@ -191,7 +191,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     private FKeyItem[] BuildFKeys() => _fKeyLabels
-        .Select(k => new FKeyItem(KeyMap.ChordsFor(k.CommandId) is [var chord, ..] ? chord.ToString() : "", k.Label,
+        .Select(k => new FKeyItem(KeyMap.ChordsFor(k.CommandId) is [var chord, ..] ? KeyChordText.Format(chord) : "", k.Label,
             k.CommandId))
         .ToArray();
 

@@ -28,6 +28,9 @@ public sealed record ThemeOption(ThemeChoice Value, string Label);
 /// <summary>A colour of <see cref="AppSettings.ColorNames"/> in the settings window's list, with its label.</summary>
 public sealed record ColorOption(string Value, string Label);
 
+/// <summary>A chord of the selected command on the Keys tab, with its text as the Mac shows it.</summary>
+public sealed record ChordItem(KeyChord Chord, string Text);
+
 /// <summary>One command on the Keys tab: its menu label and the chords it has in the window (primary first).
 /// <see cref="IsChanged"/> while they differ from its default chords.</summary>
 public sealed class ShortcutRow : ObservableObject
@@ -55,12 +58,23 @@ public sealed class ShortcutRow : ObservableObject
             var changed = IsChanged;
             if (!SetProperty(ref _chords, value)) return;
             OnPropertyChanged(nameof(ChordsText));
+            OnPropertyChanged(nameof(ChordItems));
             if (changed != IsChanged) OnPropertyChanged(nameof(IsChanged));
         }
     }
 
-    /// <summary>The chords as the key map writes them, comma-separated.</summary>
-    public string ChordsText => string.Join(", ", Chords);
+    /// <summary>The chords as the Mac shows them (<see cref="KeyChordText"/>), comma-separated.</summary>
+    public string ChordsText => string.Join(", ", Chords.Select(KeyChordText.Format));
+
+    /// <summary>The chords with their shown text, for the list of the selected command.</summary>
+    public IReadOnlyList<ChordItem> ChordItems => Chords.Select(c => new ChordItem(c, KeyChordText.Format(c))).ToArray();
+
+    /// <summary>True when the label, the chords as shown or the chords as saved ("Shift+F8") contain
+    /// <paramref name="filter"/>, case ignored.</summary>
+    internal bool Matches(string filter) =>
+        Label.Contains(filter, StringComparison.CurrentCultureIgnoreCase) ||
+        ChordsText.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+        string.Join(", ", Chords).Contains(filter, StringComparison.OrdinalIgnoreCase);
 
     public bool IsChanged => !Chords.SequenceEqual(_defaults);
 
@@ -155,9 +169,6 @@ public sealed partial class SettingsViewModel : ObservableObject
     private string _externalEditor;
 
     [ObservableProperty]
-    private IReadOnlyList<ShortcutRow> _visibleShortcuts;
-
-    [ObservableProperty]
     private ShortcutRow? _selectedShortcut;
 
     /// <summary>Why the last chord recorded was not taken; null when it was, or nothing was recorded yet.</summary>
@@ -189,10 +200,18 @@ public sealed partial class SettingsViewModel : ObservableObject
         _shortcuts = CommandIds.All
             .Select(id => new ShortcutRow(id, keyMap.ChordsFor(id), KeyMap.Default.ChordsFor(id)))
             .ToArray();
-        _visibleShortcuts = _shortcuts;
+        VisibleShortcuts = new(_shortcuts);
     }
 
-    // View
+    // The limits of the number fields, for the view.
+    public static decimal MinFontSize => (decimal)AppSettings.MinFontSize;
+    public static decimal MaxFontSize => (decimal)AppSettings.MaxFontSize;
+    public static decimal MinRowHeight => (decimal)AppSettings.MinRowHeight;
+    public static decimal MaxRowHeight => (decimal)AppSettings.MaxRowHeight;
+    public static decimal MinColumnWidth => (decimal)AppSettings.MinColumnWidth;
+    public static decimal MaxColumnWidth => (decimal)AppSettings.MaxColumnWidth;
+
+    // View (a number field left empty holds NaN, which Validate refuses)
 
     public static IReadOnlyList<ThemeOption> ThemeOptions { get; } =
     [
@@ -236,14 +255,18 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// <summary>One row per command, in <see cref="CommandIds.All"/> order.</summary>
     public IReadOnlyList<ShortcutRow> Shortcuts => _shortcuts;
 
-    /// <summary>Shows in <see cref="VisibleShortcuts"/> only the rows whose label or chord text contains it, case
-    /// ignored; all rows when blank.</summary>
+    /// <summary>The rows <see cref="ShortcutFilter"/> lets through, in table order. A row edited while the filter
+    /// is on stays (so it stays selected) until the filter text changes, even when it no longer matches.</summary>
+    public ObservableCollection<ShortcutRow> VisibleShortcuts { get; }
+
+    /// <summary>Shows in <see cref="VisibleShortcuts"/> only the rows whose label or chord text (as shown or as
+    /// saved) contains it, case ignored; all rows when blank.</summary>
     public string ShortcutFilter
     {
         get => _shortcutFilter;
         set
         {
-            if (SetProperty(ref _shortcutFilter, value ?? "")) ApplyFilter();
+            if (SetProperty(ref _shortcutFilter, value ?? "")) ApplyFilter(keepShown: false);
         }
     }
 
@@ -255,7 +278,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         ArgumentNullException.ThrowIfNull(row);
         if (KeyChordRules.RefusalOf(chord) is { } refusal)
         {
-            ShortcutMessage = Loc.Format("Settings_ChordRefused_" + refusal, chord.ToString());
+            ShortcutMessage = Loc.Format("Settings_ChordRefused_" + refusal, KeyChordText.Format(chord));
             return ChordAssignment.NotAssignable;
         }
         ShortcutMessage = null;
@@ -266,7 +289,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             owner.Chords = owner.Chords.Where(c => c != chord).ToArray();
         }
         row.Chords = [..row.Chords, chord];
-        ApplyFilter();
+        ApplyFilter(keepShown: true);
         return ChordAssignment.Assigned;
     }
 
@@ -277,7 +300,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         ArgumentNullException.ThrowIfNull(row);
         row.Chords = row.Chords.Where(c => c != chord).ToArray();
-        ApplyFilter();
+        ApplyFilter(keepShown: true);
     }
 
     /// <summary>Gives the command its default chords again, taking them from any command that has them now.</summary>
@@ -287,7 +310,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         foreach (var other in _shortcuts.Where(r => r != row && r.Chords.Any(row.Defaults.Contains)))
             other.Chords = other.Chords.Where(c => !row.Defaults.Contains(c)).ToArray();
         row.Chords = row.Defaults;
-        ApplyFilter();
+        ApplyFilter(keepShown: true);
     }
 
     /// <summary>Every command gets its default chords: <see cref="Apply"/> then saves no overrides.</summary>
@@ -295,7 +318,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         foreach (var row in _shortcuts) row.Chords = row.Defaults;
         ShortcutMessage = null;
-        ApplyFilter();
+        ApplyFilter(keepShown: true);
     }
 
     // Button bar and editing
@@ -321,6 +344,8 @@ public sealed partial class SettingsViewModel : ObservableObject
             return Loc.Format("Settings_Error_FontSize", AppSettings.MinFontSize, AppSettings.MaxFontSize);
         if (!InRange(RowHeight, AppSettings.MinRowHeight, AppSettings.MaxRowHeight))
             return Loc.Format("Settings_Error_RowHeight", AppSettings.MinRowHeight, AppSettings.MaxRowHeight);
+        if (RowHeight < FontSize + AppSettings.RowPadding)
+            return Loc.Format("Settings_Error_RowTooLow", FontSize + AppSettings.RowPadding);
         if (LeftColumns.Concat(RightColumns)
             .Any(c => !InRange(c.Width, AppSettings.MinColumnWidth, AppSettings.MaxColumnWidth)))
             return Loc.Format("Settings_Error_ColumnWidth", AppSettings.MinColumnWidth, AppSettings.MaxColumnWidth);
@@ -339,7 +364,10 @@ public sealed partial class SettingsViewModel : ObservableObject
         }
         Error = null;
         var keyMap = new KeyMap(_shortcuts.SelectMany(r => r.Chords.Select(c => (r.CommandId, c))));
-        _settings.Update(_settings.Current with
+        var current = _settings.Current;
+        // Overrides of commands this build does not know (a typo, a newer build's command) stay as they were.
+        var unknown = current.KeyBindings.Where(b => !CommandIds.All.Contains(b.CommandId));
+        _settings.Update(current with
         {
             Theme = Theme,
             FontSize = FontSize,
@@ -347,7 +375,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             LeftColumns = LeftColumns.Select(c => c.ToSetting()).ToArray(),
             RightColumns = RightColumns.Select(c => c.ToSetting()).ToArray(),
             FileColors = FileColors.Select(r => r.ToRule()).ToArray(),
-            KeyBindings = keyMap.OverridesAgainst(KeyMap.Default),
+            KeyBindings = [..keyMap.OverridesAgainst(KeyMap.Default), ..unknown],
             Buttons = Buttons.Select(b => b.ToButton()).ToArray(),
             ExternalEditor = string.IsNullOrWhiteSpace(ExternalEditor) ? null : ExternalEditor.Trim(),
         });
@@ -357,17 +385,21 @@ public sealed partial class SettingsViewModel : ObservableObject
         return true;
     }
 
+    /// <summary>False for NaN too (an empty field).</summary>
     private static bool InRange(double value, double min, double max) => value >= min && value <= max;
 
-    private void ApplyFilter()
+    /// <param name="keepShown">After an edit: the rows shown now stay, so the edited one does not vanish from
+    /// under the user; rows that match now are added.</param>
+    private void ApplyFilter(bool keepShown)
     {
         var filter = ShortcutFilter.Trim();
-        IReadOnlyList<ShortcutRow> rows = filter.Length == 0
-            ? _shortcuts
-            : _shortcuts.Where(r => r.Label.Contains(filter, StringComparison.CurrentCultureIgnoreCase) ||
-                                    r.ChordsText.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToArray();
-        // The same rows keep the list (and its selection) as it is.
-        if (!rows.SequenceEqual(VisibleShortcuts)) VisibleShortcuts = rows;
+        var shown = keepShown ? VisibleShortcuts.ToHashSet() : [];
+        var rows = _shortcuts.Where(r => filter.Length == 0 || r.Matches(filter) || shown.Contains(r)).ToList();
+        // Changed in place, so the list keeps its selection.
+        for (var k = VisibleShortcuts.Count - 1; k >= 0; k--)
+            if (!rows.Contains(VisibleShortcuts[k])) VisibleShortcuts.RemoveAt(k);
+        for (var k = 0; k < rows.Count; k++)
+            if (k >= VisibleShortcuts.Count || VisibleShortcuts[k] != rows[k]) VisibleShortcuts.Insert(k, rows[k]);
     }
 
     private static T Add<T>(ObservableCollection<T> rows, T row)

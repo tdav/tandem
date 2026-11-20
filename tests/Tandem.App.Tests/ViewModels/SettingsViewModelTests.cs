@@ -48,7 +48,7 @@ public sealed class SettingsViewModelTests : IDisposable
         var view = Row(vm, CommandIds.FileView);
         Assert.Equal([Chord("F3"), Chord("Cmd+3")], view.Chords);
         Assert.False(view.IsChanged);
-        Assert.Equal("F3, Cmd+3", view.ChordsText);
+        Assert.Equal("F3, ⌘3", view.ChordsText);
         Assert.Equal([Chord("Cmd+OemComma")], Row(vm, CommandIds.AppSettings).Chords);
         Assert.Empty(Row(vm, CommandIds.ShellReveal).Chords);
     }
@@ -207,6 +207,8 @@ public sealed class SettingsViewModelTests : IDisposable
         Assert.Equal([CommandIds.FileCopy], vm.VisibleShortcuts.Select(r => r.CommandId));
 
         vm.ShortcutFilter = "Shift+F8";
+        Assert.Equal([CommandIds.FileDeletePermanent], vm.VisibleShortcuts.Select(r => r.CommandId));
+        vm.ShortcutFilter = "⇧F8"; // as shown
         Assert.Equal([CommandIds.FileDeletePermanent], vm.VisibleShortcuts.Select(r => r.CommandId));
 
         // A chord assigned now is found by its text.
@@ -371,6 +373,87 @@ public sealed class SettingsViewModelTests : IDisposable
         Assert.Equal(reason, KeyChordRules.RefusalOf(Chord(chord)));
         var vm = new SettingsViewModel(Service());
         Assert.Equal(ChordAssignment.NotAssignable, vm.Assign(Row(vm, CommandIds.FileCopy), Chord(chord)));
-        Assert.False(string.IsNullOrEmpty(vm.ShortcutMessage));
+        Assert.Contains(KeyChordText.Format(Chord(chord)), vm.ShortcutMessage);
+    }
+
+    [Fact]
+    public void Apply_keeps_overrides_of_unknown_commands()
+    {
+        var service = Service(AppSettings.Default with
+        {
+            KeyBindings =
+            [
+                new KeyBindingOverride("future.command", ["Cmd+J"]),
+                new KeyBindingOverride(CommandIds.FileCopy, ["F9"]),
+            ],
+        });
+        var vm = new SettingsViewModel(service);
+
+        Assert.True(vm.Apply());
+
+        Assert.Equal(
+            [("file.copy", new[] { "F9" }), ("future.command", new[] { "Cmd+J" })],
+            new JsonSettingsStore(_directory).Load().KeyBindings.Select(b => (b.CommandId, b.Chords.ToArray()))
+                .OrderBy(b => b.CommandId, StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void Empty_number_field_blocks_Apply()
+    {
+        var service = Service();
+        var vm = new SettingsViewModel(service);
+
+        vm.FontSize = double.NaN;
+        Assert.NotNull(vm.Validate());
+        Assert.False(vm.Apply());
+        vm.FontSize = 14;
+        vm.RowHeight = double.NaN;
+        Assert.NotNull(vm.Validate());
+        vm.RowHeight = 22;
+        vm.RightColumns[1].Width = double.NaN;
+        Assert.NotNull(vm.Validate());
+        vm.RightColumns[1].Width = 84;
+
+        Assert.Same(AppSettings.Default, service.Current);
+        Assert.True(vm.Apply());
+    }
+
+    [Fact]
+    public void Row_lower_than_the_font_needs_blocks_Apply()
+    {
+        var service = Service();
+        var vm = new SettingsViewModel(service);
+        vm.FontSize = 20;
+        vm.RowHeight = 25;
+
+        var error = vm.Validate();
+
+        Assert.NotNull(error);
+        Assert.Contains("26", error);
+        Assert.False(vm.Apply());
+        vm.RowHeight = 26;
+        Assert.True(vm.Apply());
+        Assert.Equal(26, service.Current.RowHeight);
+    }
+
+    [Fact]
+    public void Edited_row_stays_visible_and_selected_under_a_filter()
+    {
+        var vm = new SettingsViewModel(Service());
+        vm.ShortcutFilter = "F7";
+        var mkdir = Row(vm, CommandIds.FileMkdir);
+        vm.SelectedShortcut = mkdir;
+        var list = vm.VisibleShortcuts;
+
+        vm.RemoveChord(mkdir, Chord("F7"));
+        vm.Assign(mkdir, Chord("Ctrl+Cmd+N"));
+
+        Assert.Same(list, vm.VisibleShortcuts);
+        Assert.Contains(mkdir, vm.VisibleShortcuts);
+        Assert.Same(mkdir, vm.SelectedShortcut);
+
+        // A changed filter shows only what matches.
+        vm.ShortcutFilter = "F7 ";
+        Assert.DoesNotContain(mkdir, vm.VisibleShortcuts);
     }
 }

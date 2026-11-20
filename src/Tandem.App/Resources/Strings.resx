@@ -1087,7 +1087,7 @@ Folder</value>
     <value>Search commands and shortcuts</value>
   </data>
   <data name="Settings_Recorder_Idle" xml:space="preserve">
-    <value>Click here and press a shortcut to add it</value>
+    <value>Click here or press Return to record a shortcut</value>
   </data>
   <data name="Settings_Recorder_Recording" xml:space="preserve">
     <value>Press a shortcut… (Esc to stop)</value>
@@ -1229,5 +1229,14 @@ Folder</value>
   </data>
   <data name="Settings_Error_ColumnWidth" xml:space="preserve">
     <value>Column widths must be from {0} to {1}.</value>
+  </data>
+  <data name="Key_Space" xml:space="preserve">
+    <value>Space</value>
+  </data>
+  <data name="Key_Insert" xml:space="preserve">
+    <value>Insert</value>
+  </data>
+  <data name="Settings_Error_RowTooLow" xml:space="preserve">
+    <value>For this font size the row height must be at least {0}.</value>
   </data>
 </root>

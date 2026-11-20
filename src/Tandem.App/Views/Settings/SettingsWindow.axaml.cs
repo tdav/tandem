@@ -45,7 +45,7 @@ public partial class SettingsWindow : Window
         if (Settings.SelectedShortcut is not { } row || _dialogs is not { } dialogs) return;
         if (Settings.Assign(row, chord) != ChordAssignment.TakenByOther || Settings.OwnerOf(chord) is not { } owner)
             return;
-        if (await dialogs.ConfirmReassignShortcutAsync(chord.ToString(), owner.Label, this))
+        if (await dialogs.ConfirmReassignShortcutAsync(KeyChordText.Format(chord), owner.Label, this))
             Settings.Assign(row, chord, takeFromOther: true);
     }
 

@@ -35,7 +35,7 @@ public sealed record AppSettings(int Version, ThemeChoice Theme, double FontSize
     public const double MinColumnWidth = 30, MaxColumnWidth = 400;
 
     /// <summary>How much taller than the font a row must be.</summary>
-    private const double RowPadding = 6;
+    public const double RowPadding = 6;
 
     /// <summary>The colours a <see cref="FileColorRule"/> may name; the app maps each to a theme resource.</summary>
     public static IReadOnlyList<string> ColorNames { get; } =
