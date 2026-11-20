@@ -107,6 +107,33 @@ public class ViewerWindowTests : LanguageTestBase
     }
 
     [AvaloniaFact]
+    public async Task Closing_the_window_closes_the_file_and_releases_its_temporary_copy()
+    {
+        var provider = new Tandem.App.Tests.ViewModels.StreamProvider();
+        var content = "packed text\n"u8.ToArray();
+        provider.Add("packed.txt", content.Length,
+            () => new Tandem.App.Tests.ViewModels.TestStream(new MemoryStream(content), false));
+        await using var app = await TestApp.StartAsync(FileSystem(), extraProviders: [provider]);
+        await app.Left.NavigateToAsync(new Tandem.Core.Vfs.VfsPath(provider.Id, "/"));
+        app.PanelView(PanelSide.Left).FocusList();
+        var window = await OpenViewerAsync(app, "packed.txt");
+        Assert.Equal(["packed text"], window.Viewer.Lines);
+        var copy = Assert.Single(Directory.EnumerateFileSystemEntries(app.Temp.Directory));
+        var copyFile = Directory.EnumerateFiles(copy).Single();
+
+        Press(window, Key.Escape, PhysicalKey.Escape);
+        await TestApp.WaitUntil(() =>
+        {
+            app.Pump();
+            return !Directory.EnumerateFileSystemEntries(app.Temp.Directory).Any();
+        });
+
+        Assert.Empty(app.Windows.Open);
+        Assert.False(File.Exists(copyFile));
+        Assert.All(provider.Opened, s => Assert.True(((Tandem.App.Tests.ViewModels.TestStream)s).IsDisposed));
+    }
+
+    [AvaloniaFact]
     public async Task Cmd_Y_still_toggles_quick_look()
     {
         await using var app = await TestApp.StartAsync(FileSystem());

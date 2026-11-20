@@ -200,6 +200,75 @@ public sealed class ViewerViewModelTests : LanguageTestBase, IDisposable
         Assert.Equal(ViewerMode.Image, viewer.Mode);
     }
 
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Small_16_bit_numbers_without_a_byte_order_mark_open_as_hex(bool bigEndian)
+    {
+        // Every high byte is zero and the low bytes are not: the detector's UTF-16 pattern, but the units are
+        // control characters.
+        var content = Enumerable.Range(0, 1000)
+            .SelectMany(i => bigEndian ? new byte[] { 0, (byte)(1 + i % 30) } : [(byte)(1 + i % 30), 0]).ToArray();
+        Assert.Equal(bigEndian ? TextEncodings.Utf16BE : TextEncodings.Utf16LE,
+            TextEncodingDetector.Detect(content, sampleIsWholeFile: true).Encoding);
+
+        await using var viewer = await OpenAsync("samples.raw", content);
+
+        Assert.Equal(ViewerMode.Hex, viewer.Mode);
+    }
+
+    [AvaloniaTheory]
+    [InlineData("Привет, мир\tэто\r\n")]
+    [InlineData("Hello, world: a line long enough for one emoji \U0001F600\n")]
+    public async Task Utf16_text_without_a_byte_order_mark_still_opens_as_text(string line)
+    {
+        var content = TextEncodings.Utf16LE.Encoding.GetBytes(string.Concat(Enumerable.Repeat(line, 20)));
+
+        await using var viewer = await OpenAsync("utf16.txt", content);
+
+        Assert.Equal(ViewerMode.Text, viewer.Mode);
+        Assert.Equal(TextEncodings.Utf16LE, viewer.Encoding);
+        Assert.Equal(line.TrimEnd('\n', '\r'), viewer.Lines[0]);
+    }
+
+    [AvaloniaFact]
+    public async Task Lone_surrogate_in_a_utf16_guess_opens_as_hex()
+    {
+        var units = Enumerable.Repeat('я', 40).Concat(['\uDC00']).Concat(Enumerable.Repeat('я', 40)).ToArray();
+        var content = units.SelectMany(c => new[] { (byte)c, (byte)(c >> 8) }).ToArray();
+
+        await using var viewer = await OpenAsync("odd.txt", content);
+
+        Assert.Equal(ViewerMode.Hex, viewer.Mode);
+    }
+
+    [AvaloniaFact]
+    public async Task Picture_file_too_large_to_decode_goes_by_its_bytes()
+    {
+        const long length = ViewerViewModel.MaxImageBytes + 1;
+        var provider = new StreamProvider();
+        var file = provider.Add("huge.png", length,
+            () => new SparseStream(length, p => p % 64 == 63 ? (byte)'\n' : (byte)'a'));
+
+        await using var viewer = await OpenAsync(Registry(provider), file);
+
+        Assert.Equal(ViewerMode.Text, viewer.Mode);
+        Assert.Empty(_images.Calls);
+    }
+
+    [AvaloniaFact]
+    public async Task Picture_decoded_before_a_cancel_is_disposed()
+    {
+        using var cts = new CancellationTokenSource();
+        _images.AfterDecode = cts.Cancel;
+        var (providers, file) = InMemory("pixel.png", Png);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => OpenAsync(providers, file, cts.Token));
+
+        Assert.Single(_images.Calls);
+        Assert.Equal(1, _images.Disposed);
+    }
+
     [AvaloniaFact]
     public async Task Broken_image_falls_back_to_hex()
     {
@@ -227,8 +296,7 @@ public sealed class ViewerViewModelTests : LanguageTestBase, IDisposable
         Assert.Equal("line 056", viewer.Lines[0]);
         var copy = Assert.Single(TempEntries());
         Assert.Equal(["packed.txt"], Directory.EnumerateFiles(copy).Select(Path.GetFileName));
-        Assert.Equal(2, provider.Opened.Count); // looked at, then copied; read from the copy since
-        Assert.True(((TestStream)provider.Opened[0]).IsDisposed);
+        Assert.True(((TestStream)Assert.Single(provider.Opened)).IsDisposed); // opened once, copied, read from the copy
 
         await viewer.DisposeAsync();
 
@@ -247,8 +315,8 @@ public sealed class ViewerViewModelTests : LanguageTestBase, IDisposable
         using var cts = new CancellationTokenSource();
 
         var opening = OpenAsync(Registry(provider), file, cts.Token);
-        await TestApp.WaitUntil(() => provider.Opened.Count == 2);
-        await ((TestStream)provider.Opened[1]).ReadWaiting.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await TestApp.WaitUntil(() => provider.Opened.Count == 1);
+        await ((TestStream)provider.Opened[0]).ReadWaiting.Task.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Single(TempEntries());
         cts.Cancel();
 
@@ -399,6 +467,9 @@ public sealed class ViewerViewModelTests : LanguageTestBase, IDisposable
         public List<(int MaxSize, bool OnUiThread)> Calls { get; } = [];
         public int Disposed;
 
+        /// <summary>Runs after a successful decode, before it returns.</summary>
+        public Action? AfterDecode { get; set; }
+
         public Bitmap Decode(Stream stream, int maxSize)
         {
             lock (Calls) Calls.Add((maxSize, Dispatcher.UIThread.CheckAccess()));
@@ -406,7 +477,9 @@ public sealed class ViewerViewModelTests : LanguageTestBase, IDisposable
             stream.ReadExactly(signature);
             if (!signature.AsSpan().SequenceEqual(Png.AsSpan(0, 8))) throw new InvalidDataException("Not a PNG.");
             stream.Position = 0;
-            return new CountingBitmap(stream, this);
+            var bitmap = new CountingBitmap(stream, this);
+            AfterDecode?.Invoke();
+            return bitmap;
         }
 
         private sealed class CountingBitmap(Stream stream, FakeImageDecoder owner) : Bitmap(stream)

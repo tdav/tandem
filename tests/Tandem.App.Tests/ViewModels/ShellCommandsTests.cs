@@ -4,6 +4,7 @@ using Tandem.App.Commands;
 using Tandem.App.Resources;
 using Tandem.App.Tests.Views;
 using Tandem.App.ViewModels;
+using Tandem.App.ViewModels.Editing;
 using Tandem.App.Views.Editing;
 using Tandem.Core.Platform;
 using Tandem.Core.Vfs;
@@ -182,6 +183,65 @@ public class ShellCommandsTests : LanguageTestBase
         Assert.Equal(VfsPath.Local("/home/README.md"), editor.File);
         Assert.Equal("readme", editor.Document.Text);
         Assert.Empty(app.Shell.Calls);
+    }
+
+    /// <summary>While F4 reads a file, an editor of the same file appears (another F4 that got there first): the
+    /// check after the read and the showing are one step, so that editor is brought forward and no second one
+    /// opens.</summary>
+    [AvaloniaFact]
+    public async Task Editor_of_the_same_file_opened_while_F4_reads_is_reused()
+    {
+        var provider = new StreamProvider();
+        var gate = new TaskCompletionSource();
+        TestStream? gated = null;
+        var file = provider.Add("a.txt", 4, () =>
+        {
+            var stream = new TestStream(new MemoryStream("text"u8.ToArray()), true);
+            if (gated is null) (gated, stream.Gate) = (stream, gate);
+            return stream;
+        });
+        await using var app = await TestApp.StartAsync(show: false, extraProviders: [provider]);
+        await app.Left.NavigateToAsync(new VfsPath(provider.Id, "/"));
+        Cursor(app.Left, "a.txt");
+
+        var f4 = app.Main.Commands.ExecuteAsync(CommandIds.FileEdit);
+        await TestApp.WaitUntil(() => gated is not null);
+        await gated!.ReadWaiting.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var first = await EditorViewModel.OpenAsync(app.Main.Services.Providers, file, CancellationToken.None);
+        app.Windows.ShowEditor(first);
+        gate.SetResult();
+        Assert.True(await f4);
+
+        Assert.Same(first, Assert.IsType<EditorWindow>(Assert.Single(app.Windows.Open)).Editor);
+    }
+
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Viewer_still_opening_when_the_commands_are_disposed_leaves_nothing_open(bool finishesLate)
+    {
+        var provider = new StreamProvider();
+        var gate = new TaskCompletionSource();
+        var content = "some text\n"u8.ToArray();
+        provider.Add("packed.txt", content.Length,
+            () => new TestStream(new MemoryStream(content), false) { Gate = gate, IgnoresCancellation = finishesLate });
+        await using var app = await TestApp.StartAsync(show: false, extraProviders: [provider]);
+        await app.Left.NavigateToAsync(new VfsPath(provider.Id, "/"));
+        Cursor(app.Left, "packed.txt");
+
+        var f3 = app.Main.Commands.ExecuteAsync(CommandIds.FileView);
+        await TestApp.WaitUntil(() => provider.Opened.Count == 1);
+        await ((TestStream)provider.Opened[0]).ReadWaiting.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Single(Directory.EnumerateFileSystemEntries(app.Temp.Directory));
+        app.Main.Shell.Dispose();
+        gate.SetResult();
+        await f3.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Empty(app.Windows.Open);
+        Assert.True(((TestStream)Assert.Single(provider.Opened)).IsDisposed);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(app.Temp.Directory));
+        Assert.Empty(app.Dialogs.Messages);
+        Assert.Empty(app.Failures);
     }
 
     [AvaloniaFact]

@@ -26,8 +26,8 @@ public enum ViewerMode
 /// </summary>
 /// <remarks>
 /// <para>Created (by <see cref="OpenAsync"/>) and used on the UI thread; every read runs off it. The file's stream
-/// stays open until <see cref="DisposeAsync"/>. A source that cannot seek (a packed entry) is first copied to the
-/// <see cref="TempFileStore"/>, and the copy is read and released on dispose.</para>
+/// stays open until <see cref="DisposeAsync"/>. A source that cannot seek (a packed entry) is first copied, from the
+/// stream already opened, to the <see cref="TempFileStore"/>; the copy is read and released on dispose.</para>
 /// <para>Nothing is read beyond what a page needs: positions are byte offsets, rows come from
 /// <see cref="PagedTextReader"/> and <see cref="HexDump"/>, so opening, jumping to the end or to any offset reads a few
 /// hundred kilobytes whatever the file's size. <see cref="Offset"/> is the first row shown; a page never starts past
@@ -37,8 +37,10 @@ public enum ViewerMode
 /// waiting their turn, as while a scroll bar is dragged, only the last is read.</para>
 /// <para>The first mode: <see cref="ViewerMode.Image"/> for a picture by its extension
 /// (<c>png jpg jpeg gif bmp webp ico</c>) of at most <see cref="MaxImageBytes"/> that decodes; otherwise the first
-/// 64 KiB decide (<see cref="TextEncodingDetector"/>): <see cref="ViewerMode.Hex"/> when they look binary, else
-/// <see cref="ViewerMode.Text"/> in the guessed encoding. A picture that does not decode shows as hex.</para>
+/// 64 KiB decide (<see cref="TextEncodingDetector"/>): <see cref="ViewerMode.Hex"/> when they look binary (a UTF-16
+/// guess without a byte order mark is checked again, see <see cref="IsUnlikelyUtf16"/>), else
+/// <see cref="ViewerMode.Text"/> in the guessed encoding. A picture that does not decode shows as hex; a larger
+/// picture file is not decoded and goes by its first 64 KiB.</para>
 /// </remarks>
 public sealed partial class ViewerViewModel : ObservableObject, IAsyncDisposable
 {
@@ -80,7 +82,7 @@ public sealed partial class ViewerViewModel : ObservableObject, IAsyncDisposable
         Image = loaded.Image;
         Modes = loaded.Image is null ? [ViewerMode.Text, ViewerMode.Hex] : [ViewerMode.Text, ViewerMode.Hex, ViewerMode.Image];
         _mode = loaded.Image is not null ? ViewerMode.Image
-            : loaded.Guess.LooksBinary || loaded.IsPictureName ? ViewerMode.Hex
+            : loaded.LooksBinary ? ViewerMode.Hex
             : ViewerMode.Text;
         _encoding = loaded.Guess.Encoding;
         _reader = new PagedTextReader(_stream, _encoding, loaded.Guess.BomLength);
@@ -225,8 +227,12 @@ public sealed partial class ViewerViewModel : ObservableObject, IAsyncDisposable
         _disposed = true;
         _life.Cancel();
         await _tail.ConfigureAwait(OnThisThreadIgnoringFailure);
-        await _stream.DisposeAsync();
-        if (_copy is not null) Release(_temp, _copy);
+        var (stream, temp, copy) = (_stream, _temp, _copy);
+        await Task.Run(async () =>
+        {
+            await stream.DisposeAsync().ConfigureAwait(false);
+            if (copy is not null) Release(temp, copy);
+        });
         Image?.Dispose();
         _life.Dispose();
     }
@@ -341,23 +347,27 @@ public sealed partial class ViewerViewModel : ObservableObject, IAsyncDisposable
     // ---- Opening -----------------------------------------------------------------------------------------
 
     /// <summary>What opening gives the viewer: the seekable stream to read (of the file, or of its temporary
-    /// <paramref name="Copy"/>), the encoding guess and the picture, if any.</summary>
-    private sealed record Loaded(Stream Stream, string? Copy, long Length, EncodingGuess Guess, Bitmap? Image,
-        bool IsPictureName);
+    /// <paramref name="Copy"/>), the encoding guess, whether the file is shown as hex at first, and the picture, if
+    /// any.</summary>
+    private sealed record Loaded(Stream Stream, string? Copy, long Length, EncodingGuess Guess, bool LooksBinary,
+        Bitmap? Image);
 
     private static async Task<Loaded> LoadAsync(IFileSystemProvider provider, TempFileStore temp, VfsPath file,
         IImageDecoder images, CancellationToken ct)
     {
         Stream? stream = null;
         string? copy = null;
+        Bitmap? image = null;
         try
         {
             stream = await provider.OpenReadAsync(file, ct).ConfigureAwait(false);
             if (!stream.CanSeek)
             {
+                // The stream already open is copied, so the source is read once.
+                copy = temp.NewFile(file.Name);
+                await CopyAsync(stream, copy, ct).ConfigureAwait(false);
                 await stream.DisposeAsync().ConfigureAwait(false);
                 stream = null;
-                copy = await temp.MaterializeAsync(provider, file, null, ct).ConfigureAwait(false);
                 stream = new FileStream(copy, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
             }
             var length = stream.Length;
@@ -371,27 +381,86 @@ public sealed partial class ViewerViewModel : ObservableObject, IAsyncDisposable
                 if (n == 0) break;
                 read += n;
             }
-            var guess = TextEncodingDetector.Detect(sample.AsSpan(0, read),
-                sampleIsWholeFile: length <= TextEncodingDetector.SampleSize);
+            var wholeFile = length <= TextEncodingDetector.SampleSize;
+            var guess = TextEncodingDetector.Detect(sample.AsSpan(0, read), wholeFile);
+            var looksBinary = guess.LooksBinary || IsUnlikelyUtf16(guess, sample.AsSpan(0, read), wholeFile);
 
-            var isPictureName = ImageExtensions.Contains(Path.GetExtension(file.Name), StringComparer.OrdinalIgnoreCase);
-            Bitmap? image = null;
-            if (isPictureName && length <= MaxImageBytes)
+            var decodable = ImageExtensions.Contains(Path.GetExtension(file.Name), StringComparer.OrdinalIgnoreCase)
+                            && length <= MaxImageBytes;
+            if (decodable)
             {
                 ct.ThrowIfCancellationRequested();
                 stream.Position = 0;
                 image = TryDecode(images, stream);
+                // A picture by its name that does not decode is shown as bytes.
+                looksBinary |= image is null;
             }
             ct.ThrowIfCancellationRequested();
-            return new Loaded(stream, copy, length, guess, image, isPictureName);
+            return new Loaded(stream, copy, length, guess, looksBinary, image);
         }
         catch
         {
+            image?.Dispose();
             if (stream is not null) await stream.DisposeAsync().ConfigureAwait(false);
             if (copy is not null) Release(temp, copy);
             throw;
         }
     }
+
+    private static async Task CopyAsync(Stream source, string path, CancellationToken ct)
+    {
+        await using var destination = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None,
+            81920, useAsync: true);
+        await source.CopyToAsync(destination, 81920, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Whether a UTF-16 guess made without a byte order mark is unlikely to be text. The detector makes it from the
+    /// share of zero bytes at odd or even positions alone, which arrays of small 16-bit numbers (tables, sound
+    /// samples) share with text, and then does not look for binary data. So the sample is decoded here: a control
+    /// character other than tab, line feed, form feed and carriage return, or a lone surrogate, means binary. A high
+    /// surrogate at the very end of a sample cut from a longer file is not counted.
+    /// </summary>
+    private static bool IsUnlikelyUtf16(EncodingGuess guess, ReadOnlySpan<byte> sample, bool wholeFile)
+    {
+        if (guess.BomLength != 0 || guess.LooksBinary) return false;
+        bool bigEndian;
+        if (guess.Encoding == TextEncodings.Utf16LE) bigEndian = false;
+        else if (guess.Encoding == TextEncodings.Utf16BE) bigEndian = true;
+        else return false;
+
+        var units = sample.Length / 2;
+        for (var i = 0; i < units; i++)
+        {
+            var unit = Unit(sample, i, bigEndian);
+            if (unit < 0x20)
+            {
+                if (unit is not ('\t' or '\n' or '\f' or '\r')) return true;
+            }
+            else if (char.IsHighSurrogate(unit))
+            {
+                if (i + 1 < units)
+                {
+                    if (!char.IsLowSurrogate(Unit(sample, i + 1, bigEndian))) return true;
+                    i++;
+                }
+                else if (wholeFile)
+                {
+                    return true;
+                }
+            }
+            else if (char.IsLowSurrogate(unit))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static char Unit(ReadOnlySpan<byte> bytes, int index, bool bigEndian) =>
+        (char)(bigEndian
+            ? bytes[2 * index] << 8 | bytes[2 * index + 1]
+            : bytes[2 * index + 1] << 8 | bytes[2 * index]);
 
     /// <summary>The picture, or null when the bytes do not decode. A decoder fails with whatever exception its codec
     /// throws for damaged or foreign data, so every failure counts as "not a picture" here.</summary>

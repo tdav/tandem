@@ -62,29 +62,27 @@ public sealed class WindowService(IDialogService dialogs, ProviderRegistry provi
 
     public async Task<bool> TryActivateEditorAsync(VfsPath path)
     {
-        if (EditorOf(path) is not { } window)
+        if (!_open.OfType<EditorWindow>().Any()) return false;
+        VfsPath target;
+        try
         {
-            if (!_open.OfType<EditorWindow>().Any()) return false;
-            VfsPath target;
-            try
-            {
-                target = await EditorViewModel.ResolveTargetAsync(_providers, path, CancellationToken.None);
-            }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-            {
-                return false; // opening it will tell why
-            }
-            if (EditorOf(target) is not { } resolved) return false;
-            window = resolved;
+            target = await EditorViewModel.ResolveTargetAsync(_providers, path, CancellationToken.None);
         }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return false; // opening it will tell why
+        }
+        return TryActivateEditorFor(target);
+    }
+
+    public bool TryActivateEditorFor(VfsPath target)
+    {
+        if (_open.OfType<EditorWindow>().FirstOrDefault(w => w.Editor.Target == target) is not { } window)
+            return false;
         if (window.WindowState == WindowState.Minimized) window.WindowState = WindowState.Normal;
         window.Activate();
         return true;
     }
-
-    /// <summary>The editor window open on <paramref name="path"/>, as opened or as the file it really is.</summary>
-    private EditorWindow? EditorOf(VfsPath path) =>
-        _open.OfType<EditorWindow>().FirstOrDefault(w => w.Editor.File == path || w.Editor.Target == path);
 
     public async Task<bool> CloseAllAsync()
     {

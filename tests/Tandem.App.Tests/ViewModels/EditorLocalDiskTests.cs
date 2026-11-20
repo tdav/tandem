@@ -138,4 +138,33 @@ public sealed class EditorLocalDiskTests : IDisposable
             await windows.CloseAllAsync();
         }
     }
+
+    /// <summary>An editor opened through a link belongs to the link's target: once the link points elsewhere, the
+    /// link finds no editor, and the old target still finds its own.</summary>
+    [AvaloniaFact]
+    public async Task Link_pointed_elsewhere_no_longer_finds_the_old_targets_editor()
+    {
+        var first = Path.Combine(_folder, "first.txt");
+        var second = Path.Combine(_folder, "second.txt");
+        await File.WriteAllTextAsync(first, "1", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(second, "2", TestContext.Current.CancellationToken);
+        var link = Path.Combine(_folder, "link.txt");
+        File.CreateSymbolicLink(link, "first.txt");
+        var providers = new ProviderRegistry();
+        providers.Register(new LocalFileSystemProvider(new UnrestrictedAccessBroker(), new MacExclusiveRename()));
+        var windows = new WindowService(new ScriptedDialogs(), providers);
+        windows.ShowEditor(await EditorViewModel.OpenAsync(providers, VfsPath.Local(link), CancellationToken.None));
+        try
+        {
+            File.Delete(link);
+            File.CreateSymbolicLink(link, "second.txt");
+
+            Assert.False(await windows.TryActivateEditorAsync(VfsPath.Local(link)));
+            Assert.True(await windows.TryActivateEditorAsync(VfsPath.Local(first)));
+        }
+        finally
+        {
+            await windows.CloseAllAsync();
+        }
+    }
 }

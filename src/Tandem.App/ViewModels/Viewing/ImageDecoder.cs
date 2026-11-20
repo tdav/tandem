@@ -29,11 +29,14 @@ public sealed class SkiaImageDecoder : IImageDecoder
         ArgumentOutOfRangeException.ThrowIfLessThan(maxSize, 1);
         var start = stream.Position;
         int width, height;
-        using (var codec = SKCodec.Create(new SKManagedStream(stream, disposeManagedStream: false)))
+        var managed = new SKManagedStream(stream, disposeManagedStream: false);
+        var codec = SKCodec.Create(managed);
+        if (codec is null)
         {
-            if (codec is null) throw new InvalidDataException("The bytes are not a picture this app can show.");
-            (width, height) = (codec.Info.Width, codec.Info.Height);
+            managed.Dispose(); // a codec owns the stream it was made from; without one, nobody does
+            throw new InvalidDataException("The bytes are not a picture this app can show.");
         }
+        using (codec) (width, height) = (codec.Info.Width, codec.Info.Height);
         stream.Position = start;
         if (width <= maxSize && height <= maxSize) return new Bitmap(stream);
         return width >= height

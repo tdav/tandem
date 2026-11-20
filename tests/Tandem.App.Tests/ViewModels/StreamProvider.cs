@@ -81,6 +81,10 @@ internal sealed class TestStream(Stream inner, bool seekable) : Stream
     /// <summary>While set, each read waits for it first.</summary>
     public TaskCompletionSource? Gate { get; set; }
 
+    /// <summary>The gate is waited for without the read's cancellation token, as a source that cannot stop
+    /// would.</summary>
+    public bool IgnoresCancellation { get; init; }
+
     /// <summary>While set, each read throws it.</summary>
     public Exception? Failure { get; set; }
 
@@ -109,6 +113,7 @@ internal sealed class TestStream(Stream inner, bool seekable) : Stream
             ReadWaiting.TrySetResult();
             gate.Task.Wait();
         }
+        if (Failure is { } failure) throw failure;
         return inner.Read(buffer, offset, count);
     }
 
@@ -117,7 +122,7 @@ internal sealed class TestStream(Stream inner, bool seekable) : Stream
         if (Gate is { } gate)
         {
             ReadWaiting.TrySetResult();
-            await gate.Task.WaitAsync(cancellationToken);
+            await (IgnoresCancellation ? gate.Task : gate.Task.WaitAsync(cancellationToken));
         }
         if (Failure is { } failure) throw failure;
         return await inner.ReadAsync(buffer, cancellationToken);

@@ -16,10 +16,16 @@ public interface IWindowService
     /// <summary>Shows <paramref name="viewer"/> in a window of its own; closing the window disposes it.</summary>
     void ShowViewer(ViewerViewModel viewer);
 
-    /// <summary>Brings the editor window of <paramref name="path"/> to the front; false when none is open. The file is
-    /// matched by what it really is, links followed (<see cref="EditorViewModel.ResolveTargetAsync"/>): "/tmp/x" and
-    /// "/private/tmp/x", or a link and its target, are one editor.</summary>
+    /// <summary>Brings the editor window of <paramref name="path"/> to the front; false when none is open. The path
+    /// is first resolved to the file it really is, links followed (<see cref="EditorViewModel.ResolveTargetAsync"/>),
+    /// and editors are matched by that file only: "/tmp/x" and "/private/tmp/x", or a link and its target, are one
+    /// editor, and a link since pointed elsewhere no longer finds the old target's editor.</summary>
     Task<bool> TryActivateEditorAsync(VfsPath path);
+
+    /// <summary>Brings the editor window of the already resolved file <paramref name="target"/>
+    /// (<see cref="EditorViewModel.Target"/>) to the front; false when none is open. Synchronous, so a caller can
+    /// check and then show a new editor with nothing in between.</summary>
+    bool TryActivateEditorFor(VfsPath target);
 
     /// <summary>True while any window of this service is open.</summary>
     bool HasOpenWindows { get; }

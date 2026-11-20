@@ -337,7 +337,8 @@ public sealed class ShellCommands : IDisposable
             if (!_disposed) await TellAsync(Loc.Format("Shell_OpenFailed", entry.Name), e);
             return;
         }
-        if (_disposed || await _windows.TryActivateEditorAsync(editor.Target)) return;
+        // No await between this check and showing: an editor of the same file opened meanwhile is reused.
+        if (_disposed || _windows.TryActivateEditorFor(editor.Target)) return;
         _windows.ShowEditor(editor);
     }
 
