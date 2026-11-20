@@ -89,13 +89,28 @@ public sealed class ArchiveMountsTests : IDisposable
     {
         public List<string?> Passwords { get; } = [];
         public List<ArchiveProvider> Opened { get; } = [];
+
+        /// <summary>Every open waits for it.</summary>
         public TaskCompletionSource? Gate { get; init; }
+
+        /// <summary>Opens with a password wait for it.</summary>
+        public TaskCompletionSource? PasswordGate { get; init; }
+
+        /// <summary>Set when the first open has begun.</summary>
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>Set when the first open with a password has begun.</summary>
+        public TaskCompletionSource EnteredWithPassword { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public async Task<ArchiveProvider> OpenAsync(string id, VfsPath archive, string? password,
             CancellationToken ct)
         {
             lock (Passwords) Passwords.Add(password);
+            Entered.TrySetResult();
+            if (password is not null) EnteredWithPassword.TrySetResult();
             if (Gate is not null) await Gate.Task.WaitAsync(ct);
+            if (password is not null && PasswordGate is not null) await PasswordGate.Task.WaitAsync(ct);
             if (password is null) throw new ArchivePasswordRequiredException(archive, wrongPassword: false);
             if (password != right)
                 throw wrong?.Invoke(archive) ?? new ArchivePasswordRequiredException(archive, wrongPassword: true);
@@ -443,19 +458,37 @@ public sealed class ArchiveMountsTests : IDisposable
     public async Task Mount_that_finishes_after_dispose_is_closed_and_not_registered()
     {
         var archive = AddFixture("sample.zip", "/arc/locked.7z");
-        var opener = new EncryptedListing(this, right: "pw") { Gate = new TaskCompletionSource() };
+        var opener = new EncryptedListing(this, right: "pw") { PasswordGate = new TaskCompletionSource() };
         _prompt.Answer("pw");
         var mounts = MountsOpeningWith(opener.OpenAsync);
 
         var pending = Task.Run(() => mounts.MountAsync(archive, Ct), Ct);
-        await Task.Delay(50, Ct);
+        await opener.EnteredWithPassword.Task.WaitAsync(Timeout, Ct);
         mounts.Dispose();
-        opener.Gate.SetResult();
+        opener.PasswordGate.SetResult();
 
         await Assert.ThrowsAsync<ObjectDisposedException>(() => pending.WaitAsync(Timeout, Ct));
         var opened = Assert.Single(opener.Opened);
         Assert.False(_providers.TryGet(opened.Id, out _));
         await Assert.ThrowsAsync<ObjectDisposedException>(() => opened.GetEntryAsync(new VfsPath(opened.Id, "/"), Ct));
+    }
+
+    [Fact]
+    public async Task Mount_disposed_while_opening_stops_before_asking_for_the_password()
+    {
+        var archive = AddFixture("sample.zip", "/arc/locked.7z");
+        var opener = new EncryptedListing(this, right: "pw") { Gate = new TaskCompletionSource() };
+        var mounts = MountsOpeningWith(opener.OpenAsync);
+
+        var pending = Task.Run(() => mounts.MountAsync(archive, Ct), Ct);
+        await opener.Entered.Task.WaitAsync(Timeout, Ct);
+        mounts.Dispose();
+        opener.Gate.SetResult();
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => pending.WaitAsync(Timeout, Ct));
+        Assert.Empty(_prompt.Questions);
+        Assert.Equal([null], opener.Passwords);
+        Assert.Empty(opener.Opened);
     }
 
     [Fact]

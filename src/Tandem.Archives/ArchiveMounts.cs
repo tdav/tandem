@@ -59,6 +59,9 @@ public sealed class ArchiveMounts : IFileMounter, IDisposable
     /// .docx or .jar is a zip). Folders and links are never archives.</summary>
     /// <exception cref="ArchiveDamagedException">The file looks like an archive but is not a readable one.</exception>
     /// <exception cref="OperationCanceledException">The user declined to give the listing's password.</exception>
+    /// <exception cref="ArchivePasswordRequiredException">By content, <paramref name="file"/> is itself an encrypted
+    /// entry of a mounted archive and the user declined (or failed) to give that archive's password when its content
+    /// was read to recognise it.</exception>
     public async Task<VfsPath?> TryMountAsync(FileEntry file, bool byContent, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(file);
@@ -78,8 +81,8 @@ public sealed class ArchiveMounts : IFileMounter, IDisposable
     /// <exception cref="ArchivePasswordRequiredException">Every answer was wrong.</exception>
     /// <exception cref="OperationCanceledException">The user declined to give the password, or
     /// <paramref name="ct"/> was cancelled.</exception>
-    /// <exception cref="ObjectDisposedException">The mounts have been disposed (the application is exiting).
-    /// </exception>
+    /// <exception cref="ObjectDisposedException">The mounts have been disposed (the application is exiting), also
+    /// while the mount was waiting to ask for the password.</exception>
     public async Task<VfsPath> MountAsync(VfsPath archive, CancellationToken ct)
     {
         if (Mounted(archive) is { } known) return Root(known);
@@ -148,6 +151,7 @@ public sealed class ArchiveMounts : IFileMounter, IDisposable
         var wrong = false;
         for (var attempt = 1; ; attempt++)
         {
+            ThrowIfDisposed(); // the application is exiting: nobody is there to answer
             var password = await _prompt.AskAsync(archive, wrong, ct).ConfigureAwait(false)
                            ?? throw new OperationCanceledException("The archive's password was not given.");
             try
@@ -182,6 +186,11 @@ public sealed class ArchiveMounts : IFileMounter, IDisposable
     }
 
     private static VfsPath Root(ArchiveProvider provider) => new(provider.Id, "/");
+
+    private void ThrowIfDisposed()
+    {
+        lock (_lock) ObjectDisposedException.ThrowIf(_disposed, this);
+    }
 
     private ArchiveProvider? Mounted(VfsPath archive)
     {

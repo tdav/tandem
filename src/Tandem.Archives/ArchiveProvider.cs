@@ -89,9 +89,17 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
         ArgumentNullException.ThrowIfNull(temp);
         if (host.IsRoot) throw new ArgumentException("The archive must be a file.", nameof(host));
         var provider = new ArchiveProvider(id, providers, host, temp, password, prompt);
-        var stamp = await provider.HostStampAsync(ct).ConfigureAwait(false);
-        provider._snapshot = await provider.LoadAsync(stamp, ct).ConfigureAwait(false);
-        return provider;
+        try
+        {
+            var stamp = await provider.HostStampAsync(ct).ConfigureAwait(false);
+            provider._snapshot = await provider.LoadAsync(stamp, ct).ConfigureAwait(false);
+            return provider;
+        }
+        catch
+        {
+            provider.Dispose();
+            throw;
+        }
     }
 
     public string Id { get; }
