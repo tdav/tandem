@@ -230,10 +230,16 @@ public sealed class ArchiveCommands : IDisposable
         return (folder, create, null);
     }
 
+    /// <summary>Where a relative destination text starts: the panel's folder, or, for a panel of entries from
+    /// elsewhere (search results), the folder of the first item, as for copying.</summary>
+    private static VfsPath BaseDirectoryOf(PanelViewModel panel, FileEntry first) =>
+        panel.HasForeignEntries ? first.Path.Parent ?? panel.CurrentPath : panel.CurrentPath;
+
     // ---- Packing -----------------------------------------------------------------------------------------
 
     /// <summary>Alt+F5: the targets into a new archive, proposed in the passive panel's folder and named after the
-    /// single target (without its extension) or the active panel's folder.</summary>
+    /// single target (without its extension) or the active panel's folder (a panel of entries from elsewhere, such as
+    /// search results, has no folder to name it after: a plain default name).</summary>
     private async Task PackAsync()
     {
         if (!CanPack() || Active is not { } active || Passive is not { } passive) return;
@@ -245,12 +251,12 @@ public sealed class ArchiveCommands : IDisposable
             ? (targets[0].Kind == EntryKind.Directory ? single
                 : _mounts.IsArchiveName(single) ? ArchiveFormats.NameWithoutSuffix(single)
                 : Path.GetFileNameWithoutExtension(single))
-            : active.CurrentPath.Name;
+            : active.HasForeignEntries ? null : active.CurrentPath.Name;
         if (string.IsNullOrEmpty(baseName)) baseName = Loc.Get("Archive_DefaultName");
         var formats = ArchiveFormats.Creatable;
         var to = passive.CurrentPath;
         var proposal = to.Combine(baseName + "." + ArchiveFormats.DefaultExtension(formats[0])).Path;
-        var from = active.CurrentPath;
+        var from = BaseDirectoryOf(active, targets[0]);
 
         var answer = await _services.Dialogs.AskPackAsync(new PackRequest(targets.Count, single, proposal, formats,
             async text => (await ArchiveFileOf(text, from, to)).Error));
@@ -279,7 +285,7 @@ public sealed class ArchiveCommands : IDisposable
         var archives = ArchivesAmong(active);
         if (archives.Count == 0) return;
         var to = passive.CurrentPath;
-        var from = active.CurrentPath;
+        var from = BaseDirectoryOf(active, archives[0]);
         if (active.SelectedCount == 0 && !IsArchive(archives[0]) && !await IsArchiveByContentAsync(archives[0])) return;
 
         var answer = await _services.Dialogs.AskUnpackAsync(new UnpackRequest(archives.Count,

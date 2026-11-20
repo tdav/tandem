@@ -266,5 +266,55 @@ public class ArchiveCommandsTests : LanguageTestBase
         Assert.Empty(app.Failures);
     }
 
+    /// <summary>The app with /proj/a/x.txt, /proj/b/y.txt and /proj/b/pack.zip found by a search of /proj, the
+    /// left panel showing the result set and the right one /dst.</summary>
+    private static async Task<TestApp> StartOnResultsAsync()
+    {
+        var fs = ArchiveApp.FileSystem();
+        fs.AddFile("/proj/a/x.txt", "x");
+        fs.AddFile("/proj/b/y.txt", "y");
+        fs.AddFile("/proj/b/pack.zip", Fixture.Bytes("sample.zip"));
+        var app = await ArchiveApp.StartAsync(fs);
+        var set = app.Main.SearchResults.Add(VfsPath.Local("/proj"), "Search in /proj: *",
+            [VfsPath.Local("/proj/a/x.txt"), VfsPath.Local("/proj/b/y.txt"), VfsPath.Local("/proj/b/pack.zip")]);
+        await app.Left.NavigateToAsync(set);
+        app.Pump();
+        return app;
+    }
+
+    [AvaloniaFact]
+    public async Task Pack_from_search_results_proposes_a_plain_name_and_starts_relative_text_at_the_files_folder()
+    {
+        await using var app = await StartOnResultsAsync();
+        Mark(app, "x.txt", "y.txt");
+        app.Dialogs.AnswerPack("out.zip");
+
+        AltF5(app);
+        await ArchiveApp.SettleAsync(app);
+
+        var request = Assert.Single(app.Dialogs.PackRequests);
+        Assert.Equal("/dst/" + Loc("Archive_DefaultName") + ".zip", request.Destination);
+        var entries = ArchiveApp.ZipEntries(app.Fs, "/proj/a/out.zip"); // the first item's folder
+        Assert.Equal(("x", "y"), (entries["x.txt"], entries["y.txt"]));
+        Assert.Empty(app.Dialogs.Messages);
+        Assert.Empty(app.Failures);
+    }
+
+    [AvaloniaFact]
+    public async Task Unpack_from_search_results_starts_relative_text_at_the_archives_folder()
+    {
+        await using var app = await StartOnResultsAsync();
+        ArchiveApp.Cursor(app, app.Left, "pack.zip");
+        app.Dialogs.AnswerUnpack("unpacked");
+
+        AltF9(app);
+        await ArchiveApp.SettleAsync(app);
+
+        Assert.Equal("/dst", Assert.Single(app.Dialogs.UnpackRequests).Destination);
+        Assert.Equal("hello\n", app.Fs.ReadAllText("/proj/b/unpacked/docs/readme.txt"));
+        Assert.Empty(app.Dialogs.Messages);
+        Assert.Empty(app.Failures);
+    }
+
     private static string Loc(string key, params object[] args) => Resources.Loc.Format(key, args);
 }

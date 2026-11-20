@@ -8,12 +8,14 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Tandem.App.Commands;
 using Tandem.App.Services;
+using Tandem.App.Tests.ViewModels;
 using Tandem.App.ViewModels;
 using Tandem.App.Views.Dialogs;
 using Tandem.App.Views.Editing;
 using Tandem.App.Views.Viewing;
 using Tandem.Archives;
 using Tandem.Archives.Tests;
+using Tandem.Core.Platform;
 using Tandem.Core.Settings;
 using Tandem.Core.Vfs;
 using Tandem.Core.Vfs.InMemory;
@@ -39,9 +41,10 @@ internal static class ArchiveApp
     }
 
     public static async Task<TestApp> StartAsync(InMemoryFileSystem? fs = null, bool show = true,
-        AppState? state = null)
+        AppState? state = null, IProcessRunner? processes = null, AppSettings? settings = null)
     {
-        var app = await TestApp.StartAsync(fs ?? FileSystem(), state: state, show: show);
+        var app = await TestApp.StartAsync(fs ?? FileSystem(), state: state, show: show, processes: processes,
+            settings: settings);
         if (state is null) await app.Right.NavigateToAsync(VfsPath.Local("/dst"));
         app.Pump();
         return app;
@@ -290,6 +293,53 @@ public class ArchiveWindowTests : LanguageTestBase
 
         Assert.Equal("Xa", ArchiveApp.ZipEntries(app.Fs, "/home/sample.zip")["a.txt"]);
         Assert.Empty(app.Dialogs.Messages);
+        Assert.Empty(app.Failures);
+    }
+
+    [AvaloniaFact]
+    public async Task F4_inside_zip_opens_the_built_in_editor_even_with_an_external_one_set()
+    {
+        var processes = new FakeProcessRunner();
+        await using var app = await ArchiveApp.StartAsync(processes: processes,
+            settings: AppSettings.Default with { ExternalEditor = "/Applications/Ed.app" });
+        await ArchiveApp.EnterAsync(app, "sample.zip");
+        ArchiveApp.Cursor(app, app.Left, "a.txt");
+
+        Assert.True(await app.Main.Commands.ExecuteAsync(CommandIds.FileEdit));
+
+        var editor = Assert.IsType<EditorWindow>(Assert.Single(app.Windows.Open)).Editor;
+        Assert.True(ArchiveApp.IsArchiveRoot(editor.File.Parent!.Value));
+        Assert.Equal("a.txt", editor.File.Name);
+        Assert.Empty(processes.Started);
+        Assert.Empty(app.Dialogs.Messages);
+        Assert.Empty(app.Failures);
+    }
+
+    [AvaloniaFact]
+    public async Task Buttons_do_not_run_inside_zip_nor_pass_a_zip_as_the_other_folder()
+    {
+        var processes = new FakeProcessRunner();
+        var copy = new UserButton("Copy", "/bin/cp", "%s %t");
+        await using var app = await ArchiveApp.StartAsync(processes: processes,
+            settings: AppSettings.Default with { Buttons = [copy] });
+        await ArchiveApp.EnterAsync(app, "sample.zip");
+
+        // Active panel inside the zip: the buttons are off.
+        Assert.False(app.Main.ButtonBar.CanRun);
+        await app.Main.ButtonBar.RunAsync(copy);
+        Assert.Empty(processes.Started);
+
+        // Passive panel inside the zip: a command using the other folder is refused, nothing starts.
+        await app.Right.NavigateToAsync(VfsPath.Local(TestApp.Home));
+        app.Main.Workspace.SwitchPanel();
+        app.Pump();
+        ArchiveApp.Cursor(app, app.Right, "sample.7z");
+        Assert.True(app.Main.ButtonBar.CanRun);
+
+        await app.Main.ButtonBar.RunAsync(copy);
+
+        Assert.Empty(processes.Started);
+        Assert.Equal([Resources.Loc.Format("UserCommand_OtherPanelNotLocal", "Copy")], app.Dialogs.Messages);
         Assert.Empty(app.Failures);
     }
 
