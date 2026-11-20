@@ -183,7 +183,11 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
     /// <summary>Moves to where <see cref="ProviderRegistry.UpOf"/> leads (the parent, or the folder a hosted
     /// provider lives in) with the cursor on the name it gives. Does nothing where there is no up.</summary>
     public Task GoUpAsync() =>
-        _hasPath && UpOf(CurrentPath) is { } up ? NavigateToAsync(up.Directory, up.FocusName) : Task.CompletedTask;
+        Up is { } up ? NavigateToAsync(up.Directory, up.FocusName) : Task.CompletedTask;
+
+    /// <summary>Where "up" (and the ".." row) leads from the folder shown (<see cref="ProviderRegistry.UpOf"/>); null
+    /// when there is no folder or no up.</summary>
+    public HostLocation? Up => _hasPath ? UpOf(CurrentPath) : null;
 
     /// <summary>Reads the folder again, keeping the cursor and the selection on the same names. If the folder no
     /// longer exists, moves to its nearest existing ancestor.</summary>

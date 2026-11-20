@@ -9,7 +9,7 @@ namespace Tandem.Core.Search;
 /// lists the entries found, read afresh from their own providers, with their own paths
 /// (<see cref="FileEntry.Path"/> is the path in the provider searched, never a "search" path), so operations on them
 /// act on the real files. The root "/" lists the sets. At most <see cref="MaxResultSets"/> sets are kept; adding one
-/// more drops the oldest. Nothing can be written here: every changing call and <see cref="OpenReadAsync"/> throw
+/// more drops the oldest (only its origin is kept, for <see cref="GetHostLocation"/>). Nothing can be written here: every changing call and <see cref="OpenReadAsync"/> throw
 /// <see cref="VfsAccessDeniedException"/>. Thread-safe.
 /// </summary>
 /// <remarks>"Up" from a set leads to the folder searched (<see cref="GetHostLocation"/>), which is also what a saved
@@ -24,6 +24,7 @@ public sealed class SearchResultsProvider(ProviderRegistry providers) : IFileSys
     private readonly DateTimeOffset _created = DateTimeOffset.UtcNow;
     private readonly Lock _lock = new();
     private readonly List<ResultSet> _sets = []; // oldest first
+    private readonly Dictionary<int, VfsPath> _droppedOrigins = []; // number → folder searched, of dropped sets
     private int _lastNumber;
 
     public string Id => ProviderId;
@@ -46,18 +47,28 @@ public sealed class SearchResultsProvider(ProviderRegistry providers) : IFileSys
         {
             var set = new ResultSet(++_lastNumber, origin, title, paths, DateTimeOffset.UtcNow);
             _sets.Add(set);
-            if (_sets.Count > MaxResultSets) _sets.RemoveAt(0);
+            if (_sets.Count > MaxResultSets)
+            {
+                _droppedOrigins[_sets[0].Number] = _sets[0].Origin;
+                _sets.RemoveAt(0);
+            }
             return SetPath(set.Number);
         }
     }
 
     // ---- IHostedProvider ----------------------------------------------------------------------------
 
-    /// <summary>For a result set, the folder searched with nothing particular focused; null otherwise.</summary>
+    /// <summary>For a result set, also one dropped since (so a panel or tab left on it still leads to where the
+    /// search was made), the folder searched with nothing particular focused; null otherwise.</summary>
     public HostLocation? GetHostLocation(VfsPath path)
     {
         CheckOwn(path);
-        return Find(path) is { } set ? new HostLocation(set.Origin, null) : null;
+        if (NumberOf(path) is not { } number) return null;
+        lock (_lock)
+        {
+            if (_sets.Find(s => s.Number == number) is { } set) return new HostLocation(set.Origin, null);
+            return _droppedOrigins.TryGetValue(number, out var origin) ? new HostLocation(origin, null) : null;
+        }
     }
 
     /// <summary>A result set's title; otherwise the path itself.</summary>
@@ -160,12 +171,19 @@ public sealed class SearchResultsProvider(ProviderRegistry providers) : IFileSys
     /// other path or a set that was dropped.</summary>
     private ResultSet? Find(VfsPath path)
     {
+        if (NumberOf(path) is not { } number) return null;
+        lock (_lock) return _sets.Find(s => s.Number == number);
+    }
+
+    /// <summary>n of a path "/n" spelt as <see cref="Add"/> spells it; null for any other path.</summary>
+    private static int? NumberOf(VfsPath path)
+    {
         if (!string.Equals(path.ProviderId, ProviderId, StringComparison.Ordinal) || path.Parent is not { IsRoot: true })
             return null;
         if (!int.TryParse(path.Name, NumberStyles.None, CultureInfo.InvariantCulture, out var number) ||
             SetPath(number).Path != path.Path)
             return null;
-        lock (_lock) return _sets.Find(s => s.Number == number);
+        return number;
     }
 
     /// <summary>The entry at <paramref name="path"/> as its own provider reports it; null when that provider is not

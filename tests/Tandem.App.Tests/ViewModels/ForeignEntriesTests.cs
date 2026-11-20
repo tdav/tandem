@@ -295,7 +295,7 @@ public class ForeignEntriesTests : LanguageTestBase
     }
 
     [AvaloniaFact]
-    public async Task Panel_on_a_dropped_result_set_ends_on_a_valid_location()
+    public async Task Panel_on_a_dropped_result_set_ends_at_the_searched_folder()
     {
         await using var app = await StartAsync();
         for (var i = 0; i < SearchResultsProvider.MaxResultSets; i++)
@@ -304,10 +304,50 @@ public class ForeignEntriesTests : LanguageTestBase
         await app.Left.RefreshAsync();
 
         Assert.Null(app.Left.Error);
-        Assert.NotEqual(new VfsPath(SearchResultsProvider.ProviderId, "/1"), app.Left.CurrentPath);
-        var entry = await app.Main.Services.Providers.For(app.Left.CurrentPath)
-            .GetEntryAsync(app.Left.CurrentPath, TestContext.Current.CancellationToken);
-        Assert.True(entry?.IsDirectoryLike);
+        Assert.Equal(VfsPath.Local("/proj"), app.Left.CurrentPath);
         Assert.Empty(app.Failures);
+    }
+
+    [AvaloniaFact]
+    public async Task Drop_on_the_parent_row_of_results_targets_the_searched_folder()
+    {
+        await using var app = await StartAsync();
+
+        Assert.True(app.Left.Rows[0].IsParentLink);
+        Assert.Equal(new DropTarget(VfsPath.Local("/proj"), 0), DropHandler.TargetAt(app.Left, 0));
+    }
+
+    [AvaloniaFact]
+    public async Task F8_on_targets_where_one_provider_has_no_trash_asks_for_permanent_deletion()
+    {
+        var other = new InMemoryFileSystem("mem2");
+        other.AddFile("/m/other.txt", "other");
+        await using var app = await StartAsync(trashCapable: true, extraProviders: [other],
+            found: [.. Found, new VfsPath("mem2", "/m/other.txt")]);
+        Mark(app.Left, "/proj/a/a.txt");
+        app.Left.Rows[IndexOf(app.Left, new VfsPath("mem2", "/m/other.txt"))].IsSelected = true;
+        app.Dialogs.DeleteAnswers.Enqueue(true);
+
+        Assert.True(await Run(app, CommandIds.FileDelete));
+
+        Assert.Equal((2, (string?)null, true), Assert.Single(app.Dialogs.DeleteRequests));
+        Assert.Empty(app.Trash.Items);
+        Assert.False(app.Fs.Exists("/proj/a/a.txt"));
+        Assert.False(other.Exists("/m/other.txt"));
+        Assert.Empty(app.Failures);
+    }
+
+    [AvaloniaFact]
+    public async Task Quick_look_is_unavailable_on_a_result_that_is_not_local()
+    {
+        var other = new InMemoryFileSystem("mem2");
+        other.AddFile("/m/other.txt", "other");
+        await using var app = await StartAsync(extraProviders: [other],
+            found: [.. Found, new VfsPath("mem2", "/m/other.txt")]);
+
+        app.Left.CursorIndex = IndexOf(app.Left, new VfsPath("mem2", "/m/other.txt"));
+        Assert.False(app.Main.Commands.CanExecute(CommandIds.FileQuickLook));
+        Cursor(app.Left, "/proj/a/a.txt");
+        Assert.True(app.Main.Commands.CanExecute(CommandIds.FileQuickLook));
     }
 }

@@ -179,10 +179,25 @@ public sealed class SearchResultsProviderTests
         var newest = _search.Add(Mem("/src"), "set 21", []);
 
         Assert.Equal(Search("/21"), newest);
-        Assert.Null(_search.GetHostLocation(Search("/1")));
         Assert.Equal("/1", _search.GetDisplayPath(Search("/1")));
         Assert.NotNull(_search.GetHostLocation(Search("/2")));
         Assert.Equal(new HostLocation(Mem("/src"), null), _search.GetHostLocation(newest));
+    }
+
+    [Fact]
+    public async Task Dropped_set_still_leads_up_to_the_folder_searched_but_is_not_found()
+    {
+        _mem.AddDirectory("/src");
+        var first = _search.Add(Mem("/src"), "first", []);
+        for (var i = 0; i < SearchResultsProvider.MaxResultSets; i++) _search.Add(Mem("/"), $"set {i}", []);
+
+        Assert.Equal(new HostLocation(Mem("/src"), null), _search.GetHostLocation(first));
+        Assert.Equal(new HostLocation(Mem("/src"), null), _providers.UpOf(first));
+        Assert.Equal(Mem("/src"), _providers.PersistentLocationOf(first));
+        Assert.Null(await _search.GetEntryAsync(first, Ct));
+        await Assert.ThrowsAsync<VfsNotFoundException>(() => List(first));
+        Assert.Null(_search.GetHostLocation(Search("/99")));
+        Assert.Null(_search.GetHostLocation(Search("/01")));
     }
 
     [Fact]

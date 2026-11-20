@@ -55,8 +55,9 @@ public sealed class DropHandler(WorkspaceViewModel workspace, FileCommands files
 
     /// <summary>
     /// What a drop at row <paramref name="rowIndex"/> of <paramref name="panel"/> targets: a folder row that folder,
-    /// the ".." row the parent folder, a file row or anywhere else (a negative or too large index) the panel's own
-    /// folder. Null when the panel shows no folder, or for ".." at the root.
+    /// the ".." row where it leads (<see cref="PanelViewModel.Up"/>: the parent, or the folder a result set searched),
+    /// a file row or anywhere else (a negative or too large index) the panel's own folder. Null when the panel shows
+    /// no folder, or for ".." at the root.
     /// </summary>
     public static DropTarget? TargetAt(PanelViewModel panel, int rowIndex)
     {
@@ -65,7 +66,7 @@ public sealed class DropHandler(WorkspaceViewModel workspace, FileCommands files
         if (current == default) return null;
         if (rowIndex < 0 || rowIndex >= panel.Rows.Count) return new DropTarget(current, null);
         var row = panel.Rows[rowIndex];
-        if (row.IsParentLink) return current.Parent is { } parent ? new DropTarget(parent, rowIndex) : null;
+        if (row.IsParentLink) return panel.Up is { } up ? new DropTarget(up.Directory, rowIndex) : null;
         return row is { IsDirectoryLike: true, Entry: { } entry }
             ? new DropTarget(entry.Path, rowIndex)
             : new DropTarget(current, null);
