@@ -173,31 +173,48 @@ public class PagedTextReaderTests
 
         var page = await reader.ReadPageAsync(0, 10, Ct);
 
+        // Rows break every GridStep (4088) bytes from the line start, and after every line break.
+        Assert.Equal(4088, PagedTextReader.GridStep);
         Assert.Equal(
-            [(0L, 4096, false), (4096L, 4096, false), (8192L, 1809, true), (10001L, 6, true)],
+            [(0L, 4088, false), (4088L, 4088, false), (8176L, 1825, true), (10001L, 6, true)],
             page.Lines.Select(l => (l.Offset, l.ByteLength, l.EndsLine)));
-        Assert.Equal(new string('x', 1808), page.Lines[2].Text);
-        Assert.Equal(4096, await reader.LineStartAsync(5000, Ct));
-        Assert.Equal(8192, await reader.LineStartAsync(10000, Ct));
+        Assert.Equal(new string('x', 1824), page.Lines[2].Text);
+        Assert.Equal(4088, await reader.LineStartAsync(5000, Ct));
+        Assert.Equal(8176, await reader.LineStartAsync(10000, Ct));
     }
 
-    [Fact]
-    public async Task Cut_never_separates_cr_from_its_lf()
+    [Theory]
+    [InlineData("\r\n")]
+    [InlineData("\n")]
+    public async Task Grid_point_on_a_line_break_makes_no_empty_row(string lineBreak)
     {
-        var text = new string('x', 4095) + "\r\nnext";
+        // The grid point 4088 falls on the line break ('\n', or the '\n' of "\r\n"); the line still ends there.
+        var text = new string('x', 4088 + 1 - lineBreak.Length) + lineBreak + "next";
         var lines = (await Reader(text).ReadPageAsync(0, 10, Ct)).Lines;
 
-        Assert.Equal([new string('x', 4095), "", "next"], lines.Select(l => l.Text));
-        Assert.Equal([false, true, false], lines.Select(l => l.EndsLine));
+        Assert.Equal([new string('x', 4089 - lineBreak.Length), "next"], lines.Select(l => l.Text));
+        Assert.Equal([true, false], lines.Select(l => l.EndsLine));
+        Assert.Equal(0, await Reader(text).StepBackAsync(text.Length - 1, 1, Ct));
     }
 
     [Fact]
-    public async Task Single_byte_code_page_cuts_at_exactly_MaxLineBytes()
+    public async Task Short_lines_are_never_split_by_the_grid()
+    {
+        // 16-byte lines straddle the grid points 4088, 8176, ...: each line is still one row.
+        var text = string.Concat(Enumerable.Range(0, 2000).Select(i => $"line {i:D10}\n"));
+        var lines = AllLines(await AllPages(Reader(text), 9));
+
+        Assert.Equal(2000, lines.Count);
+        Assert.All(lines, l => Assert.True(l.EndsLine));
+    }
+
+    [Fact]
+    public async Task Single_byte_code_page_cuts_at_exactly_GridStep()
     {
         var text = new string('я', 5000) + "\nабв";
         var lines = AllLines(await AllPages(Reader(text, TextEncodings.Windows1251), 1));
 
-        Assert.Equal([4096, 905, 3], lines.Select(l => l.ByteLength));
+        Assert.Equal([4088, 913, 3], lines.Select(l => l.ByteLength));
         Assert.Equal(text, Join(lines));
     }
 
@@ -205,12 +222,12 @@ public class PagedTextReaderTests
     public async Task StepBack_walks_lines_and_stops_at_the_start()
     {
         var reader = Reader("one\ntwo\nthree\n" + new string('я', 3000) + "\nlast");
-        // Pieces: 0 "one", 4 "two", 8 "three", 14 'я'×2048, 4110 'я'×952, 6015 "last"
+        // Rows: 0 "one", 4 "two", 8 "three", 14 'я'×2044, 4102 'я'×956, 6015 "last"
 
         Assert.Equal(6015, await reader.StepBackAsync(6017, 0, Ct));
-        Assert.Equal(4110, await reader.StepBackAsync(6017, 1, Ct));
+        Assert.Equal(4102, await reader.StepBackAsync(6017, 1, Ct));
         Assert.Equal(14, await reader.StepBackAsync(6017, 2, Ct));
-        Assert.Equal(8, await reader.StepBackAsync(4111, 2, Ct)); // from inside a two-byte 'я'
+        Assert.Equal(8, await reader.StepBackAsync(4103, 2, Ct)); // from inside a two-byte 'я'
         Assert.Equal(0, await reader.StepBackAsync(6017, 5, Ct));
         Assert.Equal(0, await reader.StepBackAsync(6017, 100, Ct));
         Assert.Equal(6015, await reader.StepBackAsync(reader.Length, 1, Ct));
@@ -234,41 +251,129 @@ public class PagedTextReaderTests
         }
     }
 
+    /// <summary>
+    /// Lines of about 10 B, 5 KiB, 70 KiB and 300 KiB of mixed ASCII, Cyrillic, '€' and emoji (in windows-1251 the
+    /// emoji is replaced by 'Ж'), ending alternately in "\n" and "\r\n".
+    /// </summary>
+    private static string MixedText(TextEncodingInfo encoding)
+    {
+        string[] alphabet = encoding.Encoding.IsSingleByte ? ["a", "я", "€", "Ж", " "] : ["a", "я", "€", Emoji, " "];
+        var sb = new StringBuilder();
+        var n = 0;
+        var lineNo = 0;
+        foreach (var target in new[] { 10, 5 * 1024, 70 * 1024, 300 * 1024, 10, 70 * 1024, 7 })
+        {
+            for (var lineBytes = 0; lineBytes < target;)
+            {
+                var piece = alphabet[n++ * 7 % 11 % alphabet.Length];
+                sb.Append(piece);
+                lineBytes += encoding.Encoding.GetByteCount(piece);
+            }
+            sb.Append(lineNo++ % 2 == 0 ? "\n" : "\r\n");
+        }
+        return sb.ToString();
+    }
+
     [Theory]
     [InlineData("utf-8")]
     [InlineData("utf-16le")]
     [InlineData("utf-16be")]
-    public async Task Line_longer_than_the_back_scan_pages_forward_and_back_consistently(string id)
+    [InlineData("windows-1251")]
+    public async Task Row_boundaries_do_not_depend_on_where_reading_started(string id)
     {
-        // About 300 KiB in one line of mixed 1-, 2-, 3- and 4-byte characters: far beyond BackScanLimit.
         var encoding = TextEncodings.Find(id)!;
-        var text = "start\n" + string.Concat(Enumerable.Range(0, 120000).Select(i => (i % 4) switch
-        {
-            0 => "a",
-            1 => "я",
-            2 => "€",
-            _ => Emoji,
-        }));
+        var text = MixedText(encoding);
         var bytes = encoding.Encoding.GetBytes(text);
-        var reader = Reader(text, encoding);
+        var stream = new SparseStream(bytes);
+        var reader = new PagedTextReader(stream, encoding, 0);
+        long len = bytes.Length;
 
-        var pages = await AllPages(reader, 5);
-        var lines = AllLines(pages);
-        Assert.All(lines, l => Assert.DoesNotContain('\uFFFD', l.Text));
-        Assert.All(lines, l => Assert.InRange(l.ByteLength, 1, PagedTextReader.MaxLineBytes));
-        Assert.Equal(text, Join(lines));
+        // Forward, one row at a time, from 0 to the end.
+        var rows = new List<TextLine>();
+        for (long p = 0; ;)
+        {
+            var page = await reader.ReadPageAsync(p, 1, Ct);
+            AssertBounded(stream, 1, "ReadPage");
+            if (page.Lines.Count == 0) break;
+            Assert.Equal(p, page.StartOffset);
+            rows.Add(page.Lines[0]);
+            p = page.EndOffset;
+        }
+        var starts = rows.Select(r => r.Offset).ToList();
+        Assert.Equal(len, rows[^1].Offset + rows[^1].ByteLength);
+        Assert.All(rows, r => Assert.InRange(r.ByteLength, 1, PagedTextReader.MaxLineBytes));
+        if (!encoding.Encoding.IsSingleByte)
+            Assert.All(rows, r => Assert.DoesNotContain('\uFFFD', r.Text));
+        Assert.Equal(text.Replace("\r\n", "\n"), Join(rows));
 
-        // Stepping back from deep inside the line moves by whole pieces and lands on whole characters.
-        var deep = pages[^3].StartOffset;
-        Assert.True(deep > PagedTextReader.BackScanLimit * 2);
-        var back = await reader.StepBackAsync(deep, 10, Ct);
-        Assert.InRange(deep - back, 10 * (PagedTextReader.MaxLineBytes - 3), 10 * PagedTextReader.MaxLineBytes);
-        var again = await reader.ReadPageAsync(back, 10, Ct);
-        Assert.Equal(back, again.StartOffset);
-        Assert.InRange(again.EndOffset, deep, deep + 10 * 3);
-        Assert.Equal(
-            encoding.Encoding.GetString(bytes, (int)back, (int)(again.EndOffset - back)),
-            string.Concat(again.Lines.Select(l => l.Text)));
+        // Pages of 7 rows forward give the same rows.
+        Assert.Equal(rows, AllLines(await AllPages(reader, 7)));
+        stream.ResetCounters();
+
+        // Backward, one row at a time and 7 rows at a time, from the end to 0.
+        var back = new List<long>();
+        for (var p = len; p > 0;)
+        {
+            p = await reader.StepBackAsync(p, 1, Ct);
+            AssertBounded(stream, 1, "StepBack");
+            back.Add(p);
+        }
+        back.Reverse();
+        Assert.Equal(starts, back);
+        var index = starts.Count;
+        for (var p = len; p > 0;)
+        {
+            p = await reader.StepBackAsync(p, 7, Ct);
+            AssertBounded(stream, 7, "StepBack");
+            index = Math.Max(0, index - 7);
+            Assert.Equal(starts[index], p);
+        }
+
+        // Sampled offsets: around 64 KiB into each long line (the old transition), deep inside, and spread out.
+        var lineStarts = rows.Where((r, i) => i == 0 || rows[i - 1].EndsLine).Select(r => r.Offset).ToList();
+        var samples = new SortedSet<long>();
+        foreach (var l in lineStarts)
+            foreach (var around in new[] { 0L, 64 * 1024, 64 * 1024 + 2048, 200 * 1024 })
+                for (var d = -40; d <= 40; d++)
+                    samples.Add(Math.Clamp(l + around + d, 0, len));
+        for (long o = 0; o <= len; o += 1009)
+            samples.Add(o);
+        samples.Add(len);
+
+        foreach (var cur in samples)
+        {
+            var at = starts.FindLastIndex(s => s <= cur);
+            var atOffset = cur >= len ? len : starts[at];
+            var atIndex = cur >= len ? starts.Count : at;
+
+            Assert.Equal(atOffset, await reader.LineStartAsync(cur, Ct));
+            AssertBounded(stream, 0, "LineStart");
+
+            // (1) One row up, then that row: it ends exactly where the row at cur starts.
+            var up = await reader.StepBackAsync(cur, 1, Ct);
+            AssertBounded(stream, 1, "StepBack");
+            Assert.Equal(starts[Math.Max(0, atIndex - 1)], up);
+            var upRow = await reader.ReadPageAsync(up, 1, Ct);
+            AssertBounded(stream, 1, "ReadPage");
+            Assert.Equal(up, upRow.StartOffset);
+            if (atIndex > 0)
+                Assert.Equal(atOffset, upRow.EndOffset);
+
+            // (2) PageUp then PageDown returns to the same top row, and PageDown then PageUp too.
+            var pageUp = await reader.StepBackAsync(cur, 10, Ct);
+            AssertBounded(stream, 10, "StepBack");
+            var upIndex = Math.Max(0, atIndex - 10);
+            Assert.Equal(starts[upIndex], pageUp);
+            if (atIndex > 0)
+                Assert.Equal(atOffset, (await reader.ReadPageAsync(pageUp, atIndex - upIndex, Ct)).EndOffset);
+            AssertBounded(stream, 10, "ReadPage");
+
+            var down = await reader.ReadPageAsync(cur, 10, Ct);
+            AssertBounded(stream, 10, "ReadPage");
+            Assert.Equal(atOffset, down.StartOffset);
+            Assert.Equal(atOffset, await reader.StepBackAsync(down.EndOffset, down.Lines.Count, Ct));
+            stream.ResetCounters();
+        }
     }
 
     [Fact]
@@ -341,8 +446,8 @@ public class PagedTextReaderTests
         Assert.True(stream.BytesRead < OneMiB, $"page read {stream.BytesRead} bytes");
         Assert.Equal(50, page.Lines.Count);
         Assert.All(page.Lines, l => Assert.False(l.EndsLine));
-        Assert.All(page.Lines, l => Assert.Equal(PagedTextReader.MaxLineBytes, l.ByteLength));
-        Assert.InRange(page.StartOffset, half - PagedTextReader.MaxLineBytes + 1, half);
+        Assert.All(page.Lines, l => Assert.Equal(PagedTextReader.GridStep, l.ByteLength));
+        Assert.Equal(half / PagedTextReader.GridStep * PagedTextReader.GridStep, page.StartOffset);
 
         stream.ResetCounters();
         var next = await reader.ReadPageAsync(page.EndOffset, 50, Ct);
@@ -351,7 +456,7 @@ public class PagedTextReaderTests
 
         stream.ResetCounters();
         var back = await reader.StepBackAsync(page.StartOffset, 50, Ct);
-        Assert.Equal(page.StartOffset - 50 * PagedTextReader.MaxLineBytes, back);
+        Assert.Equal(page.StartOffset - 50 * PagedTextReader.GridStep, back);
         Assert.True(stream.BytesRead < OneMiB, $"step back read {stream.BytesRead} bytes");
 
         stream.ResetCounters();
@@ -362,23 +467,37 @@ public class PagedTextReaderTests
         Assert.False(Assert.Single(last.Lines).EndsLine);
     }
 
+    private const int Lookahead = 8;
+
+    /// <summary>The documented bound for StepBack, the loosest of the three: BackScanLimit + (lineCount + 1) × MaxLineBytes + 8.</summary>
+    private static long Bound(int lineCount) =>
+        PagedTextReader.BackScanLimit + (lineCount + 1L) * PagedTextReader.MaxLineBytes + Lookahead;
+
+    private static void AssertBounded(SparseStream stream, int lineCount, string call)
+    {
+        Assert.True(stream.BytesRead <= Bound(lineCount), $"{call} read {stream.BytesRead} bytes");
+        Assert.True(stream.MaxRequestedCount <= Bound(lineCount), $"{call} asked for {stream.MaxRequestedCount} bytes at once");
+        stream.ResetCounters();
+    }
+
     [Fact]
     public async Task Reads_are_bounded_by_the_documented_limit()
     {
         var stream = new SparseStream(EightGiB, pos => (byte)('a' + pos % 26));
         var reader = new PagedTextReader(stream, TextEncodings.Utf8, 0);
 
-        const int lookahead = 8;
         await reader.ReadPageAsync(EightGiB / 3, 10, Ct);
-        Assert.InRange(stream.BytesRead, 1, PagedTextReader.BackScanLimit + 10 * PagedTextReader.MaxLineBytes + lookahead);
+        Assert.InRange(stream.BytesRead, 10 * PagedTextReader.GridStep,
+            PagedTextReader.BackScanLimit + 10 * PagedTextReader.MaxLineBytes + Lookahead);
+        AssertBounded(stream, 10, "ReadPage");
 
-        stream.ResetCounters();
         await reader.LineStartAsync(EightGiB / 3, Ct);
-        Assert.InRange(stream.BytesRead, 1, PagedTextReader.BackScanLimit + lookahead);
+        Assert.InRange(stream.BytesRead, 1, PagedTextReader.BackScanLimit + Lookahead);
+        AssertBounded(stream, 0, "LineStart");
 
-        stream.ResetCounters();
         await reader.StepBackAsync(EightGiB / 3, 10, Ct);
-        Assert.InRange(stream.BytesRead, 1, PagedTextReader.BackScanLimit + 11 * PagedTextReader.MaxLineBytes + lookahead);
+        Assert.True(stream.BytesRead > 0);
+        AssertBounded(stream, 10, "StepBack");
     }
 
     [Fact]
@@ -399,7 +518,7 @@ public class PagedTextReaderTests
         var page = await reader.ReadPageAsync(length / 2, 5, Ct);
 
         Assert.Equal(5, page.Lines.Count);
-        Assert.All(page.Lines, l => Assert.Equal(new string('\0', PagedTextReader.MaxLineBytes), l.Text));
+        Assert.All(page.Lines, l => Assert.Equal(new string('\0', PagedTextReader.GridStep), l.Text));
         var last = await reader.ReadPageAsync(await reader.StepBackAsync(length, 1, Ct), 5, Ct);
         Assert.True(Assert.Single(last.Lines).EndsLine);
     }
@@ -442,12 +561,22 @@ public class PagedTextReaderTests
     {
         var text = string.Concat(Enumerable.Range(0, 5000).Select(i => $"row {i}\n"));
         var reader = Reader(text);
-        var expected = await reader.ReadPageAsync(30000, 20, Ct);
+        long[] offsets = [30000, 100, 17, 40000];
+        var expected = new List<TextPage>();
+        foreach (var offset in offsets)
+            expected.Add(await reader.ReadPageAsync(offset, 20, Ct));
+        var expectedBack = await reader.StepBackAsync(30000, 20, Ct);
 
-        var results = await Task.WhenAll(Enumerable.Range(0, 32).Select(i => Task.Run(() =>
-            i % 2 == 0 ? reader.ReadPageAsync(30000, 20, Ct) : reader.ReadPageAsync(100, 20, Ct), Ct)));
+        var pages = Task.WhenAll(Enumerable.Range(0, 32).Select(i => Task.Run(() => reader.ReadPageAsync(offsets[i % 4], 20, Ct), Ct)));
+        var backs = Task.WhenAll(Enumerable.Range(0, 16).Select(_ => Task.Run(() => reader.StepBackAsync(30000, 20, Ct), Ct)));
+        var results = await pages;
 
-        foreach (var page in results.Where((_, i) => i % 2 == 0))
-            Assert.Equal(expected.Lines, page.Lines);
+        for (var i = 0; i < results.Length; i++)
+        {
+            Assert.Equal(expected[i % 4].StartOffset, results[i].StartOffset);
+            Assert.Equal(expected[i % 4].EndOffset, results[i].EndOffset);
+            Assert.Equal(expected[i % 4].Lines, results[i].Lines);
+        }
+        Assert.All(await backs, b => Assert.Equal(expectedBack, b));
     }
 }

@@ -5,9 +5,13 @@ namespace Tandem.Core.Tests.Viewing;
 /// so a test can read "an 8 GiB file" without one on disk. Counts every byte handed out
 /// (<see cref="BytesRead"/>) and the largest single request (<see cref="MaxRequestedCount"/>).
 /// </summary>
-public sealed class SparseStream(long length, Func<long, byte> content) : Stream
+public sealed class SparseStream(long length, Func<long, byte>? content) : Stream
 {
+    private readonly byte[]? _bytes;
     private long _position;
+
+    /// <summary>A counting stream over real bytes, copied a span at a time (fast for many reads).</summary>
+    public SparseStream(byte[] bytes) : this(bytes.Length, null) => _bytes = bytes;
 
     public long BytesRead { get; private set; }
     public int MaxRequestedCount { get; private set; }
@@ -35,8 +39,11 @@ public sealed class SparseStream(long length, Func<long, byte> content) : Stream
     {
         MaxRequestedCount = Math.Max(MaxRequestedCount, buffer.Length);
         var n = (int)Math.Clamp(length - _position, 0, buffer.Length);
-        for (var i = 0; i < n; i++)
-            buffer[i] = content(_position + i);
+        if (_bytes is not null)
+            _bytes.AsSpan((int)_position, n).CopyTo(buffer);
+        else
+            for (var i = 0; i < n; i++)
+                buffer[i] = content!(_position + i);
         _position += n;
         BytesRead += n;
         return n;
