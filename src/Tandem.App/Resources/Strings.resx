@@ -1029,4 +1029,18 @@ Folder</value>
   <data name="QuickView_OpenFailed" xml:space="preserve">
     <value>Could not open “{0}”: {1}</value>
   </data>
+
+  <!-- Archives: packing and unpacking (Tandem.Core.Operations.OperationKind, RejectionReason) -->
+  <data name="OperationKind_Pack" xml:space="preserve">
+    <value>Packing</value>
+  </data>
+  <data name="OperationKind_Unpack" xml:space="preserve">
+    <value>Unpacking</value>
+  </data>
+  <data name="RejectionReason_DestinationExists" xml:space="preserve">
+    <value>The archive file already exists</value>
+  </data>
+  <data name="RejectionReason_FormatNotWritable" xml:space="preserve">
+    <value>Archives of this format cannot be created</value>
+  </data>
 </root>

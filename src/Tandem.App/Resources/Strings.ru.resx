@@ -1020,4 +1020,18 @@
   <data name="QuickView_OpenFailed" xml:space="preserve">
     <value>Не удалось открыть «{0}»: {1}</value>
   </data>
+
+  <!-- Archives: packing and unpacking (Tandem.Core.Operations.OperationKind, RejectionReason) -->
+  <data name="OperationKind_Pack" xml:space="preserve">
+    <value>Упаковка</value>
+  </data>
+  <data name="OperationKind_Unpack" xml:space="preserve">
+    <value>Распаковка</value>
+  </data>
+  <data name="RejectionReason_DestinationExists" xml:space="preserve">
+    <value>Файл архива уже существует</value>
+  </data>
+  <data name="RejectionReason_FormatNotWritable" xml:space="preserve">
+    <value>Этот формат нельзя создать</value>
+  </data>
 </root>

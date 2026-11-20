@@ -442,7 +442,7 @@ public sealed partial class ArchiveProvider
 
     /// <summary>Closes the host's stream of a write that failed, so that nothing of it is applied (a zip host outside
     /// a batch would otherwise take the half-written part) and the failure stays the one reported: it never throws.
-    /// Internal for tests.</summary>
+    /// Internal for <see cref="PackOperation"/> and tests.</summary>
     internal static async Task AbortAsync(Stream output)
     {
         if (output is EditStream edit)
@@ -522,7 +522,7 @@ public sealed partial class ArchiveProvider
 
     /// <summary>The time for the zip writer: local, as zip stores the wall clock; not before what zip can hold.
     /// </summary>
-    private static DateTime ZipTime(DateTimeOffset time)
+    internal static DateTime ZipTime(DateTimeOffset time)
     {
         var local = time.LocalDateTime;
         return local < EarliestZipTime ? EarliestZipTime : local;

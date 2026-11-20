@@ -20,6 +20,14 @@ public enum RejectionReason
     /// <summary>Moving to the trash was asked for, but there is no trash for <see cref="OperationRejectedException.SourcePath"/>
     /// (it is not on the local disk, or no trash service is available).</summary>
     TrashNotSupported,
+
+    /// <summary>The file to be created (<see cref="OperationRejectedException.DestinationPath"/>) already
+    /// exists.</summary>
+    DestinationExists,
+
+    /// <summary>Files of the asked format cannot be written (<see cref="OperationRejectedException.DestinationPath"/>
+    /// is the file that was to be created).</summary>
+    FormatNotWritable,
 }
 
 /// <summary>The operation was refused before it touched anything (e.g. copying a folder into itself).
@@ -34,7 +42,7 @@ public sealed class OperationRejectedException(RejectionReason reason, string me
     public VfsPath? SourcePath { get; } = source;
 
     /// <summary>The destination involved: the destination directory, or the final path for
-    /// <see cref="RejectionReason.SourceEqualsDestination"/>.</summary>
+    /// <see cref="RejectionReason.SourceEqualsDestination"/>, or the archive file a pack was to create.</summary>
     public VfsPath? DestinationPath { get; } = destination;
 
     /// <summary>The name involved, for <see cref="RejectionReason.InvalidName"/> and

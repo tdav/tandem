@@ -14,10 +14,12 @@ public sealed record CopyOptions(bool VerifyContent = false, string? NewName = n
 /// Scans first (<see cref="OperationState.Scanning"/>) to know the totals, then copies item by item.
 /// An existing destination file and per-item I/O errors are put to <paramref name="interaction"/>; an existing
 /// destination directory is merged into without asking.
+/// <para>Unpacking is this copy with <paramref name="kind"/> <see cref="OperationKind.Unpack"/>; any kind other than
+/// that and <see cref="OperationKind.Copy"/> is refused with <see cref="ArgumentException"/>.</para>
 /// </summary>
 public sealed class CopyOperation(ProviderRegistry providers, IReadOnlyList<VfsPath> sources,
     VfsPath destinationDirectory, CopyOptions options, IOperationInteraction interaction,
-    INativeCopy? nativeCopy = null) : FileOperation
+    INativeCopy? nativeCopy = null, OperationKind kind = OperationKind.Copy) : FileOperation
 {
     private readonly ProviderRegistry _providers = providers ?? throw new ArgumentNullException(nameof(providers));
     private readonly IReadOnlyList<VfsPath> _sources =
@@ -27,8 +29,14 @@ public sealed class CopyOperation(ProviderRegistry providers, IReadOnlyList<VfsP
     private readonly INativeCopy? _nativeCopy = nativeCopy;
     private readonly IOperationInteraction _interaction =
         interaction ?? throw new ArgumentNullException(nameof(interaction));
+    private readonly OperationKind _kind = kind is OperationKind.Copy or OperationKind.Unpack
+        ? kind
+        : throw new ArgumentException($"A copy is named {OperationKind.Copy} or {OperationKind.Unpack}, not {kind}.",
+            nameof(kind));
 
-    public override OperationKind Kind => OperationKind.Copy;
+    /// <summary><see cref="OperationKind.Copy"/>, or <see cref="OperationKind.Unpack"/> for a copy out of an archive:
+    /// the same work under the name the interface shows.</summary>
+    public override OperationKind Kind => _kind;
 
     public override int ItemCount => _sources.Count;
 
