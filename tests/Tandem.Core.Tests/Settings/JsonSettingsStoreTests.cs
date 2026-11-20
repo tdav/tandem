@@ -211,6 +211,63 @@ public sealed class JsonSettingsStoreTests : IDisposable
     }
 
     [Fact]
+    public void Numbers_left_out_of_the_file_get_their_defaults()
+    {
+        var json = SampleJson();
+        json.Remove("FontSize");
+        json.Remove("RowHeight");
+        json["LeftColumns"]!.AsArray()[0]!.AsObject().Remove("Width");   // Size
+        json["RightColumns"]!.AsArray()[2]!.AsObject().Remove("Width");  // Modified
+        WriteRaw(json.ToJsonString());
+
+        var loaded = Store().Load();
+
+        Assert.Equal(AppSettings.DefaultFontSize, loaded.FontSize);
+        Assert.Equal(AppSettings.DefaultRowHeight, loaded.RowHeight);
+        Assert.Equal(new ColumnSetting(ColumnId.Size, true, 84), loaded.LeftColumns[0]);
+        Assert.Equal(new ColumnSetting(ColumnId.Modified, true, 124), loaded.RightColumns[2]);
+        Assert.False(File.Exists(BadFile));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-3)]
+    [InlineData(double.NaN)]
+    public void Zero_negative_or_NaN_numbers_get_their_defaults(double value)
+    {
+        var settings = AppSettings.Default with
+        {
+            FontSize = value,
+            RowHeight = value,
+            LeftColumns = [new ColumnSetting(ColumnId.Extension, false, value)],
+        };
+
+        var loaded = settings.Normalized();
+
+        Assert.Equal(AppSettings.DefaultFontSize, loaded.FontSize);
+        Assert.Equal(AppSettings.DefaultRowHeight, loaded.RowHeight);
+        Assert.Equal(new ColumnSetting(ColumnId.Extension, false, 56), loaded.LeftColumns[0]);
+    }
+
+    [Fact]
+    public void Key_override_without_chords_is_dropped_but_an_empty_list_unbinds()
+    {
+        var json = SampleJson();
+        json["KeyBindings"] = new JsonArray(
+            new JsonObject { ["CommandId"] = "file.copy" },
+            new JsonObject { ["CommandId"] = "file.move", ["Chords"] = null },
+            new JsonObject { ["CommandId"] = "view.quickView", ["Chords"] = new JsonArray() });
+        WriteRaw(json.ToJsonString());
+
+        var loaded = Store().Load();
+
+        var only = Assert.Single(loaded.KeyBindings);
+        Assert.Equal("view.quickView", only.CommandId);
+        Assert.Empty(only.Chords);
+        Assert.False(File.Exists(BadFile));
+    }
+
+    [Fact]
     public void Missing_and_duplicate_columns_are_repaired()
     {
         var json = SampleJson();
@@ -280,8 +337,9 @@ public sealed class JsonSettingsStoreTests : IDisposable
 
         Assert.Empty(loaded.FileColors);
         Assert.Empty(loaded.Buttons);
+        // The file.copy entry without chords is dropped, so the later one with F5 is the first that counts.
         Assert.Equal(["file.copy", "file.move"], loaded.KeyBindings.Select(b => b.CommandId));
-        Assert.Empty(loaded.KeyBindings[0].Chords);
+        Assert.Equal(["F5"], loaded.KeyBindings[0].Chords);
         Assert.Equal(["F6"], loaded.KeyBindings[1].Chords);
         Assert.Null(loaded.ExternalEditor);
         Assert.False(File.Exists(BadFile));

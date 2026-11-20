@@ -57,10 +57,10 @@ public sealed record AppSettings(int Version, ThemeChoice Theme, double FontSize
 
     /// <summary>
     /// These settings made usable, as read from a file someone may have edited: numbers clamped to their limits
-    /// (a row at least <c>FontSize + 6</c> high), missing lists empty, each column list holding every column once
+    /// (a row at least <c>FontSize + 6</c> high; a missing, zero or negative number gets its default), missing lists empty, each column list holding every column once
     /// (repeats dropped, missing ones added from <see cref="DefaultColumns"/>, widths clamped), colour rules without a
-    /// mask or with an unknown colour, buttons without a title or program and key overrides without a command
-    /// dropped, and a blank <see cref="ExternalEditor"/> null.
+    /// mask or with an unknown colour, buttons without a title or program and key overrides without a command or
+    /// without a chord list dropped, and a blank <see cref="ExternalEditor"/> null.
     /// </summary>
     public AppSettings Normalized()
     {
@@ -84,8 +84,10 @@ public sealed record AppSettings(int Version, ThemeChoice Theme, double FontSize
         };
     }
 
+    /// <summary><paramref name="value"/> kept within its limits; NaN, zero or less (a number left out of the file
+    /// reads as 0) gives <paramref name="fallback"/>, the usual value, not the smallest one.</summary>
     private static double Clamp(double value, double min, double max, double fallback) =>
-        double.IsNaN(value) ? fallback : Math.Clamp(value, min, max);
+        double.IsNaN(value) || value <= 0 ? fallback : Math.Clamp(value, min, max);
 
     private static ColumnSetting[] NormalizedColumns(IReadOnlyList<ColumnSetting>? columns)
     {
@@ -99,15 +101,17 @@ public sealed record AppSettings(int Version, ThemeChoice Theme, double FontSize
         return result.ToArray();
     }
 
-    /// <summary>One override per command, the first one written; chords that are blank are dropped.</summary>
+    /// <summary>One override per command, the first one written; chords that are blank are dropped. An override
+    /// without a chord list (left out or null) is dropped, so the command keeps its default chords; an empty list
+    /// still leaves the command without chords.</summary>
     private static KeyBindingOverride[] NormalizedKeyBindings(IReadOnlyList<KeyBindingOverride>? overrides)
     {
         var result = new List<KeyBindingOverride>();
         foreach (var binding in overrides ?? [])
         {
-            if (binding is null || string.IsNullOrWhiteSpace(binding.CommandId) ||
+            if (binding?.Chords is null || string.IsNullOrWhiteSpace(binding.CommandId) ||
                 result.Any(b => b.CommandId == binding.CommandId)) continue;
-            var chords = (binding.Chords ?? []).Where(c => !string.IsNullOrWhiteSpace(c)).ToArray();
+            var chords = binding.Chords.Where(c => !string.IsNullOrWhiteSpace(c)).ToArray();
             result.Add(binding with { Chords = chords });
         }
         return result.ToArray();
