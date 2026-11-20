@@ -11,7 +11,7 @@ namespace Tandem.App.ViewModels;
 // The ".." row is never marked and never counted. Selection totals are kept as running sums: every change of a mark
 // goes through Account, whether it comes from the panel's own commands or from a row's IsSelected (the view's
 // binding). Bulk commands change the marks silently and raise the totals' notifications once. A new listing
-// recomputes the totals once; a refresh carries the marks over by name, a navigation starts with none.
+// recomputes the totals once; a refresh carries the marks over by path, a navigation starts with none.
 public sealed partial class PanelViewModel
 {
     private int _selectedCount;
@@ -32,6 +32,10 @@ public sealed partial class PanelViewModel
 
     /// <summary>The size of all files listed; folders count as 0.</summary>
     public long TotalBytes => _totalBytes;
+
+    /// <summary>Some rows are entries of another folder than the one shown (<see cref="EntryRowViewModel.IsForeign"/>),
+    /// e.g. search results.</summary>
+    public bool HasForeignEntries { get; private set; }
 
     /// <summary>"Selected {count} of {total}, {size}" in the current language.</summary>
     public string StatusText =>
@@ -173,10 +177,12 @@ public sealed partial class PanelViewModel
         var handler = _onRowSelectionChanged ??= OnRowSelectionChanged;
         int total = 0, selected = 0;
         long totalBytes = 0, selectedBytes = 0;
+        var foreign = false;
         foreach (var row in rows)
         {
             row.SelectionChanged = handler;
             if (row.IsParentLink) continue;
+            foreign |= row.IsForeign;
             var bytes = row.SelectableBytes;
             total++;
             totalBytes += bytes;
@@ -188,6 +194,7 @@ public sealed partial class PanelViewModel
         _totalBytes = totalBytes;
         _selectedCount = selected;
         _selectedBytes = selectedBytes;
+        HasForeignEntries = foreign;
     }
 
     /// <summary>An inline rename is open while the rows are replaced (a refresh): it moves to the new row of the same

@@ -20,6 +20,8 @@ public sealed partial class EntryRowViewModel : ObservableObject
     private string? _dateText;
     private string? _modeText;
     private string? _foldedName;
+    private string? _locationText;
+    private readonly Func<VfsPath, string>? _displayPathOf;
     private bool _isSelected;
     private InlineRenameViewModel? _rename;
 
@@ -27,6 +29,14 @@ public sealed partial class EntryRowViewModel : ObservableObject
     {
         ArgumentNullException.ThrowIfNull(entry);
         Entry = entry;
+    }
+
+    /// <summary>A row for an entry that lies outside the folder shown; <paramref name="displayPathOf"/> gives its
+    /// folder as the user reads it, when <see cref="LocationText"/> is first read (on the UI thread).</summary>
+    public EntryRowViewModel(FileEntry entry, Func<VfsPath, string> displayPathOf) : this(entry)
+    {
+        ArgumentNullException.ThrowIfNull(displayPathOf);
+        _displayPathOf = displayPathOf;
     }
 
     private EntryRowViewModel()
@@ -54,6 +64,15 @@ public sealed partial class EntryRowViewModel : ObservableObject
     public string Name => _name ??= Entry!.Name;
 
     public string Extension => _extension ??= Entry!.Extension;
+
+    /// <summary>"" for an entry of the folder shown; for one that lies elsewhere (<see cref="IsForeign"/>, e.g. a
+    /// search result), its folder as the user reads it.</summary>
+    public string LocationText => _locationText ??= _displayPathOf is { } displayPathOf
+        ? displayPathOf(Entry!.Path.Parent ?? Entry.Path)
+        : "";
+
+    /// <summary>The entry does not lie in the folder the panel shows: its path's parent is another folder.</summary>
+    public bool IsForeign => _displayPathOf is not null;
 
     /// <summary>The size for files; the word "Folder" for folders and links to folders; empty for "..".</summary>
     public string SizeText => _sizeText ??= IsDirectoryLike ? Loc.Get("Panel_Folder") : SizeFormatter.Format(Entry!.Size);

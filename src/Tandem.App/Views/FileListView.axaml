@@ -24,6 +24,11 @@
             <Setter Property="BorderBrush" Value="{DynamicResource Tandem.CursorBorder}" />
             <Setter Property="BorderThickness" Value="1" />
         </Style>
+        <!-- Where an entry of another folder (a search result) lies, after its name. Before the marked style, which
+             colours it too. -->
+        <Style Selector="TextBlock.location">
+            <Setter Property="Foreground" Value="{DynamicResource Tandem.SecondaryForeground}" />
+        </Style>
         <!-- Marked rows: coloured text. -->
         <Style Selector="Grid.marked TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource Tandem.MarkedForeground}" />
@@ -78,8 +83,14 @@
                         <ColumnDefinition Width="{x:Static v:FileListColumns.Mode}" />
                     </Grid.ColumnDefinitions>
                     <Panel>
-                        <TextBlock Classes="name" Text="{Binding Name}" TextTrimming="CharacterEllipsis"
-                                   IsVisible="{Binding !IsRenaming}" />
+                        <!-- Docked left, the name is measured first: it keeps its room, the folder takes what is left. -->
+                        <DockPanel IsVisible="{Binding !IsRenaming}">
+                            <TextBlock DockPanel.Dock="Left" Classes="name" Text="{Binding Name}"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock x:Name="LocationText" Classes="location" Text="{Binding LocationText}"
+                                       IsVisible="{Binding IsForeign}" TextTrimming="CharacterEllipsis"
+                                       Margin="8,0,0,0" />
+                        </DockPanel>
                         <!-- The inline rename editor, created only while the row is being renamed. -->
                         <ContentControl Content="{Binding Rename}" IsVisible="{Binding IsRenaming}">
                             <ContentControl.ContentTemplate>

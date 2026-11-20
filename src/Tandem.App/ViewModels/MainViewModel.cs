@@ -9,6 +9,7 @@ using Tandem.App.Services;
 using Tandem.App.ViewModels.Viewing;
 using Tandem.Core.Listing;
 using Tandem.Core.Platform;
+using Tandem.Core.Search;
 using Tandem.Core.Vfs;
 
 namespace Tandem.App.ViewModels;
@@ -52,6 +53,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Workspace = workspace;
         Services = services;
         KeyMap = keyMap;
+        SearchResults = services.Providers.TryGet(SearchResultsProvider.ProviderId, out var search) &&
+                        search is SearchResultsProvider results
+            ? results
+            : throw new InvalidOperationException("The search results provider is not registered.");
         QuickView = new QuickViewViewModel(workspace, services.Providers, services.Temp, quickLookDelay,
             ReportFailure);
         RunCommand = new RunCommand(Commands, ExecuteCommandAsync);
@@ -91,6 +96,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public WorkspaceViewModel Workspace { get; }
 
     public AppServices Services { get; }
+
+    /// <summary>The search result sets, each a folder a panel can show (registered by
+    /// <see cref="Composition.Build"/>).</summary>
+    public SearchResultsProvider SearchResults { get; }
 
     public CommandRegistry Commands { get; } = new();
 

@@ -73,16 +73,17 @@ public sealed class DropHandler(WorkspaceViewModel workspace, FileCommands files
 
     /// <summary>
     /// The items (on the local disk) a drag that starts on row <paramref name="rowIndex"/> carries: every marked item
-    /// when that row is marked, otherwise just that row; nothing for "..", for no row, or for a panel not on the local
-    /// disk. The marks are not changed.
+    /// when that row is marked, otherwise just that row; nothing for "..", for no row, or when any of the items is not
+    /// on the local disk (the items' own provider counts, not the panel's folder's). The marks are not changed.
     /// </summary>
     public static IReadOnlyList<FileEntry> DragItems(PanelViewModel panel, int rowIndex)
     {
         ArgumentNullException.ThrowIfNull(panel);
-        if (!ShellCommands.IsLocal(panel) || rowIndex < 0 || rowIndex >= panel.Rows.Count) return [];
+        if (panel.CurrentPath == default || rowIndex < 0 || rowIndex >= panel.Rows.Count) return [];
         var row = panel.Rows[rowIndex];
         if (row is not { IsParentLink: false, Entry: { } entry }) return [];
-        return row.IsSelected ? panel.GetOperationTargets() : [entry];
+        var items = row.IsSelected ? panel.GetOperationTargets() : [entry];
+        return items.All(e => e.Path.ProviderId == VfsPath.LocalProviderId) ? items : [];
     }
 
     private bool PanelTakesDrops(PanelSide side) =>
