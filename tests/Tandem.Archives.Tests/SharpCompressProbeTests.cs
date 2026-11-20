@@ -244,19 +244,31 @@ public class SharpCompressProbeTests
             archive.Entries.Select(e => e.Key));
     }
 
-    /// <summary>Every reader returns local times (<see cref="DateTimeKind.Local"/>) that are the right instant.
-    /// </summary>
+    /// <summary>The fixtures were made at 2024-01-02 03:04:05 UTC. Tar and 7z store that instant, and readers return
+    /// it as a <see cref="DateTimeKind.Local"/> time.</summary>
     [Theory]
-    [InlineData("sample.zip", 6)] // zip times have a two-second step: 05 is stored as 06
-    [InlineData("sample.tar", 5)]
-    [InlineData("sample.7z", 5)]
-    public void Modified_times_are_local(string fixture, int second)
+    [InlineData("sample.tar")]
+    [InlineData("sample.7z")]
+    public void Tar_and_7z_times_are_instants(string fixture)
     {
         using var archive = OpenArchive(fixture);
         var modified = archive.Entries.First(e => e.Key == "a.txt").LastModifiedTime;
 
         Assert.Equal(DateTimeKind.Local, modified?.Kind);
-        Assert.Equal(new DateTime(2024, 1, 2, 3, 4, second, DateTimeKind.Local), modified);
+        Assert.Equal(new DateTime(2024, 1, 2, 3, 4, 5, DateTimeKind.Utc), modified!.Value.ToUniversalTime());
+    }
+
+    /// <summary>Zip stores wall-clock fields with no zone (the fixture was written in UTC, two-second step: 05 is
+    /// 06). The reader hands them back unchanged, labelled <see cref="DateTimeKind.Local"/>, whatever the zone.
+    /// </summary>
+    [Fact]
+    public void Zip_times_are_zone_less_wall_clock()
+    {
+        using var archive = OpenArchive("sample.zip");
+        var modified = archive.Entries.First(e => e.Key == "a.txt").LastModifiedTime;
+
+        Assert.Equal(DateTimeKind.Local, modified?.Kind);
+        Assert.Equal(new DateTime(2024, 1, 2, 3, 4, 6), DateTime.SpecifyKind(modified!.Value, DateTimeKind.Unspecified));
     }
 
     // ---- Zip names --------------------------------------------------------------------------------------------
@@ -267,7 +279,9 @@ public class SharpCompressProbeTests
     public void Zip_names_without_the_utf8_flag_decode_as_utf8_by_default()
     {
         var bytes = Fixture.Bytes("sample.zip");
-        Assert.Equal(0, BitConverter.ToUInt16(bytes, 6) & 0x800);
+        var header = bytes.AsSpan().IndexOf(Encoding.UTF8.GetBytes("привет.txt")) - 30; // its local file header
+        Assert.True("PK\u0003\u0004"u8.SequenceEqual(bytes.AsSpan(header, 4)));
+        Assert.Equal(0, BitConverter.ToUInt16(bytes, header + 6) & 0x800);
         using (var mac = OpenArchive("sample.zip")) Assert.Contains("привет.txt", mac.Entries.Select(e => e.Key));
         using (var dos = OpenArchive("cp866.zip")) Assert.NotEqual("привет.txt", dos.Entries.Single().Key);
     }
@@ -339,7 +353,7 @@ public class SharpCompressProbeTests
 
     // ---- Writing ----------------------------------------------------------------------------------------------
 
-    private static WriterOptions WriterOptionsFor(ArchiveFormat format) => format switch
+    internal static WriterOptions WriterOptionsFor(ArchiveFormat format) => format switch
     {
         ArchiveFormat.Zip => new ZipWriterOptions(CompressionType.Deflate) { LeaveStreamOpen = true },
         ArchiveFormat.Tar => new TarWriterOptions(CompressionType.None, true, TarHeaderWriteFormat.GNU_TAR_LONG_LINK)
@@ -349,7 +363,7 @@ public class SharpCompressProbeTests
         _ => throw new ArgumentOutOfRangeException(nameof(format)),
     };
 
-    private static ArchiveType TypeOf(ArchiveFormat format) =>
+    internal static ArchiveType TypeOf(ArchiveFormat format) =>
         format == ArchiveFormat.Zip ? ArchiveType.Zip : ArchiveType.Tar;
 
     [Theory]
@@ -400,10 +414,9 @@ public class SharpCompressProbeTests
         Assert.Equal(DataBin, files["docs/sub/data.bin"]);
     }
 
-    /// <summary>Directories are written with <see cref="IWriter.WriteDirectory"/>. Times must carry a kind: given
-    /// <see cref="DateTimeKind.Utc"/> or <see cref="DateTimeKind.Local"/>, both writers store the right instant, but
-    /// an <see cref="DateTimeKind.Unspecified"/> time is taken as UTC by the zip writer and as local by the tar
-    /// writer.</summary>
+    /// <summary>Directories are written with <see cref="IWriter.WriteDirectory"/>. Given a
+    /// <see cref="DateTimeKind.Utc"/> or <see cref="DateTimeKind.Local"/> time, both writers store the right instant
+    /// (an unspecified one is not: <see cref="SharpCompressZoneProbeTests"/>).</summary>
     [Theory]
     [InlineData(ArchiveFormat.Zip)]
     [InlineData(ArchiveFormat.Tar)]
@@ -412,13 +425,11 @@ public class SharpCompressProbeTests
     {
         var utc = new DateTime(2024, 1, 2, 3, 4, 6, DateTimeKind.Utc);
         var local = new DateTime(2023, 5, 6, 7, 8, 10, DateTimeKind.Local);
-        var unspecified = new DateTime(2022, 3, 4, 5, 6, 8, DateTimeKind.Unspecified);
         var output = new MemoryStream();
         using (var writer = WriterFactory.Open(output, TypeOf(format), WriterOptionsFor(format)))
         {
             writer.WriteDirectory("empty", utc);
             writer.Write("local.txt", new MemoryStream("l"u8.ToArray()), local);
-            writer.Write("unspecified.txt", new MemoryStream("u"u8.ToArray()), unspecified);
         }
 
         output.Position = 0;
@@ -429,10 +440,6 @@ public class SharpCompressProbeTests
 
         Assert.Equal((true, utc.ToLocalTime()), entries["empty/"]);
         Assert.Equal(local, entries["local.txt"].Modified);
-        var unspecifiedAs = format == ArchiveFormat.Zip
-            ? DateTime.SpecifyKind(unspecified, DateTimeKind.Utc).ToLocalTime()
-            : DateTime.SpecifyKind(unspecified, DateTimeKind.Local);
-        Assert.Equal(unspecifiedAs, entries["unspecified.txt"].Modified);
     }
 
     // ---- Encryption and damage --------------------------------------------------------------------------------
@@ -539,4 +546,56 @@ public class SharpCompressProbeTests
         public override void SetLength(long value) => throw new NotSupportedException();
         public override void Write(byte[] buffer, int offset, int count) => inner.Write(buffer, offset, count);
     }
+}
+
+[CollectionDefinition(nameof(LocalZoneCollection), DisableParallelization = true)]
+public sealed class LocalZoneCollection;
+
+/// <summary>Probes whose answer depends on the local time zone. Each runs with the zone switched to a fixed UTC+5
+/// with no daylight saving (Asia/Tashkent), alone, since the zone is process-wide.</summary>
+[Collection(nameof(LocalZoneCollection))]
+public class SharpCompressZoneProbeTests
+{
+    private static void InZone(string zone, TimeSpan offset, Action action)
+    {
+        var saved = Environment.GetEnvironmentVariable("TZ");
+        Environment.SetEnvironmentVariable("TZ", zone);
+        TimeZoneInfo.ClearCachedData();
+        try
+        {
+            Assert.Equal(offset, TimeZoneInfo.Local.GetUtcOffset(new DateTime(2022, 3, 4)));
+            action();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("TZ", saved);
+            TimeZoneInfo.ClearCachedData();
+        }
+    }
+
+    /// <summary>An <see cref="DateTimeKind.Unspecified"/> time is taken as UTC by the zip writer and as local by the
+    /// tar writer, so Tandem must always pass a time with a kind.</summary>
+    [Theory]
+    [InlineData(ArchiveFormat.Zip)]
+    [InlineData(ArchiveFormat.Tar)]
+    [InlineData(ArchiveFormat.TarGz)]
+    public void Writers_disagree_about_an_unspecified_time(ArchiveFormat format) =>
+        InZone("Asia/Tashkent", TimeSpan.FromHours(5), () =>
+        {
+            var unspecified = new DateTime(2022, 3, 4, 5, 6, 8, DateTimeKind.Unspecified);
+            var output = new MemoryStream();
+            using (var writer = WriterFactory.Open(output, SharpCompressProbeTests.TypeOf(format),
+                       SharpCompressProbeTests.WriterOptionsFor(format)))
+                writer.Write("unspecified.txt", new MemoryStream("u"u8.ToArray()), unspecified);
+
+            output.Position = 0;
+            using var reader = ReaderFactory.Open(output, new ReaderOptions());
+            Assert.True(reader.MoveToNextEntry());
+            var stored = reader.Entry.LastModifiedTime!.Value.ToUniversalTime();
+
+            var expected = format == ArchiveFormat.Zip
+                ? new DateTime(2022, 3, 4, 5, 6, 8, DateTimeKind.Utc) // taken as UTC
+                : new DateTime(2022, 3, 4, 0, 6, 8, DateTimeKind.Utc); // taken as UTC+5 local
+            Assert.Equal(expected, stored);
+        });
 }

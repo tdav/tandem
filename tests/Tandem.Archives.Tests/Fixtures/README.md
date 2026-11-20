@@ -4,7 +4,12 @@ Made on macOS by `make-fixtures.sh` (with `make-crafted.py`) from the stock `/us
 `/usr/bin/bsdtar` (libarchive) and `/usr/bin/python3`. They are committed; run the script only to rebuild them.
 Nothing here was downloaded.
 
-The common tree, every entry dated 2024-01-02 03:04:05 local time:
+The script runs with `TZ=UTC`, so the output does not depend on the machine's zone. Running it again gives the same
+bytes (`gzip:!timestamp`; the 7z files are made from `sample.tar`, so no access or change times get in), except for
+`encrypted.zip`: ZipCrypto's 12-byte encryption header is random by design.
+
+The common tree, every entry dated 2024-01-02 03:04:05 UTC. Zip stores zone-less wall-clock fields (03:04:06 after
+its two-second rounding); tar and 7z store the instant.
 
 | Entry | Content |
 |---|---|

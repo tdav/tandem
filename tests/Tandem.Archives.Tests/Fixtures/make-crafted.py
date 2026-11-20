@@ -6,16 +6,16 @@ slip.zip   - entries whose names climb out of the destination or are absolute: .
              a/../../b.txt and dir\\win.txt (a backslash, not a separator, inside the name).
 trap.tar   - a symbolic link "link" -> /tmp, then a regular file "link/file.txt" under it.
 """
+import calendar
 import io
 import os
 import sys
 import tarfile
-import time
 import zipfile
 
 out, tree = sys.argv[1], sys.argv[2]
-stamp = (2024, 1, 2, 3, 4, 4)  # zip times have a two-second step
-mtime = time.mktime(stamp + (0, 0, -1))
+stamp = (2024, 1, 2, 3, 4, 4)  # UTC; zip times have a two-second step
+mtime = calendar.timegm(stamp + (0, 0, 0))
 
 
 def zip_info(name):

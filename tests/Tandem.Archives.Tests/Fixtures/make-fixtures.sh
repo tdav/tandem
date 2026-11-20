@@ -9,8 +9,9 @@ here=$(cd "$(dirname "$0")" && pwd)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 export COPYFILE_DISABLE=1 # no AppleDouble "._" files in tar archives
+export TZ=UTC # zip stores wall-clock time: in UTC it reads the same as the instant tar and 7z store
 
-# The common tree, every entry dated 2024-01-02 03:04:05 local time.
+# The common tree, every entry dated 2024-01-02 03:04:05 UTC.
 tree="$work/tree"
 mkdir -p "$tree/docs/sub" "$tree/empty"
 printf 'a' > "$tree/a.txt"
@@ -31,14 +32,14 @@ rm -f a.txt sample.zip sample.tar sample.tar.gz sample.tar.bz2 sample.tar.xz sam
 tar_options='--format ustar --no-mac-metadata --no-xattrs --no-acls --no-fflags --uid 0 --gid 0 --uname root --gname wheel'
 # shellcheck disable=SC2086
 (cd "$tree" && /usr/bin/bsdtar -cf "$here/sample.tar" $tar_options -n $entries &&
-               /usr/bin/bsdtar -czf "$here/sample.tar.gz" $tar_options -n $entries &&
+               /usr/bin/bsdtar -czf "$here/sample.tar.gz" $tar_options --options gzip:!timestamp -n $entries &&
                /usr/bin/bsdtar -cjf "$here/sample.tar.bz2" $tar_options -n $entries &&
                /usr/bin/bsdtar -cJf "$here/sample.tar.xz" $tar_options -n $entries)
 
-# 7z: stored entries give a non-solid archive; compressed ones are written as one solid block.
-# shellcheck disable=SC2086
-(cd "$tree" && /usr/bin/bsdtar -cf "$here/sample.7z" --format 7zip --options 7zip:compression=store -n $entries &&
-               /usr/bin/bsdtar -cf "$here/solid.7z" --format 7zip -n $entries)
+# 7z: stored entries give a non-solid archive; compressed ones are written as one solid block. They are made from
+# sample.tar, whose entries carry only the modified time, so the files' access and change times stay out.
+/usr/bin/bsdtar -cf sample.7z --format 7zip --options 7zip:compression=store @sample.tar
+/usr/bin/bsdtar -cf solid.7z --format 7zip @sample.tar
 
 /usr/bin/python3 -I "$here/make-crafted.py" "$here" "$tree"
 
