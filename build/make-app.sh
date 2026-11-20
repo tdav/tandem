@@ -23,7 +23,9 @@ step() { printf '\n==> %s\n' "$1"; }
 step "Cleaning $PUBLISH_DIR and $APP"
 rm -rf "$PUBLISH_DIR" "$APP"
 
-# Stage 1: no trimming and no single-file (the UI relies on reflection; correctness over size). No debug symbols.
+# No trimming and no single-file (the UI relies on reflection; correctness over size). ReadyToRun precompiles the
+# app to native code for fast start-up while keeping the JIT as a fallback; full NativeAOT is not used because
+# Avalonia and the view models rely on reflection. No debug symbols.
 step "Publishing src/Tandem.App (Release, osx-arm64, self-contained)"
 dotnet publish "$PROJECT" \
     -c Release \
@@ -31,6 +33,8 @@ dotnet publish "$PROJECT" \
     --self-contained true \
     -p:PublishTrimmed=false \
     -p:PublishSingleFile=false \
+    -p:PublishReadyToRun=true \
+    -p:TieredPGO=true \
     -p:DebugType=none \
     -p:DebugSymbols=false \
     -o "$PUBLISH_DIR"
@@ -38,6 +42,7 @@ dotnet publish "$PROJECT" \
 step "Assembling $APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$ROOT/build/Info.plist" "$APP/Contents/Info.plist"
+cp "$ROOT/build/Tandem.icns" "$APP/Contents/Resources/Tandem.icns"
 # ditto keeps permissions and symlinks; the trailing slashes copy the folder's contents.
 ditto "$PUBLISH_DIR/" "$APP/Contents/MacOS/"
 find "$APP" -name '*.pdb' -delete

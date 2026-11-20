@@ -85,6 +85,7 @@ if [[ -f "$PLIST" ]]; then
     check_plist CFBundleName Tandem
     check_plist CFBundleExecutable Tandem.App
     check_plist CFBundlePackageType APPL
+    check_plist CFBundleIconFile Tandem
     check_plist CFBundleShortVersionString 0.1.0
     check_plist CFBundleVersion 1
     check_plist CFBundleInfoDictionaryVersion 6.0
@@ -124,6 +125,11 @@ authority="$(codesign -dvv "$APP" 2>&1 | grep -E '^(Authority|Signature)=' | hea
 echo "info     signed with: ${authority:-unknown}"
 
 # --- Bundled resources -----------------------------------------------------------------------------------------
+if [[ -s "$CONTENTS/Resources/Tandem.icns" ]]; then
+    pass "app icon Resources/Tandem.icns present"
+else
+    fail "app icon Resources/Tandem.icns missing"
+fi
 if [[ -f "$CONTENTS/MacOS/Tandem.App.dll" ]]; then
     pass "main assembly Tandem.App.dll present (English resources)"
 else
