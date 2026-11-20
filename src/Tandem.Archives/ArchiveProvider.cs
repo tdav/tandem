@@ -174,7 +174,8 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
     /// (one question at a time for the whole archive, again after a wrong answer); the password that fits is kept
     /// for later reads.</summary>
     /// <exception cref="ArchivePasswordRequiredException">The entry is encrypted and no password fitted: none was
-    /// given, the user declined, or <see cref="ArchiveMounts.MaxPasswordAttempts"/> answers were wrong.</exception>
+    /// given, the user declined (now or earlier in the batch the caller holds, which then does not ask again), or
+    /// <see cref="ArchiveMounts.MaxPasswordAttempts"/> answers were wrong.</exception>
     public async Task<Stream> OpenReadAsync(VfsPath path, CancellationToken ct)
     {
         if (PendingEdits() is { } edits)
@@ -198,11 +199,15 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
         {
             return await OpenEntryAsync(snapshot, node, password, ct).ConfigureAwait(false);
         }
-        catch (ArchivePasswordRequiredException) when (_prompt is not null)
+        catch (ArchivePasswordRequiredException) when (_prompt is not null && !DeclinedInHeldBatch())
         {
             return await OpenAskingAsync(snapshot, node, password, ct).ConfigureAwait(false);
         }
     }
+
+    /// <summary>True when the calling flow holds the open batch (<see cref="BatchScope.Holds"/>) and the user
+    /// declined the password in it: the rest of that operation's reads fail without asking again.</summary>
+    private bool DeclinedInHeldBatch() => BatchScope.Holds(this) && OpenBatch() is { PasswordDeclined: true };
 
     /// <summary>True when both are the same existing path of this provider.</summary>
     public async Task<bool> IsSameEntryAsync(VfsPath a, VfsPath b, CancellationToken ct)
@@ -434,7 +439,8 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
     /// <summary>Opens an entry that <paramref name="failed"/> did not open, asking the prompt for the password: one
     /// question at a time for the whole archive (a read that waited first tries what an earlier one found), with
     /// <c>previousWasWrong</c> when the password tried last did not fit, at most
-    /// <see cref="ArchiveMounts.MaxPasswordAttempts"/> times. The password that fits is kept.</summary>
+    /// <see cref="ArchiveMounts.MaxPasswordAttempts"/> times. The password that fits is kept. A decline from a flow
+    /// that holds the open batch is remembered by that batch (<see cref="DeclinedInHeldBatch"/>).</summary>
     /// <exception cref="ArchivePasswordRequiredException">The user declined, or every answer was wrong.</exception>
     private async Task<Stream> OpenAskingAsync(Snapshot snapshot, ArchiveNode node, string? failed,
         CancellationToken ct)
@@ -455,10 +461,16 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
                 }
             }
             var wrong = failed is not null;
+            // A read that waited for another one's question in the same operation does not ask after its decline.
+            if (DeclinedInHeldBatch()) throw new ArchivePasswordRequiredException(Host, wrong);
             for (var attempt = 1; ; attempt++)
             {
-                var answer = await _prompt!.AskAsync(Host, wrong, ct).ConfigureAwait(false)
-                             ?? throw new ArchivePasswordRequiredException(Host, wrong);
+                var answer = await _prompt!.AskAsync(Host, wrong, ct).ConfigureAwait(false);
+                if (answer is null)
+                {
+                    if (BatchScope.Holds(this) && OpenBatch() is { } held) held.PasswordDeclined = true;
+                    throw new ArchivePasswordRequiredException(Host, wrong);
+                }
                 try
                 {
                     var stream = await OpenEntryAsync(snapshot, node, answer, ct).ConfigureAwait(false);
@@ -844,6 +856,9 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
         /// <summary>The changes collected so far; null until the first change. Guarded by the owner's edit
         /// lock.</summary>
         public Edits? PendingEdits { get; private set; }
+
+        /// <summary>The user declined the password for a read of this batch's operation.</summary>
+        public volatile bool PasswordDeclined;
 
         public Task PrepareReadAsync(IReadOnlyList<VfsPath> files, CancellationToken ct)
         {

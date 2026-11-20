@@ -343,6 +343,32 @@ public sealed class ArchiveMountsTests : IDisposable
         Assert.Equal([false, false, false], _prompt.PreviousWasWrong); // mount, read, copy: each declined
     }
 
+    [Fact]
+    public async Task Declined_read_password_is_not_asked_again_in_the_same_operation()
+    {
+        var archive = AddFixture("encrypted.zip");
+        var root = await _mounts.MountAsync(archive, Ct);
+        _host.Files.AddDirectory("/dst");
+        _prompt.Answer((string?)null);
+        var interaction = new ScriptedInteraction()
+            .OnError(ErrorAction.Skip).OnError(ErrorAction.Skip).OnError(ErrorAction.Skip);
+        var sources = new[] { root.Combine("a.txt"), At(root, "docs/readme.txt"), root.Combine("привет.txt") };
+        var op = new CopyOperation(_providers, sources, Mem("/dst"), new CopyOptions(), interaction);
+
+        var result = await op.RunAsync().WaitAsync(Timeout, Ct);
+
+        Assert.Equal(OperationState.Completed, result.State);
+        Assert.Single(_prompt.Questions); // one decline covers the operation
+        Assert.Equal(3, interaction.Errors.Count);
+        Assert.All(interaction.Errors, e => Assert.IsType<ArchivePasswordRequiredException>(e.Error));
+        Assert.Equal(["/dst"], _host.Files.AllPaths.Where(p => p.StartsWith("/dst", StringComparison.Ordinal)));
+
+        // Outside that operation a read asks again.
+        _prompt.Answer("secret");
+        Assert.Equal("a"u8.ToArray(), await ReadAsync(root.Combine("a.txt")));
+        Assert.Equal(2, _prompt.Questions.Count);
+    }
+
     // ---- Passwords at the first read (encrypted entries) ------------------------------------------------
 
     [Fact]
