@@ -238,6 +238,20 @@ public class PanelTabsTests : IDisposable
     }
 
     [AvaloniaFact]
+    public async Task Title_is_the_whole_display_path_when_it_is_not_a_slash_path()
+    {
+        var search = new Tandem.Core.Search.SearchResultsProvider(_providers);
+        _providers.Register(search);
+        await RestoreAsync(Tab("/a/b"));
+
+        await _tabs.Active.Panel.NavigateToAsync(search.Add(Mem("/a"), "Search: *.txt in /a/b", [Mem("/a/b/c")]));
+        Assert.Equal("Search: *.txt in /a/b", _tabs.Active.Title);
+
+        await _tabs.Active.Panel.NavigateToAsync(Mem("/a/b/c"));
+        Assert.Equal("c", _tabs.Active.Title);
+    }
+
+    [AvaloniaFact]
     public async Task Restore_missing_path_uses_nearest_ancestor()
     {
         await RestoreAsync(Tab("/a/b/gone/deeper"));

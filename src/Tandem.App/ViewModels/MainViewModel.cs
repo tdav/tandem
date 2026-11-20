@@ -6,10 +6,12 @@ using CommunityToolkit.Mvvm.Input;
 using Tandem.App.Commands;
 using Tandem.App.Resources;
 using Tandem.App.Services;
+using Tandem.App.ViewModels.Search;
 using Tandem.App.ViewModels.Settings;
 using Tandem.App.ViewModels.Viewing;
 using Tandem.Core.Listing;
 using Tandem.Core.Platform;
+using Tandem.Core.Search;
 using Tandem.Core.Settings;
 using Tandem.Core.Vfs;
 
@@ -37,6 +39,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private int _volumeReadVersion;
     private int _pageSize = DefaultPageSize;
     private bool[] _tabAvailable = [];
+    private SearchViewModel? _search;
     private volatile bool _disposed;
     private KeyMap _keyMap;
     private readonly (string CommandId, string Label)[] _fKeyLabels;
@@ -64,6 +67,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _fileColorRules = settings.Current.FileColors;
         _fileColors = new FileColors(_fileColorRules);
         _theme = settings.Current.Theme;
+        SearchResults = services.Providers.TryGet(SearchResultsProvider.ProviderId, out var search) &&
+                        search is SearchResultsProvider results
+            ? results
+            : throw new InvalidOperationException("The search results provider is not registered.");
         QuickView = new QuickViewViewModel(workspace, services.Providers, services.Temp, quickLookDelay,
             ReportFailure);
         RunCommand = new RunCommand(Commands, ExecuteCommandAsync);
@@ -109,6 +116,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public WorkspaceViewModel Workspace { get; }
 
     public AppServices Services { get; }
+
+    /// <summary>The search result sets, each a folder a panel can show (registered by
+    /// <see cref="Composition.Build"/>).</summary>
+    public SearchResultsProvider SearchResults { get; }
 
     public CommandRegistry Commands { get; } = new();
 
@@ -352,6 +363,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Workspace.Right.StateChanged -= OnTabsStateChanged;
         Interaction.Close();
         Shell.CloseQuickLook();
+        _search?.Dispose();
         QuickView.Dispose();
         CommandLine.Dispose();
         ButtonBar.Dispose();
@@ -508,8 +520,37 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         // The window starts from the key map in effect; an open one comes to the front instead.
         Commands.Register(CommandIds.AppSettings,
             () => Services.Windows.ShowSettingsAsync(new SettingsViewModel(Settings, KeyMap)));
+        // Only on the local disk (not in archives, result sets or elsewhere). The availability flips with the active
+        // panel's folder being local, exactly as "open terminal"'s does, whose flips ShellCommands announces.
+        On(CommandIds.SearchFiles, ShowSearch, () => Workspace.IsLoaded && ShellCommands.IsLocal(Panel()));
         Commands.RaiseCanExecuteChanged();
     }
+
+    /// <summary>The search window for the active panel's folder: the window open already comes forward, for a new
+    /// folder with a new search that keeps the criteria typed.</summary>
+    private void ShowSearch()
+    {
+        var root = Workspace.ActivePanel.CurrentPath;
+        if (_search is { IsDisposed: false } open && open.Root == root)
+        {
+            Services.Windows.ShowSearch(open);
+            return;
+        }
+        var search = new SearchViewModel(Services.Providers, root, GoToFoundAsync,
+            (paths, title) => ShowFoundAsync(root, paths, title));
+        if (_search is { IsDisposed: false } previous) search.CopyCriteriaFrom(previous);
+        _search = search;
+        Services.Windows.ShowSearch(search);
+    }
+
+    /// <summary>A search result in the active panel: its folder, with the cursor on it.</summary>
+    private Task GoToFoundAsync(FileEntry entry) =>
+        entry.Path.Parent is { } folder ? Workspace.ActivePanel.NavigateToAsync(folder, entry.Name) : Task.CompletedTask;
+
+    /// <summary>Search results as a folder of <see cref="SearchResults"/>, shown in the active panel; up from it
+    /// leads to <paramref name="root"/>.</summary>
+    private Task ShowFoundAsync(VfsPath root, IReadOnlyList<VfsPath> paths, string title) =>
+        Workspace.ActivePanel.NavigateToAsync(SearchResults.Add(root, title, paths));
 
     private void OnWorkspacePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {

@@ -55,8 +55,9 @@ public sealed class DropHandler(WorkspaceViewModel workspace, FileCommands files
 
     /// <summary>
     /// What a drop at row <paramref name="rowIndex"/> of <paramref name="panel"/> targets: a folder row that folder,
-    /// the ".." row the parent folder, a file row or anywhere else (a negative or too large index) the panel's own
-    /// folder. Null when the panel shows no folder, or for ".." at the root.
+    /// the ".." row where it leads (<see cref="PanelViewModel.Up"/>: the parent, or the folder a result set searched),
+    /// a file row or anywhere else (a negative or too large index) the panel's own folder. Null when the panel shows
+    /// no folder, or for ".." at the root.
     /// </summary>
     public static DropTarget? TargetAt(PanelViewModel panel, int rowIndex)
     {
@@ -65,7 +66,7 @@ public sealed class DropHandler(WorkspaceViewModel workspace, FileCommands files
         if (current == default) return null;
         if (rowIndex < 0 || rowIndex >= panel.Rows.Count) return new DropTarget(current, null);
         var row = panel.Rows[rowIndex];
-        if (row.IsParentLink) return current.Parent is { } parent ? new DropTarget(parent, rowIndex) : null;
+        if (row.IsParentLink) return panel.Up is { } up ? new DropTarget(up.Directory, rowIndex) : null;
         return row is { IsDirectoryLike: true, Entry: { } entry }
             ? new DropTarget(entry.Path, rowIndex)
             : new DropTarget(current, null);
@@ -73,16 +74,17 @@ public sealed class DropHandler(WorkspaceViewModel workspace, FileCommands files
 
     /// <summary>
     /// The items (on the local disk) a drag that starts on row <paramref name="rowIndex"/> carries: every marked item
-    /// when that row is marked, otherwise just that row; nothing for "..", for no row, or for a panel not on the local
-    /// disk. The marks are not changed.
+    /// when that row is marked, otherwise just that row; nothing for "..", for no row, or when any of the items is not
+    /// on the local disk (the items' own provider counts, not the panel's folder's). The marks are not changed.
     /// </summary>
     public static IReadOnlyList<FileEntry> DragItems(PanelViewModel panel, int rowIndex)
     {
         ArgumentNullException.ThrowIfNull(panel);
-        if (!ShellCommands.IsLocal(panel) || rowIndex < 0 || rowIndex >= panel.Rows.Count) return [];
+        if (panel.CurrentPath == default || rowIndex < 0 || rowIndex >= panel.Rows.Count) return [];
         var row = panel.Rows[rowIndex];
         if (row is not { IsParentLink: false, Entry: { } entry }) return [];
-        return row.IsSelected ? panel.GetOperationTargets() : [entry];
+        var items = row.IsSelected ? panel.GetOperationTargets() : [entry];
+        return items.All(e => e.Path.ProviderId == VfsPath.LocalProviderId) ? items : [];
     }
 
     private bool PanelTakesDrops(PanelSide side) =>

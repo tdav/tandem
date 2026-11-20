@@ -16,9 +16,13 @@ namespace Tandem.App.ViewModels;
 /// </summary>
 /// <remarks>
 /// Created and used on the UI thread. What the commands apply to is <see cref="PanelViewModel.GetOperationTargets"/>
-/// of the active panel; nothing to apply to (the cursor on "..", an empty folder) disables them. Copy and move go to
-/// the passive panel's source and are disabled while that panel shows no folder or an error. Drag and drop goes through
-/// the same copy/move flow (<see cref="CopyOrMoveAsync(IReadOnlyList{VfsPath}, VfsPath, bool)"/>).
+/// of the active panel; nothing to apply to (the cursor on "..", an empty folder) disables them. The targets may lie
+/// outside the panel's folder (search results): moving, deleting and renaming need every target's own provider to
+/// write, the Trash is used when every target's provider has one, and a relative destination starts at the first
+/// target's folder. A new folder is made in the panel's folder, so it needs that folder's provider to write. Copy and
+/// move go to the passive panel's source and are disabled while that panel shows no folder or an error.
+/// Drag and drop goes through the same copy/move flow
+/// (<see cref="CopyOrMoveAsync(IReadOnlyList{VfsPath}, VfsPath, bool)"/>).
 /// <see cref="CommandRegistry.RaiseCanExecuteChanged"/> is raised only when one of these commands' availability
 /// actually changes.
 /// </remarks>
@@ -130,7 +134,8 @@ public sealed class FileCommands : IDisposable
         (panel.SelectedCount > 0 || panel.CursorRow is { IsParentLink: false });
 
     private bool HasCursorEntry() =>
-        Active is { } panel && CanWrite(panel) && panel.CursorRow is { IsParentLink: false };
+        Active is { CursorRow: { IsParentLink: false, Entry: { } entry } } panel && panel.CurrentPath != default &&
+        CanWriteTo(entry.Path);
 
     private bool HasRows() => Active is { TotalCount: > 0 };
 
@@ -140,9 +145,21 @@ public sealed class FileCommands : IDisposable
     private bool CanCopyOrMove() =>
         HasTargets() && Passive is { Error: null } passive && CanWrite(passive);
 
-    private bool CanMove() => CanCopyOrMove() && CanWrite(Active!);
+    private bool CanMove() => CanCopyOrMove() && CanWriteTargets(Active!);
 
-    private bool CanDelete() => HasTargets() && CanWrite(Active!);
+    private bool CanDelete() => HasTargets() && CanWriteTargets(Active!);
+
+    /// <summary>Whether every operation target's own provider can write. A panel listing only its folder's entries
+    /// answers by that folder, without going through the targets.</summary>
+    private bool CanWriteTargets(PanelViewModel panel) =>
+        panel.HasForeignEntries
+            ? panel.GetOperationTargets().All(t => CanWriteTo(t.Path))
+            : CanWrite(panel);
+
+    /// <summary>Whether every target's provider has the Trash.</summary>
+    private bool CanTrash(IReadOnlyList<FileEntry> targets) =>
+        _trash is not null &&
+        targets.All(t => _providers.For(t.Path).Capabilities.HasFlag(ProviderCapabilities.Trash));
 
     private void OnWorkspacePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -190,11 +207,12 @@ public sealed class FileCommands : IDisposable
         if (!(move ? CanMove() : CanCopyOrMove()) || Active is not { } active || Passive is not { } passive) return;
         var targets = active.GetOperationTargets();
         if (targets.Count == 0) return;
-        await CopyOrMoveCoreAsync(targets.Select(t => t.Path).ToArray(), active.CurrentPath, passive.CurrentPath,
-            move);
+        await CopyOrMoveCoreAsync(targets.Select(t => t.Path).ToArray(), targets[0].Path.Parent ?? active.CurrentPath,
+            passive.CurrentPath, move);
     }
 
-    /// <summary>Whether items can be copied into <paramref name="directory"/>: its provider can write.</summary>
+    /// <summary>Whether items can be copied into <paramref name="directory"/>, or the item at that path changed: its
+    /// provider can write.</summary>
     public bool CanWriteTo(VfsPath directory) =>
         directory != default && _providers.For(directory).Capabilities.HasFlag(ProviderCapabilities.Write);
 
@@ -225,7 +243,7 @@ public sealed class FileCommands : IDisposable
         return task;
     }
 
-    private bool CanMoveFrom(IReadOnlyList<VfsPath> sources) => CanWriteTo(sources[0].Parent ?? sources[0]);
+    private bool CanMoveFrom(IReadOnlyList<VfsPath> sources) => sources.All(CanWriteTo);
 
     /// <param name="baseDirectory">Where a relative destination text starts (the items' folder).</param>
     private async Task<bool> CopyOrMoveCoreAsync(IReadOnlyList<VfsPath> sources, VfsPath baseDirectory,
@@ -364,8 +382,7 @@ public sealed class FileCommands : IDisposable
         var targets = panel.GetOperationTargets();
         if (targets.Count == 0) return;
 
-        var provider = _providers.For(panel.CurrentPath);
-        var toTrash = !permanent && _trash is not null && provider.Capabilities.HasFlag(ProviderCapabilities.Trash);
+        var toTrash = !permanent && CanTrash(targets);
         var single = targets.Count == 1 ? targets[0].Name : null;
         if (!await _dialogs.ConfirmDeleteAsync(targets.Count, single, permanent: !toTrash)) return;
 
@@ -394,7 +411,8 @@ public sealed class FileCommands : IDisposable
         var directory = entry.Path.Parent!.Value;
         // Onto an existing name, the conflict answer decides what the new name ends up as (kept, overwritten, or
         // renamed again): the cursor must not guess and land on the other file.
-        var nameTaken = panel.Rows.Any(r => !r.IsParentLink && string.Equals(r.Name, newName, StringComparison.Ordinal));
+        var nameTaken = panel.Rows.Any(r => r.Entry is { } other && other.Path.Parent == directory &&
+                                            string.Equals(r.Name, newName, StringComparison.Ordinal));
         var operation = new MoveOperation(_providers, [entry.Path], directory, new CopyOptions(NewName: newName),
             _interaction, _nativeCopy);
         Start(operation, runImmediately: true, afterRefresh: result =>
@@ -470,14 +488,16 @@ public sealed class FileCommands : IDisposable
 
     /// <summary>Refreshes every tab, on both sides and in front or not, whose folder is one of
     /// <paramref name="folders"/> or lies inside one of <paramref name="removed"/> (a refresh of a folder that is gone
-    /// moves to its nearest ancestor).</summary>
+    /// moves to its nearest ancestor), and every tab listing entries of other folders, which may be among the changed
+    /// ones.</summary>
     private async Task RefreshPanelsShowingAsync(IReadOnlyList<VfsPath> folders, IReadOnlyList<VfsPath> removed)
     {
         if (!_workspace.IsLoaded) return;
         var panels = _workspace.Left.Tabs.Concat(_workspace.Right.Tabs).Select(t => t.Panel).Distinct();
         var refreshes = panels
             .Where(p => p.CurrentPath != default &&
-                        (folders.Contains(p.CurrentPath) || removed.Any(r => p.CurrentPath.IsSameOrDescendantOf(r))))
+                        (folders.Contains(p.CurrentPath) || removed.Any(r => p.CurrentPath.IsSameOrDescendantOf(r)) ||
+                         p.HasForeignEntries))
             .Select(p => p.RefreshAsync());
         await Task.WhenAll(refreshes);
     }

@@ -1,4 +1,5 @@
 using Tandem.App.ViewModels.Editing;
+using Tandem.App.ViewModels.Search;
 using Tandem.App.ViewModels.Settings;
 using Tandem.App.ViewModels.Viewing;
 using Tandem.Core.Vfs;
@@ -6,8 +7,9 @@ using Tandem.Core.Vfs;
 namespace Tandem.App.Services;
 
 /// <summary>
-/// The app's windows besides the main one and its dialogs: the editor and viewer windows (later the search
-/// window), which are not modal, and the settings window. The main window closes them when the app quits. Called on the UI thread.
+/// The app's windows besides the main one and its dialogs: the editor and viewer windows and the file search
+/// window, which are not modal, and the settings window. The main window closes them when the app quits. Called on the
+/// UI thread.
 /// </summary>
 public interface IWindowService
 {
@@ -24,6 +26,11 @@ public interface IWindowService
     /// </summary>
     Task<bool> ShowSettingsAsync(SettingsViewModel settings);
 
+    /// <summary>Shows <paramref name="search"/> in the one search window: a new window when none is open; otherwise
+    /// that window comes forward, showing <paramref name="search"/> (the model it showed before is disposed when it is
+    /// another one). Closing the window disposes the model it shows.</summary>
+    void ShowSearch(SearchViewModel search);
+
     /// <summary>Brings the editor window of <paramref name="path"/> to the front; false when none is open. The path
     /// is first resolved to the file it really is, links followed (<see cref="EditorViewModel.ResolveTargetAsync"/>),
     /// and editors are matched by that file only: "/tmp/x" and "/private/tmp/x", or a link and its target, are one
@@ -38,7 +45,8 @@ public interface IWindowService
     /// <summary>True while any window of this service is open.</summary>
     bool HasOpenWindows { get; }
 
-    /// <summary>Closes every window of this service; an editor with unsaved changes asks first. False when the user
-    /// kept one open (or its save failed): the windows from there on stay open.</summary>
+    /// <summary>Closes every window of this service; an editor with unsaved changes asks first, a running search is
+    /// stopped without a question. False when the user kept one open (or its save failed): the windows from there on
+    /// stay open.</summary>
     Task<bool> CloseAllAsync();
 }

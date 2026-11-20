@@ -183,7 +183,11 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
     /// <summary>Moves to where <see cref="ProviderRegistry.UpOf"/> leads (the parent, or the folder a hosted
     /// provider lives in) with the cursor on the name it gives. Does nothing where there is no up.</summary>
     public Task GoUpAsync() =>
-        _hasPath && UpOf(CurrentPath) is { } up ? NavigateToAsync(up.Directory, up.FocusName) : Task.CompletedTask;
+        Up is { } up ? NavigateToAsync(up.Directory, up.FocusName) : Task.CompletedTask;
+
+    /// <summary>Where "up" (and the ".." row) leads from the folder shown (<see cref="ProviderRegistry.UpOf"/>); null
+    /// when there is no folder or no up.</summary>
+    public HostLocation? Up => _hasPath ? UpOf(CurrentPath) : null;
 
     /// <summary>Reads the folder again, keeping the cursor and the selection on the same names. If the folder no
     /// longer exists, moves to its nearest existing ancestor.</summary>
@@ -345,10 +349,11 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
         {
             var view = CurrentView;
             var parentLink = _providers.UpOf(path) is not null;
+            var shape = new RowShape(path, parentLink, DisplayPathOf);
             if (kind == LoadKind.Reorder)
             {
                 var entries = _entries;
-                var rows = await Task.Run(() => BuildRows(entries, parentLink, view, sort: true));
+                var rows = await Task.Run(() => BuildRows(entries, shape, view, sort: true));
                 listing = new Listing(entries, rows, view, null);
             }
             else
@@ -356,7 +361,7 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
                 var provider = _providers.For(path);
                 var preview = kind == LoadKind.Navigate ? version : (int?)null;
                 listing = await Task.Run(() =>
-                    ReadAsync(provider, path, parentLink, kind == LoadKind.Navigate, preview, view, ct));
+                    ReadAsync(provider, path, shape, kind == LoadKind.Navigate, preview, view, ct));
             }
 
             // The options changed while the folder was being read or sorted: sort again before showing it.
@@ -364,7 +369,7 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
             {
                 var newView = CurrentView;
                 var entries = listing.Entries;
-                var rows = await Task.Run(() => BuildRows(entries, parentLink, newView, sort: true));
+                var rows = await Task.Run(() => BuildRows(entries, shape, newView, sort: true));
                 listing = listing with { Rows = rows, View = newView };
             }
 
@@ -412,7 +417,7 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
 
     /// <summary>Background: subscribes to changes (before reading, so no change is missed), reads the folder and
     /// builds the sorted rows. Posts the first entries to the UI as a preview when the folder is large.</summary>
-    private async Task<Listing> ReadAsync(IFileSystemProvider provider, VfsPath path, bool parentLink, bool watch,
+    private async Task<Listing> ReadAsync(IFileSystemProvider provider, VfsPath path, RowShape shape, bool watch,
         int? previewVersion, ViewOptions view, CancellationToken ct)
     {
         var subscription = watch ? Subscribe(provider, path) : null;
@@ -423,10 +428,10 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
             {
                 entries.Add(entry);
                 if (previewVersion is { } version && entries.Count == PreviewCount + 1)
-                    PostPreview(version, BuildRows(entries.GetRange(0, PreviewCount), parentLink, view, sort: false));
+                    PostPreview(version, BuildRows(entries.GetRange(0, PreviewCount), shape, view, sort: false));
             }
             ct.ThrowIfCancellationRequested();
-            return new Listing(entries, BuildRows(entries, parentLink, view, sort: true), view, subscription);
+            return new Listing(entries, BuildRows(entries, shape, view, sort: true), view, subscription);
         }
         catch
         {
@@ -435,7 +440,12 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
         }
     }
 
-    private static List<EntryRowViewModel> BuildRows(IReadOnlyList<FileEntry> entries, bool parentLink,
+    /// <summary>What the rows of a folder need besides its entries: the folder (an entry whose parent is another
+    /// folder is foreign and shows where it lies, through <paramref name="DisplayPathOf"/>) and whether there is a
+    /// ".." row.</summary>
+    private sealed record RowShape(VfsPath Folder, bool ParentLink, Func<VfsPath, string> DisplayPathOf);
+
+    private static List<EntryRowViewModel> BuildRows(IReadOnlyList<FileEntry> entries, RowShape shape,
         ViewOptions view, bool sort)
     {
         var visible = new List<FileEntry>(entries.Count);
@@ -445,8 +455,11 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
         if (sort) visible.Sort(EntrySorter.Create(view.Sort));
 
         var rows = new List<EntryRowViewModel>(visible.Count + 1);
-        if (parentLink) rows.Add(EntryRowViewModel.CreateParentLink());
-        foreach (var entry in visible) rows.Add(new EntryRowViewModel(entry));
+        if (shape.ParentLink) rows.Add(EntryRowViewModel.CreateParentLink());
+        foreach (var entry in visible)
+            rows.Add(entry.Path.Parent == shape.Folder
+                ? new EntryRowViewModel(entry)
+                : new EntryRowViewModel(entry, shape.DisplayPathOf));
         return rows;
     }
 
@@ -489,10 +502,9 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
         }
         else
         {
-            // Keep the cursor and the selection on the same names; a vanished cursor name keeps its position. A
-            // navigation keeps no selection: its rows are new.
-            var cursorName = CursorRow?.Name;
-            var index = cursorName is null ? -1 : IndexOf(rows, cursorName);
+            // Keep the cursor and the selection on the same items (by path: in search results names repeat); a
+            // vanished cursor item keeps its position. A navigation keeps no selection: its rows are new.
+            var index = IndexOfSame(rows, CursorRow);
             cursor = index >= 0 ? index : _cursorIndex;
             RestoreSelection(rows);
         }
@@ -507,15 +519,24 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
 
     private void RestoreSelection(List<EntryRowViewModel> rows)
     {
-        HashSet<string>? selected = null;
+        HashSet<VfsPath>? selected = null;
         foreach (var row in _rows.Items)
-            if (row.IsSelected)
-                (selected ??= new HashSet<string>(StringComparer.Ordinal)).Add(row.Name);
+            if (row is { IsSelected: true, Entry: { } entry })
+                (selected ??= []).Add(entry.Path);
         if (selected is null) return;
         foreach (var row in rows)
-            if (!row.IsParentLink && selected.Contains(row.Name))
+            if (row.Entry is { } entry && selected.Contains(entry.Path))
                 row.IsSelected = true;
     }
+
+    /// <summary>The row of <paramref name="rows"/> for the same item as <paramref name="row"/> (the same path, or
+    /// ".." for ".."); -1 when there is none.</summary>
+    private static int IndexOfSame(List<EntryRowViewModel> rows, EntryRowViewModel? row) => row switch
+    {
+        null => -1,
+        { IsParentLink: true } => rows.FindIndex(r => r.IsParentLink),
+        _ => rows.FindIndex(r => r.Entry?.Path == row.Entry!.Path),
+    };
 
     private static int IndexOf(List<EntryRowViewModel> rows, string name) =>
         rows.FindIndex(r => string.Equals(r.Name, name, StringComparison.Ordinal));

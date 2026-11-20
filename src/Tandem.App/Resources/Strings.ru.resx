@@ -1230,4 +1230,116 @@
   <data name="Settings_Error_RowTooLow" xml:space="preserve">
     <value>При этом размере шрифта высота строки должна быть не меньше {0}.</value>
   </data>
+  <!-- File search window (search.files) -->
+  <data name="Menu_search_files" xml:space="preserve">
+    <value>Поиск файлов…</value>
+  </data>
+  <data name="Search_WindowTitle" xml:space="preserve">
+    <value>Поиск файлов</value>
+  </data>
+  <data name="Search_Root" xml:space="preserve">
+    <value>Где искать:</value>
+  </data>
+  <data name="Search_Names" xml:space="preserve">
+    <value>Имена файлов:</value>
+  </data>
+  <data name="Search_Regex" xml:space="preserve">
+    <value>Регулярное выражение</value>
+  </data>
+  <data name="Search_Content" xml:space="preserve">
+    <value>Содержит текст:</value>
+  </data>
+  <data name="Search_CaseSensitive" xml:space="preserve">
+    <value>С учётом регистра</value>
+  </data>
+  <data name="Search_Encoding" xml:space="preserve">
+    <value>Кодировка:</value>
+  </data>
+  <data name="Search_EncodingAuto" xml:space="preserve">
+    <value>Авто</value>
+  </data>
+  <data name="Search_SizeFrom" xml:space="preserve">
+    <value>Размер от:</value>
+  </data>
+  <data name="Search_To" xml:space="preserve">
+    <value>до:</value>
+  </data>
+  <data name="Search_ModifiedFrom" xml:space="preserve">
+    <value>Изменён с:</value>
+  </data>
+  <data name="Search_MaxDepth" xml:space="preserve">
+    <value>Глубина папок:</value>
+  </data>
+  <data name="Search_Excluded" xml:space="preserve">
+    <value>Пропускать папки:</value>
+  </data>
+  <data name="Search_IncludeHidden" xml:space="preserve">
+    <value>Включая скрытые файлы</value>
+  </data>
+  <data name="Search_Start" xml:space="preserve">
+    <value>Найти</value>
+  </data>
+  <data name="Search_Stop" xml:space="preserve">
+    <value>Остановить</value>
+  </data>
+  <data name="Search_ShowInPanel" xml:space="preserve">
+    <value>Показать в панели</value>
+  </data>
+  <data name="Search_ColumnName" xml:space="preserve">
+    <value>Имя</value>
+  </data>
+  <data name="Search_ColumnFolder" xml:space="preserve">
+    <value>Папка</value>
+  </data>
+  <data name="Search_ColumnSize" xml:space="preserve">
+    <value>Размер</value>
+  </data>
+  <data name="Search_ColumnDate" xml:space="preserve">
+    <value>Изменён</value>
+  </data>
+  <data name="Search_AnyName" xml:space="preserve">
+    <value>*</value>
+  </data>
+  <data name="Search_ResultsTitle" xml:space="preserve">
+    <value>Поиск: {0} в {1}</value>
+  </data>
+  <data name="Search_BadSize" xml:space="preserve">
+    <value>Размер должен быть числом не меньше нуля.</value>
+  </data>
+  <data name="Search_BadDepth" xml:space="preserve">
+    <value>Глубина папок должна быть целым числом не меньше нуля.</value>
+  </data>
+  <data name="Search_BadSizeRange" xml:space="preserve">
+    <value>Наименьший размер больше наибольшего.</value>
+  </data>
+  <data name="Search_BadDateRange" xml:space="preserve">
+    <value>Первая дата позже последней.</value>
+  </data>
+  <data name="Search_BadNameRegex" xml:space="preserve">
+    <value>Шаблон имён — неправильное регулярное выражение: {0}</value>
+  </data>
+  <data name="Search_EmptyContent" xml:space="preserve">
+    <value>Введите текст для поиска.</value>
+  </data>
+  <data name="Search_BadContent" xml:space="preserve">
+    <value>Искомый текст — неправильное регулярное выражение: {0}</value>
+  </data>
+  <data name="Search_BadEncoding" xml:space="preserve">
+    <value>Эту кодировку нельзя использовать: {0}</value>
+  </data>
+  <data name="Search_RootFailed" xml:space="preserve">
+    <value>Не удалось прочитать «{0}»: {1}</value>
+  </data>
+  <data name="Search_StatusRunning" xml:space="preserve">
+    <value>Поиск… Найдено: {0}. Папок: {1}. Пропущено: папок {2}, файлов {3}.</value>
+  </data>
+  <data name="Search_StatusDone" xml:space="preserve">
+    <value>Готово. Найдено: {0}. Папок: {1}. Пропущено: папок {2}, файлов {3}.</value>
+  </data>
+  <data name="Search_StatusStopped" xml:space="preserve">
+    <value>Остановлено. Найдено: {0}. Папок: {1}. Пропущено: папок {2}, файлов {3}.</value>
+  </data>
+  <data name="Search_StatusLimit" xml:space="preserve">
+    <value>Остановлено: показано наибольшее число результатов ({0}). Папок: {1}. Пропущено: папок {2}, файлов {3}.</value>
+  </data>
 </root>

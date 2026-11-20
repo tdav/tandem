@@ -19,8 +19,9 @@ public sealed record OpenWithApps(FileEntry Entry, IReadOnlyList<AppInfo> Apps);
 /// </summary>
 /// <remarks>
 /// Created and used on the UI thread. Everything but the viewer, the editor and the properties dialog works for the
-/// local provider only and is disabled elsewhere. The viewer and the editor open a file of any provider off the UI
-/// thread, in a window of <see cref="IWindowService"/> (a viewer still opening when the commands are disposed is
+/// local provider only and is disabled elsewhere: for an item, its own provider counts (search results list local
+/// items in a folder that is not on the disk); for the terminal, the panel's folder. The viewer and the editor open
+/// a file of any provider off the UI thread, in a window of <see cref="IWindowService"/> (a viewer still opening when the commands are disposed is
 /// closed); F4 on a file already open there brings its window forward; Enter on a file elsewhere opens a copy of it made in the <see cref="TempFileStore"/> (off the UI
 /// thread): changes to the copy do not go back. Only the panels shown (active and passive) are listened to: what a
 /// panel no longer shown reports (a file activated, not a folder, a failed open) is dropped on purpose, since the user
@@ -93,7 +94,7 @@ public sealed class ShellCommands : IDisposable
         _delay = quickLookDelay ?? Task.Delay;
 
         commands.Register(CommandIds.FileView, ViewAsync, () => CursorEntry() is { IsDirectoryLike: false });
-        commands.Register(CommandIds.FileQuickLook, ToggleQuickLookAsync, IsActiveLocal);
+        commands.Register(CommandIds.FileQuickLook, ToggleQuickLookAsync, CanQuickLook);
         commands.Register(CommandIds.FileEdit, EditAsync, () => CursorEntry() is { IsDirectoryLike: false });
         commands.Register(CommandIds.FileProperties, ShowPropertiesAsync, () => CursorEntry() is not null);
         commands.Register(CommandIds.ShellReveal, RevealAsync, () => LocalCursorEntry() is not null);
@@ -197,10 +198,18 @@ public sealed class ShellCommands : IDisposable
             ? entry
             : null;
 
-    private FileEntry? LocalCursorEntry() => IsActiveLocal() ? CursorEntry() : null;
+    private FileEntry? LocalCursorEntry() => CursorEntry() is { } entry && IsLocal(entry) ? entry : null;
 
+    private static bool IsLocal(FileEntry entry) => entry.Path.ProviderId == VfsPath.LocalProviderId;
+
+    /// <summary>In a local folder (with nothing to show, a toggle closes the preview), or on a local item.</summary>
+    private bool CanQuickLook() => IsActiveLocal() || LocalCursorEntry() is not null;
+
+    /// <summary>The local items among the operation targets.</summary>
     private IReadOnlyList<string> QuickLookTargets() =>
-        Active is { } panel && IsLocal(panel) ? panel.GetOperationTargets().Select(e => e.Path.Path).ToArray() : [];
+        Active is { } panel && panel.CurrentPath != default
+            ? panel.GetOperationTargets().Where(IsLocal).Select(e => e.Path.Path).ToArray()
+            : [];
 
     private void OnWorkspacePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -484,7 +493,7 @@ public sealed class ShellCommands : IDisposable
 
     private async Task ToggleQuickLookAsync()
     {
-        if (!IsActiveLocal()) return;
+        if (!CanQuickLook()) return;
         CancelFollow();
         var targets = QuickLookTargets();
         try

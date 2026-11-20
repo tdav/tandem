@@ -58,6 +58,9 @@ public static class CommandIds
     // Settings track: the settings window (Cmd+,).
     public const string AppSettings = "app.settings";
 
+    // Search track: the file search window (Alt+F7, Cmd+F).
+    public const string SearchFiles = "search.files";
+
     // Invoked from menus only; no default key binding.
     public const string ShellReveal = "shell.reveal";
     public const string ShellOpenTerminal = "shell.openTerminal";

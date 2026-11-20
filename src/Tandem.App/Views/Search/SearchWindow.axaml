@@ -1,0 +1,117 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Tandem.App.ViewModels.Search"
+        xmlns:loc="using:Tandem.App.Resources"
+        x:Class="Tandem.App.Views.Search.SearchWindow"
+        x:DataType="vm:SearchViewModel"
+        Title="{loc:Tr Key=Search_WindowTitle}"
+        Width="820" Height="640" MinWidth="560" MinHeight="360">
+    <!-- The criteria on top, the buttons beside them; below, the results (virtualized, up to 100 000 rows); at the
+         bottom, a reason the search did not start and the status. -->
+    <DockPanel Background="{DynamicResource Tandem.ViewerBackground}">
+        <Border DockPanel.Dock="Top" Background="{DynamicResource Tandem.BarBackground}"
+                BorderBrush="{DynamicResource Tandem.DividerBrush}" BorderThickness="0,0,0,1" Padding="10,8">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Spacing="6" Margin="12,0,0,0" MinWidth="130">
+                    <Button x:Name="StartButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Content="{loc:Tr Key=Search_Start}" IsDefault="False" />
+                    <Button x:Name="StopButton" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Content="{loc:Tr Key=Search_Stop}" IsEnabled="{Binding IsRunning}" />
+                    <Button x:Name="ShowInPanelButton" HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center" Content="{loc:Tr Key=Search_ShowInPanel}"
+                            IsEnabled="{Binding HasResults}" />
+                </StackPanel>
+                <Grid x:Name="Criteria" ColumnDefinitions="Auto,*" RowSpacing="6" ColumnSpacing="8"
+                      RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                    <TextBlock Grid.Row="0" Classes="secondary" VerticalAlignment="Center"
+                               Text="{loc:Tr Key=Search_Root}" />
+                    <TextBlock Grid.Row="0" Grid.Column="1" x:Name="RootText" VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis" Text="{Binding RootText}" />
+
+                    <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="{loc:Tr Key=Search_Names}" />
+                    <DockPanel Grid.Row="1" Grid.Column="1">
+                        <CheckBox DockPanel.Dock="Right" Margin="8,0,0,0" IsChecked="{Binding NameIsRegex}"
+                                  Content="{loc:Tr Key=Search_Regex}" />
+                        <TextBox x:Name="NameMasksBox" Text="{Binding NameMasks}" />
+                    </DockPanel>
+
+                    <CheckBox Grid.Row="2" x:Name="SearchContentBox" IsChecked="{Binding SearchContent}"
+                              Content="{loc:Tr Key=Search_Content}" />
+                    <TextBox Grid.Row="2" Grid.Column="1" x:Name="ContentBox" Text="{Binding ContentText}"
+                             IsEnabled="{Binding SearchContent}" />
+
+                    <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Spacing="12"
+                                IsEnabled="{Binding SearchContent}">
+                        <CheckBox IsChecked="{Binding ContentIsRegex}" Content="{loc:Tr Key=Search_Regex}" />
+                        <CheckBox IsChecked="{Binding ContentCaseSensitive}"
+                                  Content="{loc:Tr Key=Search_CaseSensitive}" />
+                        <TextBlock VerticalAlignment="Center" Text="{loc:Tr Key=Search_Encoding}" />
+                        <ComboBox x:Name="EncodingBox" MinWidth="130" ItemsSource="{Binding EncodingChoices}"
+                                  SelectedItem="{Binding SelectedEncoding}"
+                                  DisplayMemberBinding="{Binding Label, x:DataType=vm:EncodingChoice}" />
+                    </StackPanel>
+
+                    <TextBlock Grid.Row="4" VerticalAlignment="Center" Text="{loc:Tr Key=Search_SizeFrom}" />
+                    <StackPanel Grid.Row="4" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                        <TextBox x:Name="MinSizeBox" Width="100" Text="{Binding MinSizeText}" />
+                        <TextBlock VerticalAlignment="Center" Text="{loc:Tr Key=Search_To}" />
+                        <TextBox x:Name="MaxSizeBox" Width="100" Text="{Binding MaxSizeText}" />
+                        <ComboBox x:Name="SizeUnitBox" MinWidth="80" ItemsSource="{Binding SizeUnitChoices}"
+                                  SelectedItem="{Binding SelectedSizeUnit}"
+                                  DisplayMemberBinding="{Binding Label, x:DataType=vm:SizeUnitChoice}" />
+                    </StackPanel>
+
+                    <TextBlock Grid.Row="5" VerticalAlignment="Center" Text="{loc:Tr Key=Search_ModifiedFrom}" />
+                    <StackPanel Grid.Row="5" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                        <CalendarDatePicker x:Name="ModifiedFromBox" Width="150"
+                                            SelectedDate="{Binding ModifiedFrom}" />
+                        <TextBlock VerticalAlignment="Center" Text="{loc:Tr Key=Search_To}" />
+                        <CalendarDatePicker x:Name="ModifiedToBox" Width="150" SelectedDate="{Binding ModifiedTo}" />
+                    </StackPanel>
+
+                    <TextBlock Grid.Row="6" VerticalAlignment="Center" Text="{loc:Tr Key=Search_MaxDepth}" />
+                    <StackPanel Grid.Row="6" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                        <TextBox x:Name="MaxDepthBox" Width="60" Text="{Binding MaxDepthText}" />
+                        <TextBlock VerticalAlignment="Center" Text="{loc:Tr Key=Search_Excluded}" />
+                        <TextBox x:Name="ExcludedBox" Width="200" Text="{Binding ExcludedFolders}" />
+                    </StackPanel>
+
+                    <CheckBox Grid.Row="7" Grid.Column="1" IsChecked="{Binding IncludeHidden}"
+                              Content="{loc:Tr Key=Search_IncludeHidden}" />
+                </Grid>
+            </DockPanel>
+        </Border>
+        <Border DockPanel.Dock="Bottom" Background="{DynamicResource Tandem.BarBackground}"
+                BorderBrush="{DynamicResource Tandem.DividerBrush}" BorderThickness="0,1,0,0" Padding="8,3">
+            <StackPanel>
+                <TextBlock x:Name="ErrorText" Text="{Binding Error}" TextWrapping="Wrap"
+                           IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}"
+                           Foreground="{DynamicResource Tandem.ErrorForeground}" />
+                <TextBlock x:Name="StatusText" Classes="secondary" TextTrimming="CharacterEllipsis"
+                           Text="{Binding StatusText}" />
+            </StackPanel>
+        </Border>
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="2*,3*,90,140" Margin="12,4,12,2">
+            <TextBlock Grid.Column="0" Classes="secondary" Text="{loc:Tr Key=Search_ColumnName}" />
+            <TextBlock Grid.Column="1" Classes="secondary" Text="{loc:Tr Key=Search_ColumnFolder}" />
+            <TextBlock Grid.Column="2" Classes="secondary" TextAlignment="Right" Margin="0,0,8,0"
+                       Text="{loc:Tr Key=Search_ColumnSize}" />
+            <TextBlock Grid.Column="3" Classes="secondary" Text="{loc:Tr Key=Search_ColumnDate}" />
+        </Grid>
+        <ListBox x:Name="ResultsList" ItemsSource="{Binding Results}" SelectionMode="Single"
+                 Background="{DynamicResource Tandem.ViewerBackground}">
+            <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:SearchResultRow">
+                    <Grid ColumnDefinitions="2*,3*,90,140">
+                        <TextBlock Grid.Column="0" Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Grid.Column="1" Classes="secondary" Text="{Binding Folder}"
+                                   TextTrimming="CharacterEllipsis" />
+                        <TextBlock Grid.Column="2" Text="{Binding SizeText}" TextAlignment="Right"
+                                   Margin="0,0,8,0" />
+                        <TextBlock Grid.Column="3" Text="{Binding DateText}" />
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </DockPanel>
+</Window>

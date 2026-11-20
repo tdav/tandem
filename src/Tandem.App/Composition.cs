@@ -5,6 +5,7 @@ using Tandem.App.Services;
 using Tandem.App.ViewModels;
 using Tandem.Core.Operations;
 using Tandem.Core.Platform;
+using Tandem.Core.Search;
 using Tandem.Core.Settings;
 using Tandem.Core.Vfs;
 using Tandem.Core.Vfs.Local;
@@ -67,7 +68,8 @@ public static class Composition
         Path.Combine(homeDirectory, "Library", "Logs", "Tandem", "tandem.log");
 
     /// <summary>The main view model on <paramref name="services"/> and <paramref name="settings"/>; not loaded
-    /// yet.</summary>
+    /// yet. Registers a <see cref="SearchResultsProvider"/> in <see cref="AppServices.Providers"/> unless one with its id
+    /// is there.</summary>
     /// <param name="progressWindowDelay">How long an operation runs before the progress window appears; see
     /// <see cref="OperationsViewModel"/>.</param>
     /// <param name="quickLookDelay">How long the cursor rests before an open Quick Look or quick-view panel follows
@@ -79,6 +81,8 @@ public static class Composition
         Func<TimeSpan, CancellationToken, Task>? quickLookDelay = null)
     {
         ArgumentNullException.ThrowIfNull(services);
+        if (!services.Providers.TryGet(SearchResultsProvider.ProviderId, out _))
+            services.Providers.Register(new SearchResultsProvider(services.Providers));
         var workspace = new WorkspaceViewModel(services.Providers, store, homeDirectory, autosaveDelay,
             e => services.Log.Write(e, "settings"));
         return new MainViewModel(workspace, services, settings, progressWindowDelay, quickLookDelay);
