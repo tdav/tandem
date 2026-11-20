@@ -16,6 +16,9 @@ namespace Tandem.Core.Operations;
 /// where they are.</para>
 /// <para>Cancelling keeps what was already moved; the item in flight stays whole at the source, without a partial
 /// file at the destination.</para>
+/// <para>A destination in a batching provider (<see cref="IBatchProvider"/>) holds the copies only once its batch
+/// is committed, at the end of the move: the sources of copied items are deleted after that commit, and kept when
+/// it fails.</para>
 /// </summary>
 public sealed class MoveOperation(ProviderRegistry providers, IReadOnlyList<VfsPath> sources,
     VfsPath destinationDirectory, CopyOptions options, IOperationInteraction interaction,
@@ -47,17 +50,33 @@ public sealed class MoveOperation(ProviderRegistry providers, IReadOnlyList<VfsP
         return keys;
     }
 
-    protected override async Task ExecuteAsync(CancellationToken ct)
+    /// <summary>Batching providers among the sources and the destination collect the whole move and commit it at
+    /// the end, also after a cancel or an error (<see cref="FileOperation.RunInBatchAsync"/>). When the destination
+    /// is in the batch, a copied item is not at its destination until the commit, so the sources are deleted (files,
+    /// then the emptied directories) only after a successful commit — in a batch of their own — and not at all when
+    /// the commit or the move fails. Renames are not affected.</summary>
+    protected override Task ExecuteAsync(CancellationToken ct)
     {
         var planner = new CopyPlanner(_providers, this, new ItemErrors(this, _interaction), _options.VerifyContent);
+        var deferred = new DeferredDeletions();
+        return RunInBatchAsync(_providers, _sources.Append(_destinationDirectory),
+            batch => MoveAsync(planner, batch, deferred, ct),
+            afterCommit: () => deferred.IsEmpty ? Task.CompletedTask : DeleteDeferredAsync(planner, deferred), ct);
+    }
+
+    private async Task MoveAsync(CopyPlanner planner, BatchScope batch, DeferredDeletions deferred,
+        CancellationToken ct)
+    {
         var engine = new CopyEngine(planner, _providers, this, _interaction, _nativeCopy, checkSize: true);
         var destination = await planner.ResolveDestinationDirectoryAsync(_destinationDirectory, ct).ConfigureAwait(false);
         var targets = CopyPlanner.ResolveTargets(_sources, destination, _options.NewName);
+        var defer = batch.Covers(destination);
 
         var (renames, copies) = await SplitAsync(planner, targets, destination, ct).ConfigureAwait(false);
 
         SetState(OperationState.Scanning);
         var items = await planner.ScanAsync(copies, ct, extraFiles: renames.Count).ConfigureAwait(false);
+        await batch.PrepareReadAsync(CopyPlanner.FilesToRead(items), ct).ConfigureAwait(false);
 
         SetState(OperationState.Running);
         foreach (var (source, target) in renames)
@@ -66,6 +85,7 @@ public sealed class MoveOperation(ProviderRegistry providers, IReadOnlyList<VfsP
         var directories = new List<CopyItem>(); // created or merged into, in plan order
         var outcomes = await engine.CopyAllAsync(items, ct, (item, outcome, writtenTo) => outcome switch
         {
+            CopyOutcome.Copied when defer => Remember(deferred.Files, (item.Source.Path, writtenTo)),
             CopyOutcome.Copied => DeleteSourceAsync(planner, item.Source.Path, writtenTo, ct),
             CopyOutcome.DirectoryCreated or CopyOutcome.DirectoryMerged => Remember(directories, item),
             _ => Task.CompletedTask,
@@ -79,9 +99,38 @@ public sealed class MoveOperation(ProviderRegistry providers, IReadOnlyList<VfsP
                 !await engine.ApplyDirectoryMetadataAsync(items[i], ct).ConfigureAwait(false))
                 metadataSkipped.Add(items[i].Source.Path);
         for (var i = directories.Count - 1; i >= 0; i--)
-            if (!metadataSkipped.Contains(directories[i].Source.Path))
-                await RemoveIfEmptyAsync(planner, directories[i].Source.Path, ct).ConfigureAwait(false);
+        {
+            var directory = directories[i].Source.Path;
+            if (metadataSkipped.Contains(directory)) continue;
+            if (defer)
+                deferred.Directories.Add(directory);
+            else
+                await RemoveIfEmptyAsync(planner, directory, ct).ConfigureAwait(false);
+        }
     }
+
+    /// <summary>Sources whose copies wait for the destination's batch to commit: files and links in plan order (with
+    /// the object each was written to), then directories deepest first.</summary>
+    private sealed class DeferredDeletions
+    {
+        public List<(VfsPath Source, VfsPath WrittenTo)> Files { get; } = [];
+
+        public List<VfsPath> Directories { get; } = [];
+
+        public bool IsEmpty => Files.Count == 0 && Directories.Count == 0;
+    }
+
+    /// <summary>Deletes the sources of the committed copies, in a batch of the sources' own. It runs after the move
+    /// itself has ended (perhaps cancelled), so nothing here is interrupted by a cancel; errors are asked about as
+    /// for any deletion of a moved source.</summary>
+    private Task DeleteDeferredAsync(CopyPlanner planner, DeferredDeletions deferred) =>
+        RunInBatchAsync(_providers, _sources, async _ =>
+        {
+            foreach (var (source, writtenTo) in deferred.Files)
+                await DeleteSourceAsync(planner, source, writtenTo, CancellationToken.None).ConfigureAwait(false);
+            foreach (var directory in deferred.Directories)
+                await RemoveIfEmptyAsync(planner, directory, CancellationToken.None).ConfigureAwait(false);
+        }, afterCommit: null, CancellationToken.None);
 
     /// <summary>Splits the targets into single renames (same volume as the destination) and copies, before
     /// anything is touched. A directory whose destination is an existing directory is copied even on the same
@@ -125,9 +174,9 @@ public sealed class MoveOperation(ProviderRegistry providers, IReadOnlyList<VfsP
     private async Task<string> VolumeOfAsync(VfsPath path, CancellationToken ct) =>
         $"{path.ProviderId}:{await _providers.For(path).GetVolumeKeyAsync(path, ct).ConfigureAwait(false)}";
 
-    private static Task Remember(List<CopyItem> directories, CopyItem item)
+    private static Task Remember<T>(List<T> list, T item)
     {
-        directories.Add(item);
+        list.Add(item);
         return Task.CompletedTask;
     }
 

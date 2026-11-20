@@ -43,10 +43,13 @@ public sealed class DeleteOperation(ProviderRegistry providers, IReadOnlyList<Vf
         return keys;
     }
 
+    /// <summary>Batching providers among the sources collect the deletions and commit them at the end, also after a
+    /// cancel or an error (<see cref="FileOperation.RunInBatchAsync"/>).</summary>
     protected override Task ExecuteAsync(CancellationToken ct)
     {
         var errors = new ItemErrors(this, _interaction);
-        return _toTrash ? MoveToTrashAsync(errors, ct) : DeletePermanentlyAsync(errors, ct);
+        return RunInBatchAsync(_providers, _sources,
+            _ => _toTrash ? MoveToTrashAsync(errors, ct) : DeletePermanentlyAsync(errors, ct), afterCommit: null, ct);
     }
 
     private async Task MoveToTrashAsync(ItemErrors errors, CancellationToken ct)

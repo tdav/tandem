@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.ExceptionServices;
 using Tandem.Core.Vfs;
 
 namespace Tandem.Core.Operations;
@@ -145,6 +146,40 @@ public abstract class FileOperation
     /// <summary>The operation's work. Throw <see cref="OperationCanceledException"/> for <paramref name="ct"/> to
     /// end as cancelled; any other exception ends it as failed.</summary>
     protected abstract Task ExecuteAsync(CancellationToken ct);
+
+    /// <summary>Runs <paramref name="body"/> inside a <see cref="BatchScope"/> on <paramref name="paths"/> and then
+    /// commits it with <see cref="CancellationToken.None"/> — also after the body was cancelled or failed, so that
+    /// the items already done are kept, as on a plain disk. A failed commit is the outcome when the body succeeded or
+    /// was cancelled; when the body failed, its own error stays the outcome. <paramref name="afterCommit"/> runs only
+    /// once the commit succeeded and the body did not fail (it may have been cancelled), after the scope is
+    /// disposed.</summary>
+    private protected static async Task RunInBatchAsync(ProviderRegistry providers, IEnumerable<VfsPath> paths,
+        Func<BatchScope, Task> body, Func<Task>? afterCommit, CancellationToken ct)
+    {
+        ExceptionDispatchInfo? bodyError = null;
+        await using (var scope = await BatchScope.BeginAsync(providers, paths, ct).ConfigureAwait(false))
+        {
+            try
+            {
+                await body(scope).ConfigureAwait(false);
+            }
+            catch (Exception e)
+            {
+                bodyError = ExceptionDispatchInfo.Capture(e);
+            }
+            try
+            {
+                await scope.CommitAsync(CancellationToken.None).ConfigureAwait(false);
+            }
+            catch when (bodyError is { SourceException: not OperationCanceledException })
+            {
+                // The body's error is the outcome; the batch is discarded on disposal.
+            }
+        }
+        if (bodyError is null or { SourceException: OperationCanceledException } && afterCommit is not null)
+            await afterCommit().ConfigureAwait(false);
+        bodyError?.Throw();
+    }
 
     /// <summary>Moves to <paramref name="state"/> and raises <see cref="Changed"/>.</summary>
     protected void SetState(OperationState state)

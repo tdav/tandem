@@ -45,7 +45,13 @@ public sealed class CopyOperation(ProviderRegistry providers, IReadOnlyList<VfsP
         return keys;
     }
 
-    protected override async Task ExecuteAsync(CancellationToken ct)
+    /// <summary>Batching providers among the sources and the destination collect the whole copy and commit it at the
+    /// end, also after a cancel or an error (<see cref="FileOperation.RunInBatchAsync"/>).</summary>
+    protected override Task ExecuteAsync(CancellationToken ct) =>
+        RunInBatchAsync(_providers, _sources.Append(_destinationDirectory), batch => CopyAsync(batch, ct),
+            afterCommit: null, ct);
+
+    private async Task CopyAsync(BatchScope batch, CancellationToken ct)
     {
         var planner = new CopyPlanner(_providers, this, new ItemErrors(this, _interaction), _options.VerifyContent);
         var engine = new CopyEngine(planner, _providers, this, _interaction, _nativeCopy);
@@ -55,6 +61,7 @@ public sealed class CopyOperation(ProviderRegistry providers, IReadOnlyList<VfsP
 
         SetState(OperationState.Scanning);
         var items = await planner.ScanAsync(targets, ct).ConfigureAwait(false);
+        await batch.PrepareReadAsync(CopyPlanner.FilesToRead(items), ct).ConfigureAwait(false);
 
         SetState(OperationState.Running);
         var outcomes = await engine.CopyAllAsync(items, ct).ConfigureAwait(false);

@@ -59,6 +59,11 @@ internal sealed class CopyPlanner(ProviderRegistry providers, FileOperation oper
         return targets;
     }
 
+    /// <summary>The files of a plan, in plan order: what the copy will read, for
+    /// <see cref="BatchScope.PrepareReadAsync"/>.</summary>
+    public static IReadOnlyList<VfsPath> FilesToRead(IReadOnlyList<CopyItem> items) =>
+        items.Where(item => item.Source.Kind == EntryKind.File).Select(item => item.Source.Path).ToList();
+
     /// <summary>The refusal for an item that would land on itself.</summary>
     public static OperationRejectedException OntoItself(VfsPath source, VfsPath destination) =>
         new(RejectionReason.SourceEqualsDestination, $"'{source.Path}' cannot be copied or moved onto itself.",
