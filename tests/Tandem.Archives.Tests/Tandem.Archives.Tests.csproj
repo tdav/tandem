@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <Compile Include="..\Tandem.Core.Tests\Operations\ScriptedInteraction.cs" Link="Operations\ScriptedInteraction.cs" />
+    <Compile Include="..\Tandem.Core.Tests\Vfs\TempDir.cs" Link="Vfs\TempDir.cs" />
   </ItemGroup>
 
   <ItemGroup>
