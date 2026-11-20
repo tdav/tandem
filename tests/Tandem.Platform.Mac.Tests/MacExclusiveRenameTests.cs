@@ -167,6 +167,42 @@ public sealed class MacExclusiveRenameTests : IDisposable
             Directory.GetFileSystemEntries(_temp.Path).Select(Path.GetFileName).Order(StringComparer.Ordinal));
     }
 
+    [Fact]
+    public async Task Local_provider_with_mac_rename_refuses_a_hard_link_of_the_source_in_another_directory()
+    {
+        var fs = new LocalFileSystemProvider(new UnrestrictedAccessBroker(), _rename);
+        Directory.CreateDirectory(_temp.Combine("x"));
+        Directory.CreateDirectory(_temp.Combine("y"));
+        File.WriteAllText(_temp.Combine("x/a"), "a");
+        HardLink(_temp.Combine("x/a"), _temp.Combine("y/A")); // an equivalent name, but another directory
+        Assert.SkipUnless(File.Exists(_temp.Combine("y/a")), "The temp volume is case-sensitive.");
+
+        var error = await Assert.ThrowsAsync<VfsAlreadyExistsException>(
+            () => fs.MoveAsync(VfsPath.Local(_temp.Combine("x/a")), VfsPath.Local(_temp.Combine("y/A")), Ct));
+
+        Assert.Contains(_temp.Combine("y/A"), error.Message);
+        Assert.Equal(["a"], Directory.GetFileSystemEntries(_temp.Combine("x")).Select(Path.GetFileName));
+        Assert.Equal(["A"], Directory.GetFileSystemEntries(_temp.Combine("y")).Select(Path.GetFileName));
+    }
+
+    [Fact]
+    public async Task Local_provider_with_mac_rename_refuses_an_equivalent_name_of_another_file_on_a_case_sensitive_volume()
+    {
+        using var volume = TinyVolume.Create(_temp.Combine("cs.dmg"), _temp.Combine("cs"), "Case-sensitive APFS");
+        var fs = new LocalFileSystemProvider(new UnrestrictedAccessBroker(), _rename);
+        var root = VfsPath.Local(volume.MountPoint);
+        File.WriteAllText(Path.Combine(volume.MountPoint, "a.txt"), "a");
+        File.WriteAllText(Path.Combine(volume.MountPoint, "A.txt"), "b");
+        Assert.False(File.Exists(Path.Combine(volume.MountPoint, "a.TXT"))); // the volume is case-sensitive
+
+        var error = await Assert.ThrowsAsync<VfsAlreadyExistsException>(
+            () => fs.MoveAsync(root.Combine("a.txt"), root.Combine("A.txt"), Ct));
+
+        Assert.Contains(Path.Combine(volume.MountPoint, "A.txt"), error.Message);
+        Assert.Equal("a", File.ReadAllText(Path.Combine(volume.MountPoint, "a.txt")));
+        Assert.Equal("b", File.ReadAllText(Path.Combine(volume.MountPoint, "A.txt")));
+    }
+
     /// <summary>"й.txt" composed (one code point) and decomposed ("и" + combining breve).</summary>
     private static (string Composed, string Decomposed) Spellings()
     {

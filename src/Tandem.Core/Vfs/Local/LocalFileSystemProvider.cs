@@ -122,6 +122,11 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusive
                     _exclusiveRename.Rename(src, dst);
                     return true;
                 }
+                catch (VfsAlreadyExistsException e)
+                {
+                    // The system's message is only "File exists"; name the destination.
+                    throw new VfsAlreadyExistsException($"'{dst}' already exists.", e);
+                }
                 catch (NotSupportedException)
                 {
                     // The volume has no exclusive rename (nothing has changed): check, then rename.
@@ -266,9 +271,11 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusive
         attributes.HasFlag(FileAttributes.Directory) && !attributes.HasFlag(FileAttributes.ReparsePoint);
 
     /// <summary>True when <paramref name="destination"/> names the entry <paramref name="source"/> itself (same device
-    /// and inode, <c>lstat</c>) by a name that differs from its own, but only in letter case or Unicode
-    /// normalization. The name test keeps a hard link of the source under another name from counting as the source,
-    /// and a move onto the very same name is still refused as existing.</summary>
+    /// and inode, <c>lstat</c>) in the same directory (the parents compared the same way) by a name that differs from
+    /// its own, but only in letter case or Unicode normalization. The name and parent tests keep a hard link of the
+    /// source — under another name, or under an equivalent name in another directory, where a plain <c>rename(2)</c>
+    /// between two links of one file does nothing and reports success — from counting as the source, and a move onto
+    /// the very same name is still refused as existing.</summary>
     private static bool IsRespelling(string source, string destination)
     {
         var sourceName = Path.GetFileName(source);
@@ -276,7 +283,10 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusive
         return !string.Equals(sourceName, destinationName, StringComparison.Ordinal) &&
                string.Equals(sourceName.Normalize(NormalizationForm.FormC),
                    destinationName.Normalize(NormalizationForm.FormC), StringComparison.OrdinalIgnoreCase) &&
-               Identity(destination) is { } target && Identity(source) == target;
+               Identity(destination) is { } target && Identity(source) == target &&
+               Path.GetDirectoryName(source) is { } sourceParent &&
+               Path.GetDirectoryName(destination) is { } destinationParent &&
+               Identity(sourceParent) is { } parent && Identity(destinationParent) == parent;
     }
 
     private static FileEntry ToEntry(VfsPath path, FileSystemInfo info)
