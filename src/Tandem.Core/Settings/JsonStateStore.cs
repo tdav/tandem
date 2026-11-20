@@ -13,12 +13,6 @@ public sealed class JsonStateStore(string directory)
 {
     private const string FileName = "state.json";
 
-    private static readonly JsonSerializerOptions Options = new()
-    {
-        WriteIndented = true,
-        Converters = { new JsonStringEnumConverter(allowIntegerValues: false) },
-    };
-
     private readonly Lock _gate = new();
     private readonly string _file = Path.Combine(directory, FileName);
     private readonly string _badFile = Path.Combine(directory, FileName + ".bad");
@@ -28,21 +22,13 @@ public sealed class JsonStateStore(string directory)
     {
         lock (_gate)
         {
-            string text;
-            try
-            {
-                if (!File.Exists(_file)) return AppState.Default(homeDirectory);
-                text = File.ReadAllText(_file);
-            }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-            {
-                return AppState.Default(homeDirectory);
-            }
+            var text = SettingsFile.ReadText(_file);
+            if (text is null) return AppState.Default(homeDirectory);
 
             var state = Parse(text);
             if (state is not null) return state;
 
-            SetAsideBadFile();
+            SettingsFile.SetAside(_file, _badFile);
             return AppState.Default(homeDirectory);
         }
     }
@@ -50,30 +36,8 @@ public sealed class JsonStateStore(string directory)
     /// <exception cref="IOException">The directory or file cannot be written; the previous file is left intact.</exception>
     public void Save(AppState state)
     {
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(state, Options);
-        lock (_gate)
-        {
-            try
-            {
-                Directory.CreateDirectory(directory);
-                using (var stream = new FileStream(_tempFile, FileMode.Create, FileAccess.Write, FileShare.None))
-                {
-                    stream.Write(bytes);
-                    stream.Flush(flushToDisk: true);
-                }
-                File.Move(_tempFile, _file, overwrite: true);
-            }
-            catch (IOException)
-            {
-                TryDelete(_tempFile);
-                throw;
-            }
-            catch (UnauthorizedAccessException e)
-            {
-                TryDelete(_tempFile);
-                throw new IOException($"Cannot save application state to '{_file}'.", e);
-            }
-        }
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(state, SettingsFile.Options);
+        lock (_gate) SettingsFile.WriteAtomically(directory, _file, _tempFile, bytes, "application state");
     }
 
     /// <summary>The parsed state, or null when the text is not a complete state this version understands.</summary>
@@ -82,7 +46,7 @@ public sealed class JsonStateStore(string directory)
         AppState? state;
         try
         {
-            state = JsonSerializer.Deserialize<AppState>(text, Options);
+            state = JsonSerializer.Deserialize<AppState>(text, SettingsFile.Options);
         }
         catch (Exception e) when (e is JsonException or NotSupportedException)
         {
@@ -101,16 +65,70 @@ public sealed class JsonStateStore(string directory)
         panel is { Tabs.Count: > 0 } &&
         panel.ActiveTab >= 0 && panel.ActiveTab < panel.Tabs.Count &&
         panel.Tabs.All(t => t is not null && !string.IsNullOrEmpty(t.ProviderId) && !string.IsNullOrEmpty(t.Path));
+}
 
-    private void SetAsideBadFile()
+/// <summary>Reading, setting aside and atomically replacing the app's own JSON files (<c>state.json</c>,
+/// <c>settings.json</c>).</summary>
+internal static class SettingsFile
+{
+    /// <summary>Indented JSON with enumeration values written, and only accepted, by name.</summary>
+    public static readonly JsonSerializerOptions Options = new()
+    {
+        WriteIndented = true,
+        Converters = { new JsonStringEnumConverter(allowIntegerValues: false) },
+    };
+
+    /// <summary>The file's text; null when it does not exist or cannot be read.</summary>
+    public static string? ReadText(string file)
     {
         try
         {
-            File.Move(_file, _badFile, overwrite: true);
+            return File.Exists(file) ? File.ReadAllText(file) : null;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Moves a file that cannot be used to <paramref name="badFile"/>, replacing an older one, if it can.</summary>
+    public static void SetAside(string file, string badFile)
+    {
+        try
+        {
+            File.Move(file, badFile, overwrite: true);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             // Keeping the bad copy is a courtesy; the next Save replaces the file anyway.
+        }
+    }
+
+    /// <summary>Writes <paramref name="bytes"/> to <paramref name="tempFile"/> in <paramref name="directory"/>
+    /// (created when missing), flushed to disk, and renames it over <paramref name="file"/>.</summary>
+    /// <param name="what">What the file holds, for the message of the exception.</param>
+    /// <exception cref="IOException">The directory or file cannot be written; the previous file is left intact.</exception>
+    public static void WriteAtomically(string directory, string file, string tempFile, byte[] bytes, string what)
+    {
+        try
+        {
+            Directory.CreateDirectory(directory);
+            using (var stream = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                stream.Write(bytes);
+                stream.Flush(flushToDisk: true);
+            }
+            File.Move(tempFile, file, overwrite: true);
+        }
+        catch (IOException)
+        {
+            TryDelete(tempFile);
+            throw;
+        }
+        catch (UnauthorizedAccessException e)
+        {
+            TryDelete(tempFile);
+            throw new IOException($"Cannot save {what} to '{file}'.", e);
         }
     }
 

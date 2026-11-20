@@ -9,8 +9,10 @@ public sealed record TabState(string ProviderId, string Path, SortColumn SortCol
 /// <summary>The tabs of one panel; <see cref="ActiveTab"/> is an index into <see cref="Tabs"/>.</summary>
 public sealed record PanelState(IReadOnlyList<TabState> Tabs, int ActiveTab);
 
-/// <summary>Which optional parts of the main window are shown.</summary>
-public sealed record ViewState(bool Sidebar = false, bool VolumeBars = true, bool CommandLine = true, bool FKeyBar = true);
+/// <summary>Which optional parts of the main window are shown. A file written before <see cref="ButtonBar"/> existed
+/// reads it as shown.</summary>
+public sealed record ViewState(bool Sidebar = false, bool VolumeBars = true, bool CommandLine = true, bool FKeyBar = true,
+    bool ButtonBar = true);
 
 /// <summary>Main window placement; <see cref="SplitRatio"/> is the left panel's share of the width.</summary>
 public sealed record WindowState(double X, double Y, double Width, double Height, bool Maximized, double SplitRatio);

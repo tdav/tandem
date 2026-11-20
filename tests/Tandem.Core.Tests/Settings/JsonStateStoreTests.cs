@@ -419,4 +419,54 @@ public sealed class JsonStateStoreTests : IDisposable
         Assert.False(File.Exists(BadFile));
         Assert.Equal(["state.json"], Directory.GetFiles(StateDir).Select(Path.GetFileName));
     }
+
+    [Fact]
+    public void Stage1_state_file_loads_with_button_bar_shown()
+    {
+        // Exactly what a stage 1 build wrote: its view has no button bar.
+        const string content = """
+            {
+              "Version": 1,
+              "Left": { "Tabs": [ { "ProviderId": "local", "Path": "/Users/someone", "SortColumn": "Name",
+                "SortDescending": false, "Pinned": false } ], "ActiveTab": 0 },
+              "Right": { "Tabs": [ { "ProviderId": "local", "Path": "/tmp", "SortColumn": "Size",
+                "SortDescending": true, "Pinned": false } ], "ActiveTab": 0 },
+              "LeftIsActive": false,
+              "View": { "Sidebar": true, "VolumeBars": false, "CommandLine": true, "FKeyBar": false },
+              "Window": { "X": 10, "Y": 20, "Width": 1200, "Height": 700, "Maximized": false, "SplitRatio": 0.5 },
+              "Favorites": [],
+              "ShowHidden": true,
+              "Language": null
+            }
+            """;
+        WriteRaw(content);
+
+        var state = Store().Load(Home);
+
+        Assert.Equal(new ViewState(Sidebar: true, VolumeBars: false, CommandLine: true, FKeyBar: false, ButtonBar: true),
+            state.View);
+        Assert.False(state.LeftIsActive);
+        Assert.True(state.ShowHidden);
+        Assert.False(File.Exists(BadFile));
+    }
+
+    [Fact]
+    public void State_version_is_still_1_and_saved_file_is_accepted_by_stage1_rules()
+    {
+        Assert.Equal(1, AppState.CurrentVersion);
+        var state = Sample() with { View = Sample().View with { ButtonBar = false } };
+
+        Store().Save(state);
+
+        // Stage 1 accepts a file of version 1 holding every field it knows; it ignores the rest.
+        var json = JsonNode.Parse(File.ReadAllText(StateFile))!.AsObject();
+        Assert.Equal(1, (int)json["Version"]!);
+        foreach (var field in new[] { "Left", "Right", "LeftIsActive", "View", "Window", "Favorites", "ShowHidden", "Language" })
+            Assert.True(json.ContainsKey(field), field);
+        var view = json["View"]!.AsObject();
+        foreach (var field in new[] { "Sidebar", "VolumeBars", "CommandLine", "FKeyBar" })
+            Assert.True(view.ContainsKey(field), field);
+        Assert.False((bool)view["ButtonBar"]!);
+        Assert.Equal(state.View, Store().Load(Home).View);
+    }
 }
