@@ -47,7 +47,12 @@ public class SearchWindowTests : LanguageTestBase
         RawInputModifiers modifiers = RawInputModifiers.None)
     {
         window.KeyPress(key, modifiers, physical, null);
-        if (window.IsVisible) window.KeyRelease(key, modifiers, physical, null); // the key may have closed it
+        if (window.IsVisible)
+        {
+            // The key may close the window, also later: from a job that the release itself runs first.
+            try { window.KeyRelease(key, modifiers, physical, null); }
+            catch (ObjectDisposedException) when (!window.IsVisible) { }
+        }
         Dispatcher.UIThread.RunJobs();
     }
 
