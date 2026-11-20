@@ -43,6 +43,8 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
     private readonly TempFileStore _temp;
     private readonly SemaphoreSlim _reload = new(1, 1);
     private readonly SemaphoreSlim _batchGate = new(1, 1);
+    private readonly SemaphoreSlim _asking = new(1, 1);
+    private readonly IArchivePasswordPrompt? _prompt;
     private readonly Lock _preparedLock = new();
     private readonly Dictionary<string, string> _prepared = new(StringComparer.Ordinal);
     private Snapshot? _preparedFor;
@@ -56,13 +58,15 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
         Cp866 = Encoding.GetEncoding(866);
     }
 
-    private ArchiveProvider(string id, ProviderRegistry providers, VfsPath host, TempFileStore temp, string? password)
+    private ArchiveProvider(string id, ProviderRegistry providers, VfsPath host, TempFileStore temp, string? password,
+        IArchivePasswordPrompt? prompt)
     {
         Id = id;
         _providers = providers;
         Host = host;
         _temp = temp;
         _password = password;
+        _prompt = prompt;
         BatchHost = providers.Get(host.ProviderId) as IBatchProvider;
     }
 
@@ -70,18 +74,21 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
     /// tells nothing), and the listing.</summary>
     /// <param name="id">The provider id to register the result under.</param>
     /// <param name="password">For an archive whose listing is encrypted; kept in memory only.</param>
+    /// <param name="prompt">Asked when an entry needs a password the provider does not have (see
+    /// <see cref="OpenReadAsync"/>); null: such a read fails with <see cref="ArchivePasswordRequiredException"/>.
+    /// The listing's own password is not asked for here: that is the caller's (<see cref="ArchiveMounts"/>).</param>
     /// <exception cref="VfsNotFoundException">There is no file at <paramref name="host"/>.</exception>
     /// <exception cref="ArchiveDamagedException">The file is no archive, or a damaged one.</exception>
     /// <exception cref="ArchivePasswordRequiredException">The listing is encrypted and the password did not fit or
     /// was not given.</exception>
     public static async Task<ArchiveProvider> OpenAsync(string id, ProviderRegistry providers, VfsPath host,
-        TempFileStore temp, string? password, CancellationToken ct)
+        TempFileStore temp, string? password, IArchivePasswordPrompt? prompt, CancellationToken ct)
     {
         ArgumentException.ThrowIfNullOrEmpty(id);
         ArgumentNullException.ThrowIfNull(providers);
         ArgumentNullException.ThrowIfNull(temp);
         if (host.IsRoot) throw new ArgumentException("The archive must be a file.", nameof(host));
-        var provider = new ArchiveProvider(id, providers, host, temp, password);
+        var provider = new ArchiveProvider(id, providers, host, temp, password, prompt);
         var stamp = await provider.HostStampAsync(ct).ConfigureAwait(false);
         provider._snapshot = await provider.LoadAsync(stamp, ct).ConfigureAwait(false);
         return provider;
@@ -98,7 +105,8 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
     /// <summary>Whether any entry of the archive as last read is encrypted.</summary>
     public bool HasEncryptedEntries => _snapshot.HasEncryptedEntries;
 
-    /// <summary>The password reads use from now on. Kept in memory only.</summary>
+    /// <summary>The password reads use from now on: the one the archive was opened with, then the one a read found
+    /// through the prompt. Kept in memory only. Setting it does not read the listing again.</summary>
     public string? Password
     {
         get => _password;
@@ -139,6 +147,11 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
         return snapshot.Index.Find(path.Path) is { } node ? ToEntry(node) : null;
     }
 
+    /// <summary>The entry's content. For an encrypted entry without a password that fits, the prompt is asked for one
+    /// (one question at a time for the whole archive, again after a wrong answer); the password that fits is kept
+    /// for later reads.</summary>
+    /// <exception cref="ArchivePasswordRequiredException">The entry is encrypted and no password fitted: none was
+    /// given, the user declined, or <see cref="ArchiveMounts.MaxPasswordAttempts"/> answers were wrong.</exception>
     public async Task<Stream> OpenReadAsync(VfsPath path, CancellationToken ct)
     {
         var snapshot = await CurrentAsync(ct).ConfigureAwait(false);
@@ -153,9 +166,14 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
                     useAsync: true);
         }
         var password = _password;
-        return snapshot.Sequential
-            ? await OpenInPassAsync(snapshot, node, password, ct).ConfigureAwait(false)
-            : await OpenDirectAsync(snapshot, node, password, ct).ConfigureAwait(false);
+        try
+        {
+            return await OpenEntryAsync(snapshot, node, password, ct).ConfigureAwait(false);
+        }
+        catch (ArchivePasswordRequiredException) when (_prompt is not null)
+        {
+            return await OpenAskingAsync(snapshot, node, password, ct).ConfigureAwait(false);
+        }
     }
 
     /// <summary>True when both are the same existing path of this provider.</summary>
@@ -390,6 +408,57 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
             IsHidden: node.Name.StartsWith('.'), node.LinkTarget);
 
     // ---- Opening entries -----------------------------------------------------------------------------------
+
+    private Task<Stream> OpenEntryAsync(Snapshot snapshot, ArchiveNode node, string? password, CancellationToken ct) =>
+        snapshot.Sequential
+            ? OpenInPassAsync(snapshot, node, password, ct)
+            : OpenDirectAsync(snapshot, node, password, ct);
+
+    /// <summary>Opens an entry that <paramref name="failed"/> did not open, asking the prompt for the password: one
+    /// question at a time for the whole archive (a read that waited first tries what an earlier one found), with
+    /// <c>previousWasWrong</c> when the password tried last did not fit, at most
+    /// <see cref="ArchiveMounts.MaxPasswordAttempts"/> times. The password that fits is kept.</summary>
+    /// <exception cref="ArchivePasswordRequiredException">The user declined, or every answer was wrong.</exception>
+    private async Task<Stream> OpenAskingAsync(Snapshot snapshot, ArchiveNode node, string? failed,
+        CancellationToken ct)
+    {
+        await _asking.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            var known = _password;
+            if (known != failed)
+            {
+                try
+                {
+                    return await OpenEntryAsync(snapshot, node, known, ct).ConfigureAwait(false);
+                }
+                catch (ArchivePasswordRequiredException)
+                {
+                    failed = known;
+                }
+            }
+            var wrong = failed is not null;
+            for (var attempt = 1; ; attempt++)
+            {
+                var answer = await _prompt!.AskAsync(Host, wrong, ct).ConfigureAwait(false)
+                             ?? throw new ArchivePasswordRequiredException(Host, wrong);
+                try
+                {
+                    var stream = await OpenEntryAsync(snapshot, node, answer, ct).ConfigureAwait(false);
+                    _password = answer;
+                    return stream;
+                }
+                catch (ArchivePasswordRequiredException) when (attempt < ArchiveMounts.MaxPasswordAttempts)
+                {
+                    wrong = true;
+                }
+            }
+        }
+        finally
+        {
+            _asking.Release();
+        }
+    }
 
     /// <summary>Random access: the entry's stream of an archive from the pool, which goes back to the pool when
     /// the stream is closed.</summary>

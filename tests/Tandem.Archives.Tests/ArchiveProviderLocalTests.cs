@@ -38,7 +38,8 @@ public sealed class ArchiveProviderLocalTests : IDisposable
     {
         var archivePath = _dir.Combine(fixture);
         await File.WriteAllBytesAsync(archivePath, Fixture.Bytes(fixture), Ct);
-        var archive = await ArchiveProvider.OpenAsync("arc", _providers, VfsPath.Local(archivePath), _temp, null, Ct);
+        var archive = await ArchiveProvider.OpenAsync("arc", _providers, VfsPath.Local(archivePath), _temp, null,
+            prompt: null, Ct);
         _providers.Register(archive);
         var output = _dir.Combine("out");
         Directory.CreateDirectory(output);
@@ -89,7 +90,7 @@ public sealed class ArchiveProviderLocalTests : IDisposable
             await tar.WriteEntryAsync(entry, Ct);
         }
         var archive = await ArchiveProvider.OpenAsync("arc", _providers, VfsPath.Local(archivePath), _temp, null,
-            Ct);
+            prompt: null, Ct);
         _providers.Register(archive);
         var output = _dir.Combine("out");
         Directory.CreateDirectory(output);

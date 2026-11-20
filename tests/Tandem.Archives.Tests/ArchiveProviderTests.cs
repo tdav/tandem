@@ -48,7 +48,8 @@ public sealed class ArchiveProviderTests : IDisposable
 
     private async Task<ArchiveProvider> OpenHostAsync(string path, string? password = null)
     {
-        var provider = await ArchiveProvider.OpenAsync("arc", _providers, Mem(path), _temp, password, Ct);
+        var provider = await ArchiveProvider.OpenAsync("arc", _providers, Mem(path), _temp, password, prompt: null,
+            Ct);
         _providers.Register(provider);
         return provider;
     }
