@@ -391,6 +391,78 @@ public class HostedPanelTests : LanguageTestBase
     }
 
     [AvaloniaFact]
+    public async Task Late_mount_result_does_not_override_a_later_navigation_still_in_flight()
+    {
+        var (app, hosted) = await StartAsync();
+        await using var __ = app;
+        var events = RecordEvents(app.Left);
+        var docs = new VfsPath(FakeHosted.ProviderId, "/docs");
+        var listGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        hosted.BeforeList = dir => dir == docs ? listGate.Task : Task.CompletedTask;
+        var pending = await StartHeldMountAsync(app, hosted, "data.pack");
+
+        var navigation = app.Left.NavigateToAsync(docs); // started after Enter, held while it reads
+        hosted.MountGate!.SetResult(); // the mount answers while the navigation is still under way
+        await TestApp.WaitUntil(() => hosted.Host is not null);
+        app.Pump();
+        listGate.SetResult();
+        await Task.WhenAll(pending, navigation);
+        app.Pump();
+
+        Assert.Equal(docs, app.Left.CurrentPath); // the user's later action wins
+        Assert.Contains("inner.txt", app.Left.Rows.Select(r => r.Name));
+        Assert.Empty(events);
+        Assert.False(app.Left.IsLoading);
+    }
+
+    [AvaloniaFact]
+    public async Task Late_mount_result_applies_when_the_later_navigation_fails()
+    {
+        var (app, hosted) = await StartAsync();
+        await using var __ = app;
+        var missing = new VfsPath(FakeHosted.ProviderId, "/missing");
+        var listGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        hosted.BeforeList = dir => dir == missing ? listGate.Task : Task.CompletedTask;
+        var pending = await StartHeldMountAsync(app, hosted, "data.pack");
+
+        var navigation = app.Left.NavigateToAsync(missing);
+        hosted.MountGate!.SetResult();
+        await TestApp.WaitUntil(() => hosted.Host is not null);
+        app.Pump();
+        Assert.Equal(VfsPath.Local(TestApp.Home), app.Left.CurrentPath); // waiting for the navigation to decide
+        listGate.SetResult();
+        await Task.WhenAll(pending, navigation);
+        app.Pump();
+
+        Assert.Equal(FakeHosted.Root, app.Left.CurrentPath);
+        Assert.False(app.Left.IsLoading);
+    }
+
+    [AvaloniaFact]
+    public async Task Mount_failing_with_any_exception_is_reported_and_never_sticks()
+    {
+        var (app, hosted) = await StartAsync();
+        await using var __ = app;
+        var failure = new InvalidDataException("not an archive");
+        hosted.MountFailure = failure;
+        var failed = new List<Exception>();
+        app.Left.OpenFailed += (_, e) => failed.Add(e);
+        Cursor(app.Left, "data.pack");
+
+        await app.Left.ActivateAsync();
+        await TestApp.WaitUntil(() => app.Dialogs.Messages.Count > 0);
+
+        Assert.Equal([failure], failed);
+        Assert.False(app.Left.IsLoading);
+        Assert.Equal(VfsPath.Local(TestApp.Home), app.Left.CurrentPath);
+        Assert.Equal([(OperationTexts.ForFailure(failure), "not an archive")], app.Dialogs.MessagesWithDetail);
+        Assert.Empty(app.Failures);
+
+        hosted.MountFailure = null; // the next Enter is not held up by the failed one
+        await EnterPackAsync(app);
+    }
+
+    [AvaloniaFact]
     public async Task A_later_activation_supersedes_a_pending_mount()
     {
         var (app, hosted) = await StartAsync();

@@ -37,6 +37,9 @@ internal sealed class FakeHosted(InMemoryFileSystem local) : IFileSystemProvider
     /// that answers late whatever happens.</summary>
     public TaskCompletionSource? MountGate { get; set; }
 
+    /// <summary>When set, reading a folder awaits it (with the folder) before the first entry.</summary>
+    public Func<VfsPath, Task>? BeforeList { get; set; }
+
     /// <summary>When set, opening a file for reading waits for it first.</summary>
     public TaskCompletionSource? ReadGate { get; set; }
 
@@ -93,6 +96,7 @@ internal sealed class FakeHosted(InMemoryFileSystem local) : IFileSystemProvider
     public async IAsyncEnumerable<FileEntry> EnumerateAsync(VfsPath directory,
         [EnumeratorCancellation] CancellationToken ct)
     {
+        if (BeforeList is { } beforeList) await beforeList(directory).ConfigureAwait(false);
         CheckHost();
         await foreach (var entry in Files.EnumerateAsync(directory, ct)) yield return entry;
     }

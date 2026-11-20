@@ -40,6 +40,7 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
     private CancellationTokenSource? _loadCts;
     private int _loadVersion;
     private MountRequest? _mount; // the file being opened as a folder; a newer request or navigation replaces it
+    private Task<bool>? _navigation; // the navigation started last
     private LoadKind? _activeLoad;
     private bool _showingPreview;
     private int _previewVersion; // the load whose preview may still be shown; 0 once it has committed or failed
@@ -126,15 +127,17 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
     /// <summary>Raised when <see cref="EnterAsync"/> is used on a file that does not open as a folder.</summary>
     public event EventHandler<FileEntry>? NotAFolder;
 
-    /// <summary>Raised when a file that opens as a folder could not be opened (<see cref="IOException"/>); the panel
-    /// stays where it is and <see cref="Error"/> is not set.</summary>
+    /// <summary>Raised when a file that opens as a folder could not be opened (any exception from the mounter but a
+    /// cancellation); the panel stays where it is and <see cref="Error"/> is not set.</summary>
     public event EventHandler<Exception>? OpenFailed;
 
     /// <summary>Shows <paramref name="path"/> with the cursor on <paramref name="focusName"/> (or the first row).
     /// On failure the previous folder stays and <see cref="Error"/> says why. Never throws for file-system errors.</summary>
     public async Task NavigateToAsync(VfsPath path, string? focusName = null)
     {
-        if (await LoadAsync(LoadKind.Navigate, path, focusName)) Navigated?.Invoke(this, path);
+        var navigation = LoadAsync(LoadKind.Navigate, path, focusName);
+        _navigation = navigation;
+        if (await navigation) Navigated?.Invoke(this, path);
     }
 
     /// <summary>Enter: opens the folder (or link to a folder) under the cursor, goes up on "..", enters a file that
@@ -203,11 +206,12 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
         DisposeInBackground(watch);
     }
 
-    /// <summary>A file being opened as a folder: where the panel was when it was asked, and the way to stop
-    /// it.</summary>
-    private sealed class MountRequest(VfsPath from)
+    /// <summary>A file being opened as a folder: where the panel was when it was asked, the last load started
+    /// before it (a navigation started later is the user's later action), and the way to stop it.</summary>
+    private sealed class MountRequest(VfsPath from, int loadVersion)
     {
         public VfsPath From { get; } = from;
+        public int LoadVersion { get; } = loadVersion;
         public CancellationTokenSource Cts { get; } = new();
     }
 
@@ -217,7 +221,9 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
     /// <see cref="OpenFailed"/>. While it runs, <see cref="IsLoading"/> is true.
     /// <para>The answer applies only if, when it comes, the panel still shows the folder it was asked in and nothing
     /// later replaced the request: another Enter or activation, a completed navigation, or <see cref="Dispose"/>
-    /// (each of these also cancels the mount). A navigation that failed, or a cursor move, does not.</para></summary>
+    /// (each of these also cancels the mount). A navigation that failed, or a cursor move, does not. An answer that
+    /// comes while a navigation started after the request is still running waits for it: the navigation wins if it
+    /// completes, and the answer applies if it fails.</para></summary>
     private Task OpenAsFolderAsync(FileEntry file, bool byContent)
     {
         if (_providers.HasMounters) return MountAsync(file, byContent);
@@ -227,34 +233,45 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
 
     private async Task MountAsync(FileEntry file, bool byContent)
     {
-        var request = new MountRequest(CurrentPath);
+        var request = new MountRequest(CurrentPath, _loadVersion);
         _mount = request;
         UpdateLoading();
         var (providers, ct) = (_providers, request.Cts.Token);
         VfsPath? folder = null;
         Exception? failure = null;
-        var cancelled = false;
+        var applies = false;
         try
         {
-            folder = await Task.Run(() => providers.TryMountAsync(file, byContent, ct));
-        }
-        catch (OperationCanceledException)
-        {
-            cancelled = true;
-        }
-        catch (IOException e)
-        {
-            failure = e;
-        }
+            try
+            {
+                folder = await Task.Run(() => providers.TryMountAsync(file, byContent, ct));
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+            catch (Exception e)
+            {
+                failure = e;
+            }
 
-        var applies = _mount == request && !_disposed && CurrentPath == request.From;
-        if (_mount == request)
-        {
-            _mount = null;
-            UpdateLoading();
+            // A navigation the user started after asking decides: if it completes it cancels this request.
+            while (_mount == request && !_disposed && _activeLoad == LoadKind.Navigate &&
+                   _loadVersion > request.LoadVersion && _navigation is { } navigation)
+                await navigation;
+
+            applies = _mount == request && !_disposed && CurrentPath == request.From;
         }
-        request.Cts.Dispose();
-        if (!applies || cancelled) return;
+        finally
+        {
+            if (_mount == request)
+            {
+                _mount = null;
+                UpdateLoading();
+            }
+            request.Cts.Dispose();
+        }
+        if (!applies) return;
         if (failure is not null) OpenFailed?.Invoke(this, failure);
         else if (folder is { } target) await NavigateToAsync(target);
         else OpensAsNothing(file, byContent);
