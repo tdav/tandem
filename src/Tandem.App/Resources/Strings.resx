@@ -1062,4 +1062,7 @@ Folder</value>
   <data name="UserCommand_StartFailed" xml:space="preserve">
     <value>Could not start “{0}”.</value>
   </data>
+  <data name="UserCommand_OtherPanelNotLocal" xml:space="preserve">
+    <value>“{0}” uses the other panel’s folder, which is not on this Mac’s disk. The command was not run.</value>
+  </data>
 </root>

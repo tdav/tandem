@@ -25,6 +25,8 @@ public class ArgumentTemplateTests
     [InlineData("\"%f and %n\"", true, new[] { "/cur/a and a" })]
     [InlineData("\"unclosed %p", true, new[] { "unclosed /cur" })]
     [InlineData("back\\slash", true, new[] { "back\\slash" })]
+    [InlineData("\"%s\"", true, new[] { "/cur/a", "/cur/b" })]
+    [InlineData("--x=\"a b\" y", true, new[] { "--x=a b", "y" })]
     public void Expand(string template, bool cursor, string[] expected) =>
         Assert.Equal(expected, ArgumentTemplate.Expand(template, cursor ? WithCursor : WithoutCursor));
 
@@ -44,5 +46,17 @@ public class ArgumentTemplateTests
     {
         var context = new ArgumentTemplate.Context("/cur", "/other", "/cur/Folder.app/", []);
         Assert.Equal(["Folder.app"], ArgumentTemplate.Expand("%n", context));
+    }
+
+    [Fact]
+    public void Other_folder_placeholder_without_an_other_folder_makes_the_line_unusable()
+    {
+        var context = WithCursor with { OtherPath = null };
+
+        Assert.Throws<ArgumentTemplate.OtherFolderUnavailableException>(() =>
+            ArgumentTemplate.Expand("cp %s %t", context));
+        Assert.Throws<ArgumentTemplate.OtherFolderUnavailableException>(() =>
+            ArgumentTemplate.Expand("%n --to=%t", WithoutCursor with { OtherPath = null }));
+        Assert.Equal(["cp", "/cur/a", "/cur/b", "%t"], ArgumentTemplate.Expand("cp %s %%t", context));
     }
 }

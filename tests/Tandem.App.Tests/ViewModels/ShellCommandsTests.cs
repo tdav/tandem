@@ -229,6 +229,45 @@ public class ShellCommandsTests : LanguageTestBase
     }
 
     [AvaloniaFact]
+    public async Task External_editor_application_that_open_cannot_launch_is_told()
+    {
+        var processes = new FakeProcessRunner();
+        await using var app = await TestApp.StartAsync(show: false, processes: processes,
+            settings: Tandem.Core.Settings.AppSettings.Default with { ExternalEditor = "/Applications/Gone.app" });
+        Cursor(app.Left, "notes.txt");
+
+        Assert.True(await app.Main.Commands.ExecuteAsync(CommandIds.FileEdit));
+        processes.Last.Write("Unable to find application named 'Gone'");
+        processes.Last.Exit(1);
+        await TestApp.WaitUntil(() => { Dispatcher.UIThread.RunJobs(); return app.Dialogs.Messages.Count > 0; });
+
+        Assert.Equal([(Loc.Format("UserCommand_StartFailed", "/Applications/Gone.app"),
+            "Unable to find application named 'Gone'")], app.Dialogs.MessagesWithDetail);
+        Assert.Empty(app.Failures);
+    }
+
+    [AvaloniaFact]
+    public async Task F4_brings_forward_a_built_in_editor_of_the_file_instead_of_the_external_one()
+    {
+        var processes = new FakeProcessRunner();
+        await using var app = await TestApp.StartAsync(show: false, processes: processes);
+        Cursor(app.Left, "README.md");
+        Assert.True(await app.Main.Commands.ExecuteAsync(CommandIds.FileEdit)); // built-in: no external one yet
+        var window = Assert.Single(app.Windows.Open);
+        app.Main.Settings.Update(app.Main.Settings.Current with { ExternalEditor = "/Applications/Ed.app" });
+
+        Assert.True(await app.Main.Commands.ExecuteAsync(CommandIds.FileEdit));
+
+        Assert.Same(window, Assert.Single(app.Windows.Open));
+        Assert.Empty(processes.Started);
+
+        // Another file goes to the external editor.
+        Cursor(app.Left, "notes.txt");
+        Assert.True(await app.Main.Commands.ExecuteAsync(CommandIds.FileEdit));
+        Assert.Equal(["-a", "/Applications/Ed.app", "/home/notes.txt"], Assert.Single(processes.Started).Arguments);
+    }
+
+    [AvaloniaFact]
     public async Task External_editor_that_cannot_start_is_told()
     {
         var processes = new FakeProcessRunner { StartFailure = new System.ComponentModel.Win32Exception("not found") };

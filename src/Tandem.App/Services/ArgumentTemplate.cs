@@ -7,23 +7,33 @@ namespace Tandem.App.Services;
 /// </summary>
 /// <remarks>
 /// The line is split into arguments at spaces (and tabs); double quotes join, and inside them <c>\"</c> and <c>\\</c>
-/// stand for the characters themselves (elsewhere a backslash is just a backslash). The split comes first, so a
-/// substituted path with spaces or quotes stays one argument; nothing is ever given to a shell. Placeholders:
+/// stand for the characters themselves (elsewhere a backslash is just a backslash); a quote may start mid-argument
+/// (<c>--x="a b"</c> is <c>--x=a b</c>). The split comes first, so a substituted path with spaces or quotes stays one
+/// argument; nothing is ever given to a shell. Quoting does not change the placeholders: <c>"%s"</c> is still one
+/// argument per target. Placeholders:
 /// <c>%p</c> the active panel's folder, <c>%t</c> the other panel's folder, <c>%f</c> the full path of the item under
 /// the cursor, <c>%n</c> its name, <c>%s</c> every target (the marked items, or the cursor item), <c>%%</c> a percent
 /// sign; any other <c>%</c> is kept as it is. An argument that is exactly <c>%s</c> becomes one argument per target;
-/// <c>%s</c> inside a longer argument gives the paths joined by spaces. An argument whose <c>%f</c>, <c>%n</c>,
-/// <c>%s</c> (or <c>%t</c>, with no other folder) has nothing to stand for is left out entirely.
+/// <c>%s</c> inside a longer argument gives the paths joined by spaces. An argument whose <c>%f</c>, <c>%n</c> or
+/// <c>%s</c> has nothing to stand for is left out entirely. A line using <c>%t</c> while there is no other folder
+/// cannot be used at all (<see cref="OtherFolderUnavailableException"/>): leaving that argument out would shift the
+/// others, and <c>cp %s %t</c> would copy one marked file over another.
 /// </remarks>
 public static class ArgumentTemplate
 {
     /// <summary>What the placeholders stand for.</summary>
-    /// <param name="OtherPath">The other panel's folder; empty when it has none on the local disk.</param>
+    /// <param name="OtherPath">The other panel's folder; null when it has none on the local disk.</param>
     /// <param name="CursorPath">The item under the cursor; null on "..", or in an empty folder.</param>
     /// <param name="Targets">The full paths of the items a command acts on.</param>
-    public sealed record Context(string CurrentPath, string OtherPath, string? CursorPath,
+    public sealed record Context(string CurrentPath, string? OtherPath, string? CursorPath,
         IReadOnlyList<string> Targets);
 
+    /// <summary>The line uses <c>%t</c>, but <see cref="Context.OtherPath"/> is null.</summary>
+    public sealed class OtherFolderUnavailableException()
+        : InvalidOperationException("The line uses the other panel's folder, and there is none.");
+
+    /// <exception cref="OtherFolderUnavailableException">The line uses <c>%t</c> and there is no other
+    /// folder.</exception>
     public static IReadOnlyList<string> Expand(string template, Context context)
     {
         ArgumentNullException.ThrowIfNull(template);
@@ -76,10 +86,12 @@ public static class ArgumentTemplate
         return tokens;
     }
 
-    /// <summary>The argument with its placeholders replaced; null when one of them has nothing to stand for.</summary>
+    /// <summary>The argument with its placeholders replaced; null when one of them has nothing to stand for. Reads
+    /// the whole argument even then, so a <c>%t</c> without an other folder always throws.</summary>
     private static string? Substitute(string token, Context context)
     {
         var result = new StringBuilder(token.Length);
+        var missing = false;
         for (var i = 0; i < token.Length; i++)
         {
             if (token[i] != '%' || i + 1 == token.Length)
@@ -92,7 +104,7 @@ public static class ArgumentTemplate
             {
                 case '%': value = "%"; break;
                 case 'p': value = context.CurrentPath; break;
-                case 't': value = context.OtherPath.Length > 0 ? context.OtherPath : null; break;
+                case 't': value = context.OtherPath ?? throw new OtherFolderUnavailableException(); break;
                 case 'f': value = context.CursorPath; break;
                 case 'n': value = context.CursorPath is { } path ? NameOf(path) : null; break;
                 case 's': value = context.Targets.Count > 0 ? string.Join(' ', context.Targets) : null; break;
@@ -100,11 +112,11 @@ public static class ArgumentTemplate
                     result.Append('%');
                     continue;
             }
-            if (value is null) return null;
-            result.Append(value);
+            if (value is null) missing = true;
+            else result.Append(value);
             i++;
         }
-        return result.ToString();
+        return missing ? null : result.ToString();
     }
 
     private static string NameOf(string path) => Path.GetFileName(path.TrimEnd('/'));

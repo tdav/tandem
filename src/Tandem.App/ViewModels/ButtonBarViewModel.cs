@@ -14,9 +14,10 @@ namespace Tandem.App.ViewModels;
 /// </summary>
 /// <remarks>
 /// Created and used on the UI thread. The buttons work only while the active panel shows a local folder (the
-/// programs get local paths). A program that cannot be started is told to the user; once started it runs on its
-/// own: its output is dropped, its exit code not shown, and it is never killed (see
-/// <see cref="ProgramLauncher.Start"/>).
+/// programs get local paths); a command whose arguments use the other panel's folder is not started while that panel
+/// is not on the local disk, and the user is told. A program that cannot be started (or an application that
+/// <c>open</c> cannot launch) is told to the user; once started it runs on its own: its output is dropped, its exit
+/// code not shown, and it is never killed (see <see cref="ProgramLauncher.Start"/>).
 /// </remarks>
 public sealed partial class ButtonBarViewModel : ObservableObject, IDisposable
 {
@@ -27,6 +28,7 @@ public sealed partial class ButtonBarViewModel : ObservableObject, IDisposable
     private readonly Action<Exception> _reportFailure;
     private PanelViewModel? _watched;
     private bool _canRun;
+    private bool _disposed;
 
     public ButtonBarViewModel(WorkspaceViewModel workspace, SettingsService settings, IProcessRunner processes,
         IDialogService dialogs, Action<Exception> reportFailure)
@@ -71,28 +73,39 @@ public sealed partial class ButtonBarViewModel : ObservableObject, IDisposable
         var passive = _workspace.PassivePanel;
         var context = new ArgumentTemplate.Context(
             panel.CurrentPath.Path,
-            ShellCommands.IsLocal(passive) ? passive.CurrentPath.Path : "",
+            ShellCommands.IsLocal(passive) ? passive.CurrentPath.Path : null,
             panel.CursorRow is { IsParentLink: false, Entry: { } entry } ? entry.Path.Path : null,
             panel.GetOperationTargets().Select(e => e.Path.Path).ToArray());
+        var failureText = Loc.Format("UserCommand_StartFailed", button.Title);
+        Task<string?> verdict;
         try
         {
             var arguments = ArgumentTemplate.Expand(button.Arguments, context);
             var spec = ProgramLauncher.Build(button.Program, arguments, context.CurrentPath,
                 _workspace.HomeDirectory);
-            ProgramLauncher.Start(_processes, spec);
+            verdict = ProgramLauncher.Start(_processes, spec);
+        }
+        catch (ArgumentTemplate.OtherFolderUnavailableException)
+        {
+            await TellAsync(Loc.Format("UserCommand_OtherPanelNotLocal", button.Title), null);
+            return;
         }
         catch (Exception e) when (ProgramLauncher.IsStartFailure(e))
         {
-            await TellAsync(Loc.Format("UserCommand_StartFailed", button.Title), e.Message);
+            await TellAsync(failureText, e.Message);
+            return;
         }
         catch (Exception e)
         {
             _reportFailure(e);
+            return;
         }
+        _ = ObserveAsync(verdict, failureText);
     }
 
     public void Dispose()
     {
+        _disposed = true;
         _settings.Changed -= OnSettingsChanged;
         _workspace.PropertyChanged -= OnWorkspacePropertyChanged;
         if (_watched is not null) _watched.PropertyChanged -= OnPanelPropertyChanged;
@@ -130,7 +143,13 @@ public sealed partial class ButtonBarViewModel : ObservableObject, IDisposable
         if (e.PropertyName == nameof(PanelViewModel.CurrentPath)) CanRun = ShellCommands.IsLocal(_watched);
     }
 
-    private async Task TellAsync(string text, string detail)
+    /// <summary>An application that the launcher could not start is told, with the launcher's words.</summary>
+    private async Task ObserveAsync(Task<string?> verdict, string failureText)
+    {
+        if (await verdict is { } output && !_disposed) await TellAsync(failureText, output.Length > 0 ? output : null);
+    }
+
+    private async Task TellAsync(string text, string? detail)
     {
         try
         {

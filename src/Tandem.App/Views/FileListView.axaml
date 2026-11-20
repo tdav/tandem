@@ -11,7 +11,7 @@
         <Style Selector="ListBox#Rows ListBoxItem">
             <Setter Property="Height" Value="{Binding $parent[v:FileListView].((vm:SideViewModel)DataContext).Layout.RowHeight}" />
             <Setter Property="MinHeight" Value="0" />
-            <Setter Property="Padding" Value="6,0" />
+            <Setter Property="Padding" Value="{StaticResource Tandem.ListItemPadding}" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
         <!-- The cursor: a filled row in the active panel, an outlined row in the other one. -->

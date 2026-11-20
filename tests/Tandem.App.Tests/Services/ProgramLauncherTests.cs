@@ -56,7 +56,7 @@ public class ProgramLauncherTests
         var runner = new FakeProcessRunner();
         var spec = new ProcessSpec("/usr/bin/true", ["x"], "/cur");
 
-        ProgramLauncher.Start(runner, spec);
+        var verdict = ProgramLauncher.Start(runner, spec);
 
         Assert.Equal([spec], runner.Started);
         var process = runner.Last;
@@ -66,6 +66,35 @@ public class ProgramLauncherTests
         await WaitUntil(() => process.IsDisposed);
         Assert.Equal(0, process.Kills);
         Assert.Equal(3, await process.ExitCode);
+        Assert.Null(await verdict.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken)); // a plain program's exit code is not looked at
+    }
+
+    [Theory]
+    [InlineData(1, "Unable to find application named 'Missing'")]
+    [InlineData(0, null)]
+    public async Task Application_that_open_cannot_launch_gives_its_output_as_the_verdict(int code, string? verdict)
+    {
+        var runner = new FakeProcessRunner();
+        var launch = ProgramLauncher.Start(runner,
+            ProgramLauncher.Build("/Applications/Missing.app", ["/cur/a"], "/cur", "/Users/me"));
+
+        runner.Last.Write("Unable to find application named 'Missing'");
+        runner.Last.Exit(code);
+
+        Assert.Equal(verdict, await launch.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
+        await WaitUntil(() => runner.Last.IsDisposed);
+        Assert.Equal(0, runner.Last.Kills);
+    }
+
+    [Fact]
+    public async Task Open_failing_without_output_still_gives_a_verdict()
+    {
+        var runner = new FakeProcessRunner();
+        var launch = ProgramLauncher.Start(runner, ProgramLauncher.Build("X.app", [], "/cur", "/Users/me"));
+
+        runner.Last.Exit(1);
+
+        Assert.Equal("", await launch.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -74,7 +103,9 @@ public class ProgramLauncherTests
         var runner = new FakeProcessRunner { StartFailure = new System.ComponentModel.Win32Exception("No such file") };
 
         var error = Assert.Throws<System.ComponentModel.Win32Exception>(() =>
-            ProgramLauncher.Start(runner, new ProcessSpec("/nowhere", [])));
+        {
+            _ = ProgramLauncher.Start(runner, new ProcessSpec("/nowhere", []));
+        });
         Assert.Equal("No such file", error.Message);
     }
 
@@ -86,7 +117,9 @@ public class ProgramLauncherTests
         string[] arguments = ["a b", "$HOME", "\"q\"", "*", "; ls"];
         await using var process = runner.Start(ProgramLauncher.Build("/bin/echo", arguments, "/", "/Users/me"));
         var lines = new List<string>();
-        await foreach (var line in process.OutputLines) lines.Add(line);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(10));
+        await foreach (var line in process.OutputLines.WithCancellation(timeout.Token)) lines.Add(line);
 
         Assert.Equal([string.Join(' ', arguments)], lines);
     }

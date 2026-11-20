@@ -321,20 +321,20 @@ public sealed class ShellCommands : IDisposable
     private void OnOpenFailed(object? sender, Exception error) =>
         _ = TellAsync(OperationTexts.ForFailure(error), error.Message);
 
-    /// <summary>F4: a local file goes to the external editor when the settings name one (started in the file's
-    /// folder, the file its one argument; a start that fails is told to the user). Otherwise the file under the
-    /// cursor opens in the built-in editor, read off the UI thread; its window comes forward instead when it is open
-    /// already. A file the editor refuses (too large, binary) or cannot read is told to the user.</summary>
+    /// <summary>F4: a file already open in a built-in editor window brings that window forward. Otherwise a local
+    /// file goes to the external editor when the settings name one (started in the file's folder, the file its one
+    /// argument; a start that fails, or an application that open cannot launch, is told to the user), and any other
+    /// file opens in the built-in editor, read off the UI thread. A file the editor refuses (too large, binary) or cannot read is told to the user.</summary>
     private async Task EditAsync()
     {
-        if (CursorEntry() is not { IsDirectoryLike: false } entry) return;
+        if (CursorEntry() is not { IsDirectoryLike: false } entry || await _windows.TryActivateEditorAsync(entry.Path))
+            return;
         if (entry.Path.ProviderId == VfsPath.LocalProviderId && _settings?.Current.ExternalEditor is { } program &&
             _processes is not null)
         {
             await EditExternallyAsync(program, entry.Path.Path);
             return;
         }
-        if (await _windows.TryActivateEditorAsync(entry.Path)) return;
         EditorViewModel editor;
         try
         {
@@ -358,15 +358,26 @@ public sealed class ShellCommands : IDisposable
 
     private async Task EditExternallyAsync(string program, string path)
     {
+        var failureText = Loc.Format("UserCommand_StartFailed", program);
+        Task<string?> verdict;
         try
         {
             var folder = Path.GetDirectoryName(path) ?? "/";
-            ProgramLauncher.Start(_processes!, ProgramLauncher.Build(program, [path], folder, _workspace.HomeDirectory));
+            verdict = ProgramLauncher.Start(_processes!,
+                ProgramLauncher.Build(program, [path], folder, _workspace.HomeDirectory));
         }
         catch (Exception e) when (ProgramLauncher.IsStartFailure(e))
         {
-            await TellAsync(Loc.Format("UserCommand_StartFailed", program), e);
+            await TellAsync(failureText, e);
+            return;
         }
+        // An application that open could not launch is told a moment later, with open's words; F4 does not wait.
+        _ = ObserveLaunchAsync(verdict, failureText);
+    }
+
+    private async Task ObserveLaunchAsync(Task<string?> verdict, string failureText)
+    {
+        if (await verdict is { } output && !_disposed) await TellAsync(failureText, output.Length > 0 ? output : null);
     }
 
     /// <summary>F3: the file under the cursor in the built-in viewer, opened off the UI thread. A file that cannot be

@@ -97,6 +97,51 @@ public class ButtonBarTests : LanguageTestBase
     }
 
     [AvaloniaFact]
+    public async Task Application_that_cannot_be_launched_is_told_with_the_launchers_words()
+    {
+        var processes = new FakeProcessRunner();
+        var button = new UserButton("Show", "/Applications/Missing.app", "%f");
+        await using var app = await StartAsync(processes, buttons: button);
+        app.Left.CursorIndex = IndexOf(app.Left, "notes.txt");
+
+        await app.Main.ButtonBar.RunAsync(button);
+        processes.Last.Write("Unable to find application named 'Missing'");
+        processes.Last.Exit(1);
+        await TestApp.WaitUntil(() =>
+        {
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            return app.Dialogs.Messages.Count > 0;
+        });
+
+        Assert.Equal([(Loc.Format("UserCommand_StartFailed", "Show"), "Unable to find application named 'Missing'")],
+            app.Dialogs.MessagesWithDetail);
+        Assert.Empty(app.Failures);
+    }
+
+    [AvaloniaFact]
+    public async Task Command_needing_the_other_folder_is_not_started_when_that_panel_is_not_local()
+    {
+        var processes = new FakeProcessRunner();
+        var copy = new UserButton("Copy", "/bin/cp", "%s %t");
+        await using var app = await StartAsync(processes, buttons: copy);
+        await app.Right.NavigateToAsync(new VfsPath("remote", "/shared"));
+        app.Left.Rows.Single(r => r.Name == "notes.txt").IsSelected = true;
+        app.Left.Rows.Single(r => r.Name == "report.pdf").IsSelected = true;
+        Assert.True(app.Main.ButtonBar.CanRun);
+
+        await app.Main.ButtonBar.RunAsync(copy);
+
+        Assert.Empty(processes.Started);
+        Assert.Equal([Loc.Format("UserCommand_OtherPanelNotLocal", "Copy")], app.Dialogs.Messages);
+        Assert.Empty(app.Failures);
+
+        // A command that does not use the other folder still runs.
+        var zip = new UserButton("Zip", "/usr/bin/zip", "-r out.zip %s");
+        await app.Main.ButtonBar.RunAsync(zip);
+        Assert.Single(processes.Started);
+    }
+
+    [AvaloniaFact]
     public async Task Buttons_cannot_run_on_a_non_local_panel()
     {
         var processes = new FakeProcessRunner();

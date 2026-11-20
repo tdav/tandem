@@ -34,18 +34,21 @@ public static class ProgramLauncher
     }
 
     /// <summary>
-    /// Starts <paramref name="spec"/> and lets it run on its own: its output is read and dropped (so it never blocks
-    /// on a full pipe), and the process is released, not killed, once it has exited. Its exit code is not looked
-    /// at.
+    /// Starts <paramref name="spec"/> and lets it run on its own: its output is read (so it never blocks on a full
+    /// pipe), and the process is released, not killed, once it has exited. The result completes when it has exited:
+    /// for an application started through <c>/usr/bin/open</c> that exited with a code other than 0 (the application
+    /// is missing, say), with the launcher's output (its lines, possibly none); otherwise with null. The exit code of
+    /// any other program is not looked at, and its output is dropped.
     /// </summary>
     /// <exception cref="Exception">Whatever <see cref="IProcessRunner.Start"/> throws when the program cannot be
-    /// started.</exception>
-    public static void Start(IProcessRunner runner, ProcessSpec spec)
+    /// started (see <see cref="IsStartFailure"/>).</exception>
+    public static Task<string?> Start(IProcessRunner runner, ProcessSpec spec)
     {
         ArgumentNullException.ThrowIfNull(runner);
         ArgumentNullException.ThrowIfNull(spec);
         var process = runner.Start(spec);
-        _ = Task.Run(() => LetRunAsync(process));
+        var keepOutput = spec.FileName == Open;
+        return Task.Run(() => LetRunAsync(process, keepOutput));
     }
 
     /// <summary>Whether <paramref name="error"/>, thrown by <see cref="Start"/>, means the program could not be
@@ -53,14 +56,19 @@ public static class ProgramLauncher
     public static bool IsStartFailure(Exception error) =>
         error is Win32Exception or IOException or UnauthorizedAccessException or InvalidOperationException;
 
-    /// <summary>Reads the output away while the process runs and releases it once it has exited (disposing it then
+    /// <summary>The most lines of the launcher's output kept for its verdict.</summary>
+    private const int VerdictLines = 20;
+
+    /// <summary>Reads the output while the process runs and releases it once it has exited (disposing it then
     /// kills nothing: a program it left running in the background keeps running).</summary>
-    private static async Task LetRunAsync(IRunningProcess process)
+    private static async Task<string?> LetRunAsync(IRunningProcess process, bool keepOutput)
     {
-        var drained = DrainAsync(process);
+        var lines = new List<string>();
+        var drained = DrainAsync(process, keepOutput ? lines : null);
+        int? code = null;
         try
         {
-            await process.ExitCode;
+            code = await process.ExitCode;
         }
         catch (Exception)
         {
@@ -68,22 +76,34 @@ public static class ProgramLauncher
         }
         try
         {
+            await drained.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        catch (Exception)
+        {
+            // a program it started still holds the output: give up on the rest
+        }
+        try
+        {
             await process.DisposeAsync();
-            await drained;
         }
         catch (Exception)
         {
             // already let go
         }
+        if (!keepOutput || code is null or 0) return null;
+        lock (lines) return string.Join('\n', lines);
     }
 
-    private static async Task DrainAsync(IRunningProcess process)
+    private static async Task DrainAsync(IRunningProcess process, List<string>? keep)
     {
         try
         {
-            await foreach (var _ in process.OutputLines)
+            await foreach (var line in process.OutputLines)
             {
-                // dropped
+                if (keep is null) continue;
+                lock (keep)
+                    if (keep.Count < VerdictLines)
+                        keep.Add(line);
             }
         }
         catch (Exception)

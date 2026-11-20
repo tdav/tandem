@@ -1053,4 +1053,7 @@
   <data name="UserCommand_StartFailed" xml:space="preserve">
     <value>Не удалось запустить «{0}».</value>
   </data>
+  <data name="UserCommand_OtherPanelNotLocal" xml:space="preserve">
+    <value>«{0}» использует папку другой панели, а она не на диске этого Mac. Команда не запущена.</value>
+  </data>
 </root>

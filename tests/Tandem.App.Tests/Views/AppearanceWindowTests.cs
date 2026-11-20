@@ -77,6 +77,42 @@ public class AppearanceWindowTests : LanguageTestBase, IDisposable
         AssertHeadersLineUpWithCells(app, PanelSide.Right);
     }
 
+    [AvaloniaFact]
+    public async Task Headers_line_up_with_cells_when_the_list_scrolls()
+    {
+        var fs = TestApp.DefaultFileSystem();
+        for (var i = 0; i < 100; i++) fs.AddFile($"/home/many/file{i:D3}.txt", "x");
+        await using var app = await TestApp.StartAsync(fs);
+        await app.Left.NavigateToAsync(VfsPath.Local("/home/many"));
+        app.Pump();
+        var list = app.FileList(PanelSide.Left);
+        var scrollBar = list.GetVisualDescendants().OfType<Avalonia.Controls.Primitives.ScrollBar>()
+            .Single(b => b.Orientation == Avalonia.Layout.Orientation.Vertical);
+        Assert.True(scrollBar.IsEffectivelyVisible, "The list should scroll.");
+
+        var row = RowOf(app, PanelSide.Left, "file001.txt");
+        foreach (var (header, cell) in new[] { ("SortByName", "RowName"), ("SortByExtension", "RowExtension"),
+                     ("SortBySize", "RowSize"), ("SortByDate", "RowModified"), ("SortByMode", "RowMode") })
+        {
+            var button = Header(app, PanelSide.Left, header);
+            var block = Cell(row, cell);
+            var headerX = button.TranslatePoint(default, app.Window)!.Value.X;
+            var cellX = block.TranslatePoint(default, app.Window)!.Value.X - block.Margin.Left;
+            Assert.True(Math.Abs(headerX - cellX) <= 1, $"{header}: header at {headerX}, cell at {cellX}.");
+        }
+        // One padding for both: the list item's and the header row's.
+        var padding = Assert.IsType<Thickness>(Resource(app, "Tandem.ListItemPadding"));
+        Assert.Equal(padding, ((ListBoxItem)row).Padding);
+        Assert.Equal(padding, app.PanelView(PanelSide.Left).GetVisualDescendants().OfType<Border>()
+            .Single(b => b.Name == "HeaderRow").Padding);
+        // The last column ends at the same place too.
+        var mode = Cell(row, "RowMode");
+        var modeRight = mode.TranslatePoint(default, app.Window)!.Value.X + mode.Bounds.Width + mode.Margin.Right;
+        var headerMode = Header(app, PanelSide.Left, "SortByMode");
+        var headerRight = headerMode.TranslatePoint(default, app.Window)!.Value.X + headerMode.Bounds.Width;
+        Assert.True(Math.Abs(headerRight - modeRight) <= 1, $"header ends at {headerRight}, cell at {modeRight}.");
+    }
+
     // Each visible column's header starts where its cells start (the cell's own margin left out), within a pixel.
     private static void AssertHeadersLineUpWithCells(TestApp app, PanelSide side)
     {
