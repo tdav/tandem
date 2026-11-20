@@ -232,6 +232,48 @@ public sealed class ViewerViewModelTests : LanguageTestBase, IDisposable
     }
 
     [AvaloniaFact]
+    public async Task Utf16_log_with_colour_codes_without_a_byte_order_mark_opens_as_text()
+    {
+        const string line = "\u001b[31mERROR\u001b[0m 12:00:01 disk is full\r\n";
+        var content = TextEncodings.Utf16LE.Encoding.GetBytes(string.Concat(Enumerable.Repeat(line, 50)));
+        Assert.Equal(TextEncodings.Utf16LE, TextEncodingDetector.Detect(content, sampleIsWholeFile: true).Encoding);
+
+        await using var viewer = await OpenAsync("build.log", content);
+
+        Assert.Equal(ViewerMode.Text, viewer.Mode);
+        Assert.Equal(TextEncodings.Utf16LE, viewer.Encoding);
+        Assert.Equal(line.TrimEnd('\n', '\r'), viewer.Lines[0]);
+    }
+
+    [AvaloniaFact]
+    public async Task Utf16_text_with_a_few_stray_control_characters_opens_as_text()
+    {
+        // One stray control unit in a hundred: under the 10 % share.
+        var line = new string('я', 99) + "\u0007";
+        var content = TextEncodings.Utf16LE.Encoding.GetBytes(string.Concat(Enumerable.Repeat(line, 20)));
+
+        await using var viewer = await OpenAsync("bell.txt", content);
+
+        Assert.Equal(ViewerMode.Text, viewer.Mode);
+    }
+
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Mixed_16_bit_numbers_without_a_byte_order_mark_open_as_hex(bool bigEndian)
+    {
+        // Values 0..63, a third of them printable: still far more control units than text has.
+        var content = Enumerable.Range(0, 2000)
+            .SelectMany(i => bigEndian ? new byte[] { 0, (byte)(1 + i % 63) } : [(byte)(1 + i % 63), 0]).ToArray();
+        Assert.Equal(bigEndian ? TextEncodings.Utf16BE : TextEncodings.Utf16LE,
+            TextEncodingDetector.Detect(content, sampleIsWholeFile: true).Encoding);
+
+        await using var viewer = await OpenAsync("samples.raw", content);
+
+        Assert.Equal(ViewerMode.Hex, viewer.Mode);
+    }
+
+    [AvaloniaFact]
     public async Task Lone_surrogate_in_a_utf16_guess_opens_as_hex()
     {
         var units = Enumerable.Repeat('я', 40).Concat(['\uDC00']).Concat(Enumerable.Repeat('я', 40)).ToArray();

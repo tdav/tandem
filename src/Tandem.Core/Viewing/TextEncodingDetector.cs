@@ -20,7 +20,9 @@ public static class TextEncodingDetector
     private const int MinUtf16Sample = 16;
     private const double Utf16HighByteShare = 0.9;
     private const double Utf16LowByteShare = 0.5;
-    private const double BinaryControlShare = 0.1;
+    /// <summary>A sample is binary when control characters other than tab, line feed, form feed, carriage return
+    /// and escape make up more than this share of it.</summary>
+    public const double BinaryControlShare = 0.1;
 
     /// <summary>
     /// Checks, in order: a byte order mark; UTF-16 without one (high bytes 0x00/0x04 on one parity);

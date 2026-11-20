@@ -417,9 +417,10 @@ public sealed partial class ViewerViewModel : ObservableObject, IAsyncDisposable
     /// <summary>
     /// Whether a UTF-16 guess made without a byte order mark is unlikely to be text. The detector makes it from the
     /// share of zero bytes at odd or even positions alone, which arrays of small 16-bit numbers (tables, sound
-    /// samples) share with text, and then does not look for binary data. So the sample is decoded here: a control
-    /// character other than tab, line feed, form feed and carriage return, or a lone surrogate, means binary. A high
-    /// surrogate at the very end of a sample cut from a longer file is not counted.
+    /// samples) share with text, and then does not look for binary data. So the sample is decoded here, judged like
+    /// the 8-bit check: binary when control characters other than tab, line feed, form feed, carriage return and
+    /// escape make up more than <see cref="TextEncodingDetector.BinaryControlShare"/> of the units. A lone surrogate
+    /// is binary at once; a high surrogate at the very end of a sample cut from a longer file is not counted.
     /// </summary>
     private static bool IsUnlikelyUtf16(EncodingGuess guess, ReadOnlySpan<byte> sample, bool wholeFile)
     {
@@ -430,12 +431,14 @@ public sealed partial class ViewerViewModel : ObservableObject, IAsyncDisposable
         else return false;
 
         var units = sample.Length / 2;
+        if (units == 0) return false;
+        var controls = 0;
         for (var i = 0; i < units; i++)
         {
             var unit = Unit(sample, i, bigEndian);
             if (unit < 0x20)
             {
-                if (unit is not ('\t' or '\n' or '\f' or '\r')) return true;
+                if (unit is not ('\t' or '\n' or '\f' or '\r' or '\u001b')) controls++;
             }
             else if (char.IsHighSurrogate(unit))
             {
@@ -454,7 +457,7 @@ public sealed partial class ViewerViewModel : ObservableObject, IAsyncDisposable
                 return true;
             }
         }
-        return false;
+        return (double)controls / units > TextEncodingDetector.BinaryControlShare;
     }
 
     private static char Unit(ReadOnlySpan<byte> bytes, int index, bool bigEndian) =>
