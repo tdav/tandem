@@ -89,13 +89,14 @@ public sealed class PackOperation : FileOperation
     }
 
     /// <exception cref="OperationRejectedException">The format cannot be created, a source is a root, two sources
-    /// share a name (ordinal), or the archive file lies in a source.</exception>
+    /// share a name (ignoring case), or the archive file lies in a source.</exception>
     private void RejectInvalidRequest()
     {
         if (!ArchiveFormats.Creatable.Contains(_format))
             throw new OperationRejectedException(RejectionReason.FormatNotWritable,
                 $"Archives of the format {_format} cannot be created.", destination: _archiveFile);
-        var names = new HashSet<string>(StringComparer.Ordinal);
+        // Ignoring case: unpacked on a case-insensitive disk (APFS by default) the two would be one item.
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var source in _sources)
         {
             if (!source.IsRoot && !names.Add(source.Name))

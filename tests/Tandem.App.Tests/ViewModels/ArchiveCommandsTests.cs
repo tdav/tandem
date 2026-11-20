@@ -6,6 +6,7 @@ using Tandem.App.Services;
 using Tandem.App.Tests.Views;
 using Tandem.App.ViewModels.Dialogs;
 using Tandem.Archives;
+using Tandem.Archives.Tests;
 using Tandem.Core.Operations;
 using Tandem.Core.Vfs;
 
@@ -180,11 +181,11 @@ public class ArchiveCommandsTests : LanguageTestBase
 
         var request = Assert.Single(app.Dialogs.UnpackRequests);
         Assert.Equal((2, null, true), (request.ArchiveCount, request.SingleName, request.SeparateFolders));
-        // Both are named "sample": the second goes into the same folder and asks about the files there.
-        Assert.Equal(["sample"], ArchiveApp.Names(app.Right));
+        // Both are named "sample": each gets a folder of its own, and nothing collides.
+        Assert.Equal(["sample", "sample 2"], ArchiveApp.Names(app.Right));
         Assert.Equal("a", app.Fs.ReadAllText("/dst/sample/a.txt"));
-        Assert.All(app.Dialogs.ConflictRequests, c => Assert.StartsWith("/dst/sample/", c.Existing.Path.Path,
-            StringComparison.Ordinal));
+        Assert.Equal("a", app.Fs.ReadAllText("/dst/sample 2/a.txt"));
+        Assert.Empty(app.Dialogs.ConflictRequests);
         Assert.Empty(app.Failures);
     }
 
@@ -192,9 +193,12 @@ public class ArchiveCommandsTests : LanguageTestBase
     public async Task Unpack_into_a_new_named_folder_and_unavailable_without_an_archive()
     {
         await using var app = await ArchiveApp.StartAsync();
-        ArchiveApp.Cursor(app, app.Left, "notes.txt");
+        Mark(app, "notes.txt", "README.md"); // marked items count by name only: no archive among them
         Assert.False(app.Main.Commands.CanExecute(CommandIds.ArchiveUnpack));
         Assert.True(app.Main.Commands.CanExecute(CommandIds.ArchivePack));
+        Mark(app, "sample.zip");
+        Assert.True(app.Main.Commands.CanExecute(CommandIds.ArchiveUnpack));
+        app.Left.ClearSelection();
 
         ArchiveApp.Cursor(app, app.Left, "sample.7z");
         Assert.True(app.Main.Commands.CanExecute(CommandIds.ArchiveUnpack));
@@ -206,6 +210,44 @@ public class ArchiveCommandsTests : LanguageTestBase
         Assert.Equal("hello\n", app.Fs.ReadAllText("/dst/out/docs/readme.txt"));
         Assert.Equal(["out"], ArchiveApp.Names(app.Right));
         Assert.Empty(app.Dialogs.Messages);
+    }
+
+    [AvaloniaFact]
+    public async Task Alt_F9_unpacks_a_zip_named_docx_under_the_cursor()
+    {
+        var fs = ArchiveApp.FileSystem();
+        fs.AddFile(TestApp.Home + "/report.docx", Fixture.Bytes("sample.zip"));
+        await using var app = await ArchiveApp.StartAsync(fs);
+        ArchiveApp.Cursor(app, app.Left, "report.docx");
+        Assert.True(app.Main.Commands.CanExecute(CommandIds.ArchiveUnpack)); // the content decides when it runs
+        app.Dialogs.AnswerUnpack();
+
+        AltF9(app);
+        await ArchiveApp.SettleAsync(app);
+
+        var request = Assert.Single(app.Dialogs.UnpackRequests);
+        Assert.Equal((1, "report.docx"), (request.ArchiveCount, request.SingleName));
+        Assert.Equal(ArchiveApp.RootNames, ArchiveApp.Names(app.Right));
+        Assert.Equal("hello\n", app.Fs.ReadAllText("/dst/docs/readme.txt"));
+        Assert.Empty(app.Dialogs.Messages);
+        Assert.Empty(app.Failures);
+    }
+
+    [AvaloniaFact]
+    public async Task Alt_F9_on_a_plain_file_says_it_is_no_archive_and_writes_nothing()
+    {
+        await using var app = await ArchiveApp.StartAsync();
+        var before = app.Fs.AllPaths.ToList();
+        ArchiveApp.Cursor(app, app.Left, "notes.txt");
+        app.Dialogs.AnswerUnpack();
+
+        AltF9(app);
+        await ArchiveApp.SettleAsync(app);
+
+        Assert.Empty(app.Dialogs.UnpackRequests); // told before any dialog
+        Assert.Equal([Loc("Archive_NotAnArchive", "notes.txt")], app.Dialogs.Messages);
+        Assert.Equal(before, app.Fs.AllPaths);
+        Assert.Empty(app.Failures);
     }
 
     [AvaloniaFact]

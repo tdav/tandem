@@ -15,8 +15,8 @@ namespace Tandem.App.ViewModels;
 /// </summary>
 /// <remarks>
 /// Created and used on the UI thread; mounting and listing archives run off it. Packing applies to the active panel's
-/// targets and proposes the passive panel's folder; unpacking applies to the archives among the targets (by name) and
-/// is unavailable when there is none. Both need a passive panel showing a folder that can be written, and both run
+/// targets and proposes the passive panel's folder; unpacking applies to the archives among the marked targets (by
+/// name; unavailable when there is none) or to the file under the cursor, whose content decides when it runs. Both need a passive panel showing a folder that can be written, and both run
 /// their operation through <see cref="FileCommands.StartOperation"/>, so the panels are read again and errors told as
 /// for copying. <see cref="CommandRegistry.RaiseCanExecuteChanged"/> is raised only when availability changes.
 /// </remarks>
@@ -34,6 +34,7 @@ public sealed class ArchiveCommands : IDisposable
     private readonly List<Task> _pending = [];
     private readonly List<PanelViewModel> _watched = [];
     private bool[] _available = [];
+    private (PanelViewModel Panel, int Count)? _markedArchives;
     private bool _disposed;
 
     public ArchiveCommands(WorkspaceViewModel workspace, AppServices services, ArchiveMounts mounts, FileCommands files,
@@ -102,14 +103,33 @@ public sealed class ArchiveCommands : IDisposable
 
     private bool CanPack() => HasTargets() && PassiveCanTakeFiles();
 
-    private bool CanUnpack() => HasTargets() && PassiveCanTakeFiles() && ArchivesAmong(Active!).Count > 0;
+    /// <summary>Marked rows count by name; a single file under the cursor (nothing marked) may be an archive by its
+    /// content, which is looked at when the command runs.</summary>
+    private bool CanUnpack()
+    {
+        if (!HasTargets() || !PassiveCanTakeFiles()) return false;
+        var panel = Active!;
+        return panel.SelectedCount == 0
+            ? panel.CursorRow is { IsParentLink: false, Entry.Kind: EntryKind.File }
+            : MarkedArchiveCount(panel) > 0;
+    }
 
-    /// <summary>The archives among the panel's targets, by name. Asked often: it looks at the selection or the
-    /// cursor row only.</summary>
+    /// <summary>How many marked rows are archives by name; kept until the marks, the folder or its rows change, so a
+    /// cursor move over a large marked folder does not walk it again.</summary>
+    private int MarkedArchiveCount(PanelViewModel panel)
+    {
+        if (_markedArchives is { } known && ReferenceEquals(known.Panel, panel)) return known.Count;
+        var count = panel.GetOperationTargets().Count(IsArchive);
+        _markedArchives = (panel, count);
+        return count;
+    }
+
+    /// <summary>The archives among the panel's targets, by name. With nothing marked, the file under the cursor
+    /// whatever its name (its content decides).</summary>
     private List<FileEntry> ArchivesAmong(PanelViewModel panel)
     {
         if (panel.SelectedCount == 0)
-            return panel.CursorRow is { IsParentLink: false, Entry: { } entry } && IsArchive(entry) ? [entry] : [];
+            return panel.CursorRow is { IsParentLink: false, Entry: { Kind: EntryKind.File } entry } ? [entry] : [];
         return panel.GetOperationTargets().Where(IsArchive).ToList();
     }
 
@@ -125,6 +145,7 @@ public sealed class ArchiveCommands : IDisposable
     {
         foreach (var panel in _watched) panel.PropertyChanged -= OnPanelPropertyChanged;
         _watched.Clear();
+        _markedArchives = null;
         if (_workspace.IsLoaded)
         {
             foreach (var panel in new[] { _workspace.ActivePanel, _workspace.PassivePanel })
@@ -140,7 +161,10 @@ public sealed class ArchiveCommands : IDisposable
     {
         if (e.PropertyName is nameof(PanelViewModel.CursorIndex) or nameof(PanelViewModel.SelectedCount)
             or nameof(PanelViewModel.CurrentPath) or nameof(PanelViewModel.Error) or nameof(PanelViewModel.TotalCount))
+        {
+            if (e.PropertyName is not nameof(PanelViewModel.CursorIndex)) _markedArchives = null;
             UpdateAvailability();
+        }
     }
 
     private void UpdateAvailability()
@@ -256,6 +280,7 @@ public sealed class ArchiveCommands : IDisposable
         if (archives.Count == 0) return;
         var to = passive.CurrentPath;
         var from = active.CurrentPath;
+        if (active.SelectedCount == 0 && !IsArchive(archives[0]) && !await IsArchiveByContentAsync(archives[0])) return;
 
         var answer = await _services.Dialogs.AskUnpackAsync(new UnpackRequest(archives.Count,
             archives.Count == 1 ? archives[0].Name : null, to.Path, SeparateFolders: archives.Count > 1,
@@ -270,13 +295,15 @@ public sealed class ArchiveCommands : IDisposable
         }
         if (create && !await CreateFolderAsync(destination)) return;
 
+        // Folders of this run, so two archives of one name (a.zip, a.tar.gz) never share one.
+        var folders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var archive in archives)
         {
             if (await RootEntriesAsync(archive.Path) is not { } entries || entries.Count == 0) continue;
             var target = destination;
             if (answer.SeparateFolders)
             {
-                target = destination.Combine(ArchiveFormats.NameWithoutSuffix(archive.Name));
+                target = destination.Combine(UniqueName(folders, ArchiveFormats.NameWithoutSuffix(archive.Name)));
                 if (!await CreateFolderAsync(target)) continue;
             }
             IReadOnlyList<VfsPath> alsoChanged = create || answer.SeparateFolders
@@ -285,6 +312,36 @@ public sealed class ArchiveCommands : IDisposable
             _files.StartOperation(new CopyOperation(Providers, entries, target, new CopyOptions(), _interaction,
                 _services.NativeCopy, kind: OperationKind.Unpack), answer.RunImmediately, alsoChanged);
         }
+    }
+
+    /// <summary><paramref name="name"/>, or "name 2", "name 3"… when this run has used it already; added to
+    /// <paramref name="used"/>.</summary>
+    private static string UniqueName(HashSet<string> used, string name)
+    {
+        var unique = name;
+        for (var n = 2; !used.Add(unique); n++) unique = Loc.Format("Archive_FolderNumbered", name, n);
+        return unique;
+    }
+
+    /// <summary>Whether the file's content is an archive's, looked at (and mounted) off the UI thread. When it is not,
+    /// or it cannot be read, the user is told; a declined password says nothing.</summary>
+    private async Task<bool> IsArchiveByContentAsync(FileEntry file)
+    {
+        try
+        {
+            if (await Task.Run(() => _mounts.TryMountAsync(file, byContent: true, CancellationToken.None)) is not null)
+                return true;
+            await _services.Dialogs.ShowMessageAsync(Loc.Format("Archive_NotAnArchive", file.Name));
+        }
+        catch (OperationCanceledException)
+        {
+            // the user declined the password
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            await _services.Dialogs.ShowMessageAsync(OperationTexts.ForError(file.Path, e), e.Message);
+        }
+        return false;
     }
 
     /// <summary>The entries of the archive's root, mounted and listed off the UI thread; null when the user declined

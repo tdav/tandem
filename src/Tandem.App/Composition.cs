@@ -80,8 +80,17 @@ public static class Composition
         ArgumentNullException.ThrowIfNull(services);
         var workspace = new WorkspaceViewModel(services.Providers, store, homeDirectory, autosaveDelay,
             e => services.Log.Write(e, "settings"));
-        return new MainViewModel(workspace, services, KeyMap.Default, progressWindowDelay, quickLookDelay,
-            CreateArchiveMounts(services));
+        var mounts = CreateArchiveMounts(services);
+        try
+        {
+            return new MainViewModel(workspace, services, KeyMap.Default, progressWindowDelay, quickLookDelay,
+                mounts);
+        }
+        catch
+        {
+            mounts.Dispose(); // no view model owns them
+            throw;
+        }
     }
 
     /// <summary>The archive mounts over <paramref name="services"/>, asking passwords through its dialogs, added to

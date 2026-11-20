@@ -502,8 +502,8 @@ public class ShellCommandsTests : LanguageTestBase
         Assert.Equal(KeyChord.Parse("F5"), menu.Single(i => i.CommandId == CommandIds.FileCopy).Chord);
         Assert.Equal(KeyChord.Parse("Cmd+I"), menu.Single(i => i.CommandId == CommandIds.FileProperties).Chord);
         Assert.Null(menu.Single(i => i.CommandId == CommandIds.ShellReveal).Chord);
-        // notes.txt is no archive: only Unpack is off.
-        Assert.All(menu, i => Assert.Equal(i.CommandId != CommandIds.ArchiveUnpack, i.IsEnabled));
+        // Unpack too: a single file under the cursor may be an archive by its content.
+        Assert.All(menu, i => Assert.True(i.IsEnabled, i.LabelKey));
         Assert.True(menu.Single(i => i.LabelKey == "Context_OpenWith").HasChildren);
     }
 

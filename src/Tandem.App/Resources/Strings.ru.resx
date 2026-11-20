@@ -1090,6 +1090,12 @@
   <data name="Archive_DefaultName" xml:space="preserve">
     <value>Архив</value>
   </data>
+  <data name="Archive_NotAnArchive" xml:space="preserve">
+    <value>«{0}» — не архив.</value>
+  </data>
+  <data name="Archive_FolderNumbered" xml:space="preserve">
+    <value>{0} {1}</value>
+  </data>
   <data name="OperationError_PasswordRequired" xml:space="preserve">
     <value>Для {0} нужен пароль архива.</value>
   </data>

@@ -42,7 +42,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <param name="quickLookDelay">Waits before an open Quick Look or quick-view panel follows the cursor; the real
     /// delay when null.</param>
     /// <param name="archiveMounts">Opens archive files as folders, already added to the services' providers as a
-    /// mounter; when null, one is made and added (<see cref="Composition.CreateArchiveMounts"/>).</param>
+    /// mounter (<see cref="Composition.CreateArchiveMounts"/>). Required; last only to keep the earlier parameters
+    /// where they were. Owned from here on: disposed with this model.</param>
     public MainViewModel(WorkspaceViewModel workspace, AppServices services, KeyMap keyMap,
         Func<TimeSpan, CancellationToken, Task>? progressWindowDelay = null,
         Func<TimeSpan, CancellationToken, Task>? quickLookDelay = null, ArchiveMounts? archiveMounts = null)
@@ -50,6 +51,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         ArgumentNullException.ThrowIfNull(workspace);
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(keyMap);
+        ArgumentNullException.ThrowIfNull(archiveMounts);
         _ui = SynchronizationContext.Current
               ?? throw new InvalidOperationException("The main view model must be created on the UI thread.");
         Workspace = workspace;
@@ -80,7 +82,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             Commands, services.Providers, services.Metadata, services.Temp, ReportFailure, quickLookDelay,
             services.NativeCopy);
         CommandLine = new CommandLineViewModel(workspace, services.Processes, workspace.HomeDirectory);
-        ArchiveMounts = archiveMounts ?? Composition.CreateArchiveMounts(services);
+        ArchiveMounts = archiveMounts;
         Archives = new ArchiveCommands(workspace, services, ArchiveMounts, Files, Interaction, Commands,
             ReportFailure);
         Commands.RaiseCanExecuteChanged();

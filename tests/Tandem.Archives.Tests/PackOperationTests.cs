@@ -368,19 +368,20 @@ public sealed class PackOperationTests : IDisposable
         Assert.Equal(content, await ReadAsync(archive, new VfsPath(archive.Id, "/big.bin")));
     }
 
-    [Fact]
-    public async Task Two_sources_with_the_same_name_are_rejected()
+    [Theory]
+    [InlineData("/src/two/a.txt")]
+    [InlineData("/src/two/A.txt")] // one folder on a case-insensitive disk when unpacked
+    public async Task Two_sources_with_the_same_name_are_rejected(string second)
     {
         _host.Files.AddFile("/src/one/a.txt", "alpha");
-        _host.Files.AddFile("/src/two/a.txt", "bravo");
-        _host.Files.AddFile("/src/two/A.txt", "other case");
+        _host.Files.AddFile(second, "bravo");
         var before = _host.Files.AllPaths.ToList();
-        var op = Pack(["/src/one/a.txt", "/src/two/A.txt", "/src/two/a.txt"]);
+        var op = Pack(["/src/one/a.txt", second]);
 
         var rejection = await Assert.ThrowsAsync<OperationRejectedException>(() => RunAsync(op));
 
         Assert.Equal(RejectionReason.InvalidName, rejection.Reason);
-        Assert.Equal(Mem("/src/two/a.txt"), rejection.SourcePath);
+        Assert.Equal(Mem(second), rejection.SourcePath);
         Assert.Equal(before, _host.Files.AllPaths);
     }
 

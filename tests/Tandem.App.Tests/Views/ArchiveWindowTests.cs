@@ -302,13 +302,8 @@ public class ArchiveWindowTests : LanguageTestBase
         ArchiveApp.Cursor(app, app.Left, "encrypted.7z");
         app.Dialogs.PasswordAnswers.Enqueue(null);
 
-        app.Press(Key.Enter, physical: PhysicalKey.Enter);
-        await TestApp.WaitUntil(() =>
-        {
-            app.Pump();
-            return app.Dialogs.PasswordRequests.Count == 1;
-        });
-        await Task.Delay(50);
+        // Enter through the main model, which returns once the panel's activation (the mount) has ended.
+        Assert.True(await app.Main.HandleKeyAsync(KeyChord.Parse("Enter")));
         app.Pump();
 
         Assert.Equal([("encrypted.7z", false)], app.Dialogs.PasswordRequests);
