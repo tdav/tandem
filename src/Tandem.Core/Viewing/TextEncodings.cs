@@ -56,6 +56,7 @@ public static class TextEncodings
         return null;
     }
 
+    // DecoderFallback.ReplacementFallback would put '?'; the documented replacement is U+FFFD.
     private static TextEncodingInfo CodePage(string id, int codePage) =>
-        new(id, Encoding.GetEncoding(codePage, EncoderFallback.ReplacementFallback, DecoderFallback.ReplacementFallback));
+        new(id, Encoding.GetEncoding(codePage, EncoderFallback.ReplacementFallback, new DecoderReplacementFallback("\uFFFD")));
 }

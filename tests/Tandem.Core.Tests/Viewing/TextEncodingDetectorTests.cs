@@ -238,6 +238,23 @@ public class TextEncodingDetectorTests
     }
 
     [Fact]
+    public void Code_page_decoders_replace_undecodable_bytes_with_U_FFFD()
+    {
+        foreach (var info in TextEncodings.All.Where(i => i.Encoding.IsSingleByte))
+        {
+            var fallback = Assert.IsType<DecoderReplacementFallback>(info.Encoding.DecoderFallback);
+            Assert.Equal("\uFFFD", fallback.DefaultString);
+        }
+
+        // .NET's tables give every byte of the listed code pages a character: 0x98, which windows-1251
+        // leaves undefined, decodes to the C1 control U+0098 (as on Windows), not to a fallback. That
+        // keeps such bytes round-tripping, so they are not "undecodable" and stay as they are.
+        var cp1251 = TextEncodings.Windows1251.Encoding;
+        Assert.Equal("a\u0098b", cp1251.GetString(Bytes('a', 0x98, 'b')));
+        Assert.Equal(Bytes('a', 0x98, 'b'), cp1251.GetBytes("a\u0098b"));
+    }
+
+    [Fact]
     public void Shorthand_properties_are_the_listed_instances()
     {
         Assert.Same(TextEncodings.All[0], TextEncodings.Utf8);
