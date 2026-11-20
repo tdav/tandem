@@ -301,4 +301,167 @@ public class HostedPanelTests : LanguageTestBase
         Assert.True(await side.CommitPathEditAsync());
         Assert.Equal(VfsPath.Local("/other"), app.Left.CurrentPath);
     }
+
+    // ---- Mounts that answer late ---------------------------------------------------------------------
+
+    /// <summary>Every FileActivated, NotAFolder and OpenFailed the panel raises, by name.</summary>
+    private static List<string> RecordEvents(PanelViewModel panel)
+    {
+        var events = new List<string>();
+        panel.FileActivated += (_, e) => events.Add("activated " + e.Name);
+        panel.NotAFolder += (_, e) => events.Add("not a folder " + e.Name);
+        panel.OpenFailed += (_, e) => events.Add("failed " + e.Message);
+        return events;
+    }
+
+    /// <summary>Enter on <paramref name="name"/> with the mount held at <see cref="FakeHosted.MountGate"/>; returns
+    /// once the mounter has been asked.</summary>
+    private static async Task<Task> StartHeldMountAsync(TestApp app, FakeHosted hosted, string name,
+        bool enter = false)
+    {
+        hosted.MountGate ??= new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var asked = hosted.MountRequests.Count;
+        Cursor(app.Left, name);
+        var pending = enter ? app.Left.EnterAsync() : app.Left.ActivateAsync();
+        await TestApp.WaitUntil(() => { lock (hosted.MountRequests) return hosted.MountRequests.Count > asked; });
+        return pending;
+    }
+
+    [AvaloniaFact]
+    public async Task Late_mount_result_after_navigating_elsewhere_is_dropped()
+    {
+        var (app, hosted) = await StartAsync();
+        await using var __ = app;
+        var events = RecordEvents(app.Left);
+        var pending = await StartHeldMountAsync(app, hosted, "data.pack");
+
+        await app.Left.NavigateToAsync(VfsPath.Local("/other"));
+        Assert.True(hosted.MountTokens[0].IsCancellationRequested); // the mount was told to stop
+        hosted.MountGate!.SetResult(); // the mounter answers all the same
+        await pending;
+        app.Pump();
+
+        Assert.Equal(VfsPath.Local("/other"), app.Left.CurrentPath);
+        Assert.Empty(events);
+        Assert.Empty(app.Shell.Calls);
+        Assert.Empty(app.Dialogs.Messages);
+        Assert.False(app.Left.IsLoading);
+    }
+
+    [AvaloniaFact]
+    public async Task Late_mount_result_after_the_panel_is_disposed_is_dropped()
+    {
+        var (app, hosted) = await StartAsync();
+        await using var __ = app;
+        var events = RecordEvents(app.Left);
+        var panel = app.Left;
+        // A file that opens as nothing (asked by name, so the late answer reads nothing): it would be activated.
+        var pending = await StartHeldMountAsync(app, hosted, "notes.txt");
+
+        panel.Dispose();
+        Assert.True(hosted.MountTokens[0].IsCancellationRequested);
+        hosted.MountGate!.SetResult();
+        await pending;
+        app.Pump();
+
+        Assert.Equal(VfsPath.Local(TestApp.Home), panel.CurrentPath);
+        Assert.Empty(events);
+        Assert.Empty(app.Shell.Calls);
+        Assert.Empty(app.Dialogs.Messages);
+    }
+
+    [AvaloniaFact]
+    public async Task Pending_mount_survives_a_failed_navigation_and_a_cursor_move()
+    {
+        var (app, hosted) = await StartAsync();
+        await using var __ = app;
+        var pending = await StartHeldMountAsync(app, hosted, "data.pack");
+        Assert.True(app.Left.IsLoading);
+
+        await app.Left.NavigateToAsync(VfsPath.Local("/missing"));
+        Assert.Equal(PanelErrorKind.NotFound, app.Left.ErrorKind); // the panel stayed at /home
+        Assert.True(app.Left.IsLoading); // still waiting for the mount
+        Cursor(app.Left, "notes.txt");
+        hosted.MountGate!.SetResult();
+        await pending;
+
+        Assert.Equal(FakeHosted.Root, app.Left.CurrentPath);
+        Assert.False(hosted.MountTokens[0].IsCancellationRequested);
+        Assert.False(app.Left.IsLoading);
+    }
+
+    [AvaloniaFact]
+    public async Task A_later_activation_supersedes_a_pending_mount()
+    {
+        var (app, hosted) = await StartAsync();
+        await using var __ = app;
+        var first = await StartHeldMountAsync(app, hosted, "data.pack");
+        var second = await StartHeldMountAsync(app, hosted, "notes.txt");
+
+        Assert.True(hosted.MountTokens[0].IsCancellationRequested);
+        hosted.MountGate!.SetResult();
+        await Task.WhenAll(first, second);
+        await TestApp.WaitUntil(() => app.Shell.Calls.Count > 0);
+
+        Assert.Equal(VfsPath.Local(TestApp.Home), app.Left.CurrentPath);
+        Assert.Equal([("open", "/home/notes.txt")], app.Shell.Calls);
+    }
+
+    [AvaloniaFact]
+    public async Task Events_of_a_panel_no_longer_shown_are_dropped()
+    {
+        var (app, hosted) = await StartAsync();
+        await using var __ = app;
+        var hidden = app.Left;
+        var events = RecordEvents(hidden);
+        var notes = await StartHeldMountAsync(app, hosted, "notes.txt");
+        var plain = await StartHeldMountAsync(app, hosted, "README.md", enter: true);
+        await app.Main.Workspace.Left.NewTabAsync(); // the old tab's panel is no longer shown
+        Assert.NotSame(hidden, app.Left);
+
+        hosted.MountGate!.SetResult(); // notes.txt was superseded by README.md; only README.md answers
+        await Task.WhenAll(notes, plain);
+        app.Pump();
+
+        Assert.Equal(["not a folder README.md"], events); // raised, but nobody shows it
+        Assert.Empty(app.Dialogs.Messages);
+        Assert.Empty(app.Shell.Calls);
+    }
+
+    [AvaloniaFact]
+    public async Task Temp_copy_for_a_panel_no_longer_shown_is_released_not_opened()
+    {
+        var (app, hosted) = await StartAsync();
+        await using var __ = app;
+        await EnterPackAsync(app);
+        hosted.ReadGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Cursor(app.Left, "top.txt");
+
+        await app.Left.ActivateAsync();
+        await TestApp.WaitUntil(() => hosted.ReadsRequested > 0);
+        Assert.NotEmpty(Directory.EnumerateFileSystemEntries(app.Temp.Directory)); // the copy is under way
+        await app.Main.Workspace.Left.NewTabAsync();
+        hosted.ReadGate.SetResult();
+
+        await TestApp.WaitUntil(() => !Directory.EnumerateFileSystemEntries(app.Temp.Directory).Any());
+        app.Pump();
+        Assert.Empty(app.Shell.Calls);
+        Assert.Empty(app.Dialogs.Messages);
+        Assert.Empty(app.Failures);
+    }
+
+    [AvaloniaFact]
+    public async Task Without_mounters_enter_on_a_file_answers_at_once()
+    {
+        await using var app = await TestApp.StartAsync(show: false);
+        var events = RecordEvents(app.Left);
+
+        Cursor(app.Left, "notes.txt");
+        var activate = app.Left.ActivateAsync();
+        var enter = app.Left.EnterAsync();
+
+        Assert.True(activate.IsCompleted);
+        Assert.True(enter.IsCompleted);
+        Assert.Equal(["activated notes.txt", "not a folder notes.txt"], events);
+    }
 }

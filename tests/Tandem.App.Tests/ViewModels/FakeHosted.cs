@@ -30,6 +30,21 @@ internal sealed class FakeHosted(InMemoryFileSystem local) : IFileSystemProvider
     /// <summary>For each mount, whether it ran on the UI thread.</summary>
     public List<bool> MountsOnUiThread { get; } = [];
 
+    /// <summary>For each mount, the token it was given.</summary>
+    public List<CancellationToken> MountTokens { get; } = [];
+
+    /// <summary>When set, every mount waits for it before answering, and does not observe its token: a mounter
+    /// that answers late whatever happens.</summary>
+    public TaskCompletionSource? MountGate { get; set; }
+
+    /// <summary>When set, opening a file for reading waits for it first.</summary>
+    public TaskCompletionSource? ReadGate { get; set; }
+
+    /// <summary>How many files have been opened for reading (counted before <see cref="ReadGate"/>).</summary>
+    public int ReadsRequested => Volatile.Read(ref _readsRequested);
+
+    private int _readsRequested;
+
     public static VfsPath Root => new(ProviderId, "/");
 
     public async Task<VfsPath?> TryMountAsync(FileEntry file, bool byContent, CancellationToken ct)
@@ -38,7 +53,9 @@ internal sealed class FakeHosted(InMemoryFileSystem local) : IFileSystemProvider
         {
             MountRequests.Add((file.Name, byContent));
             MountsOnUiThread.Add(Avalonia.Threading.Dispatcher.UIThread.CheckAccess());
+            MountTokens.Add(ct);
         }
+        if (MountGate is { } gate) await gate.Task.ConfigureAwait(false);
         var opens = file.Name.EndsWith(".pack", StringComparison.OrdinalIgnoreCase) ||
                     byContent && await StartsWithPkAsync(file, ct);
         if (!opens) return null;
@@ -86,10 +103,12 @@ internal sealed class FakeHosted(InMemoryFileSystem local) : IFileSystemProvider
         return Files.GetEntryAsync(path, ct);
     }
 
-    public Task<Stream> OpenReadAsync(VfsPath path, CancellationToken ct)
+    public async Task<Stream> OpenReadAsync(VfsPath path, CancellationToken ct)
     {
+        Interlocked.Increment(ref _readsRequested);
+        if (ReadGate is { } gate) await gate.Task.ConfigureAwait(false);
         CheckHost();
-        return Files.OpenReadAsync(path, ct);
+        return await Files.OpenReadAsync(path, ct).ConfigureAwait(false);
     }
 
     public Task<Stream> OpenWriteAsync(VfsPath path, CancellationToken ct) => Files.OpenWriteAsync(path, ct);

@@ -287,6 +287,17 @@ public class ProviderRegistryTests
     // ---- Mounters ------------------------------------------------------------------------------------
 
     [Fact]
+    public void Has_mounters_once_one_is_added()
+    {
+        var registry = new ProviderRegistry();
+        Assert.False(registry.HasMounters);
+
+        registry.AddMounter(new FuncMounter((_, _) => null));
+
+        Assert.True(registry.HasMounters);
+    }
+
+    [Fact]
     public async Task First_mounter_that_answers_wins_and_none_gives_null()
     {
         var registry = new ProviderRegistry();

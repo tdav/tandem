@@ -18,9 +18,11 @@ public sealed record OpenWithApps(FileEntry Entry, IReadOnlyList<AppInfo> Apps);
 /// <remarks>
 /// Created and used on the UI thread. Everything but the properties dialog works for the local provider only and is
 /// disabled elsewhere; Enter on a file elsewhere opens a copy of it made in the <see cref="TempFileStore"/> (off the UI
-/// thread): changes to the copy do not go back. A launch that fails (<see cref="IOException"/>), at once
-/// or when the launcher reports it a moment later (no application for the file, an item that is gone), is told to the
-/// user in words, once; anything unexpected goes to the failure handler. While Quick Look is open, moving the cursor
+/// thread): changes to the copy do not go back. Only the panels shown (active and passive) are listened to: what a
+/// panel no longer shown reports (a file activated, not a folder, a failed open) is dropped on purpose, since the user
+/// has moved on, and a copy still being made for such a panel is removed instead of opened. A launch that fails
+/// (<see cref="IOException"/>), at once or when the launcher reports it a moment later (no application for the file,
+/// an item that is gone), is told to the user in words, once; anything unexpected goes to the failure handler. While Quick Look is open, moving the cursor
 /// shows the new item after a short pause (holding an arrow key starts one preview, not one per row); going to
 /// another folder, switching the active panel or closing the window closes it.
 /// <see cref="CommandRegistry.RaiseCanExecuteChanged"/> is raised only when one of these commands' availability flips.
@@ -245,12 +247,13 @@ public sealed class ShellCommands : IDisposable
         if (entry.Path.ProviderId == VfsPath.LocalProviderId)
             _ = RunAsync(() => _shell.OpenDefault(entry.Path.Path), failureText);
         else
-            _ = OpenCopyAsync(entry, failureText);
+            _ = OpenCopyAsync(sender as PanelViewModel, entry, failureText);
     }
 
-    /// <summary>Copies <paramref name="entry"/> into the temporary files off the UI thread and opens the copy. A copy
-    /// that fails (<see cref="IOException"/>) is told as <paramref name="failureText"/>. Never throws.</summary>
-    private async Task OpenCopyAsync(FileEntry entry, string failureText)
+    /// <summary>Copies <paramref name="entry"/> into the temporary files off the UI thread and opens the copy, unless
+    /// <paramref name="panel"/> is no longer shown by then: the copy is removed. A copy that fails
+    /// (<see cref="IOException"/>) is told as <paramref name="failureText"/>. Never throws.</summary>
+    private async Task OpenCopyAsync(PanelViewModel? panel, FileEntry entry, string failureText)
     {
         string copy;
         try
@@ -268,8 +271,26 @@ public sealed class ShellCommands : IDisposable
             _reportFailure(e);
             return;
         }
-        if (_disposed) return;
+        if (_disposed || panel is null || !_watched.Contains(panel))
+        {
+            Release(copy);
+            return;
+        }
         await RunAsync(() => _shell.OpenDefault(copy), failureText);
+    }
+
+    /// <summary>Removes a temporary copy nobody will open; one that cannot be removed goes with the next
+    /// clear.</summary>
+    private void Release(string copy)
+    {
+        try
+        {
+            _temp.Release(copy);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // TempFileStore.Clear removes it at exit or the next start
+        }
     }
 
     /// <summary>Cmd+Down on a file that does not open as a folder.</summary>

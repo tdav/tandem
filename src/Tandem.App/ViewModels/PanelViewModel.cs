@@ -39,7 +39,7 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
     private List<FileEntry> _entries = []; // every entry of CurrentPath, hidden ones included, unsorted
     private CancellationTokenSource? _loadCts;
     private int _loadVersion;
-    private int _navigationVersion; // counts the navigations started, so a slow mount can tell the panel moved on
+    private MountRequest? _mount; // the file being opened as a folder; a newer request or navigation replaces it
     private LoadKind? _activeLoad;
     private bool _showingPreview;
     private int _previewVersion; // the load whose preview may still be shown; 0 once it has committed or failed
@@ -105,6 +105,7 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>A folder is being read, or a file is being opened as a folder.</summary>
     [ObservableProperty]
     public partial bool IsLoading { get; private set; }
 
@@ -143,6 +144,7 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
     {
         var row = CursorRow;
         if (row is null) return Task.CompletedTask;
+        CancelMount(); // this activation is what the user wants now
         if (row.IsParentLink) return GoUpAsync();
         var entry = row.Entry!;
         if (IsPackage(entry))
@@ -161,6 +163,7 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
     {
         var row = CursorRow;
         if (row is null) return Task.CompletedTask;
+        CancelMount();
         if (row.IsParentLink) return GoUpAsync();
         var entry = row.Entry!;
         return entry.IsDirectoryLike ? NavigateToAsync(entry.Path) : OpenAsFolderAsync(entry, byContent: true);
@@ -193,39 +196,86 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
         if (_disposed) return;
         _disposed = true;
         _loadCts?.Cancel();
+        _mount?.Cts.Cancel();
+        _mount = null;
         var watch = _watch;
         _watch = null;
         DisposeInBackground(watch);
     }
 
-    /// <summary>Asks the mounters (off the UI thread) what <paramref name="file"/> opens as and goes there; a file
-    /// that opens as nothing is activated (<paramref name="byContent"/> false) or reported as not a folder. A mount the
-    /// user cancelled does nothing; one that fails raises <see cref="OpenFailed"/>. Nothing happens either when the
-    /// panel has moved on meanwhile.</summary>
-    private async Task OpenAsFolderAsync(FileEntry file, bool byContent)
+    /// <summary>A file being opened as a folder: where the panel was when it was asked, and the way to stop
+    /// it.</summary>
+    private sealed class MountRequest(VfsPath from)
     {
-        var navigation = _navigationVersion;
-        bool StillHere() => !_disposed && navigation == _navigationVersion;
-        var providers = _providers;
-        VfsPath? folder;
+        public VfsPath From { get; } = from;
+        public CancellationTokenSource Cts { get; } = new();
+    }
+
+    /// <summary>Asks the mounters (off the UI thread) what <paramref name="file"/> opens as and goes there; a file
+    /// that opens as nothing is activated (<paramref name="byContent"/> false) or reported as not a folder. Without
+    /// mounters the answer is given at once. A mount the user cancelled does nothing; one that fails raises
+    /// <see cref="OpenFailed"/>. While it runs, <see cref="IsLoading"/> is true.
+    /// <para>The answer applies only if, when it comes, the panel still shows the folder it was asked in and nothing
+    /// later replaced the request: another Enter or activation, a completed navigation, or <see cref="Dispose"/>
+    /// (each of these also cancels the mount). A navigation that failed, or a cursor move, does not.</para></summary>
+    private Task OpenAsFolderAsync(FileEntry file, bool byContent)
+    {
+        if (_providers.HasMounters) return MountAsync(file, byContent);
+        OpensAsNothing(file, byContent);
+        return Task.CompletedTask;
+    }
+
+    private async Task MountAsync(FileEntry file, bool byContent)
+    {
+        var request = new MountRequest(CurrentPath);
+        _mount = request;
+        UpdateLoading();
+        var (providers, ct) = (_providers, request.Cts.Token);
+        VfsPath? folder = null;
+        Exception? failure = null;
+        var cancelled = false;
         try
         {
-            folder = await Task.Run(() => providers.TryMountAsync(file, byContent, CancellationToken.None));
+            folder = await Task.Run(() => providers.TryMountAsync(file, byContent, ct));
         }
         catch (OperationCanceledException)
         {
-            return;
+            cancelled = true;
         }
         catch (IOException e)
         {
-            if (StillHere()) OpenFailed?.Invoke(this, e);
-            return;
+            failure = e;
         }
-        if (!StillHere()) return;
-        if (folder is { } target) await NavigateToAsync(target);
-        else if (byContent) NotAFolder?.Invoke(this, file);
+
+        var applies = _mount == request && !_disposed && CurrentPath == request.From;
+        if (_mount == request)
+        {
+            _mount = null;
+            UpdateLoading();
+        }
+        request.Cts.Dispose();
+        if (!applies || cancelled) return;
+        if (failure is not null) OpenFailed?.Invoke(this, failure);
+        else if (folder is { } target) await NavigateToAsync(target);
+        else OpensAsNothing(file, byContent);
+    }
+
+    private void OpensAsNothing(FileEntry file, bool byContent)
+    {
+        if (byContent) NotAFolder?.Invoke(this, file);
         else FileActivated?.Invoke(this, file);
     }
+
+    /// <summary>Stops a pending mount; its answer, if it still comes, is dropped.</summary>
+    private void CancelMount()
+    {
+        if (_mount is not { } mount) return;
+        _mount = null;
+        mount.Cts.Cancel();
+        UpdateLoading();
+    }
+
+    private void UpdateLoading() => IsLoading = _activeLoad is not null || _mount is not null;
 
     /// <summary><see cref="ProviderRegistry.UpOf"/>; null when the path's provider is no longer registered.</summary>
     private HostLocation? UpOf(VfsPath path)
@@ -268,7 +318,6 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
         _loadCts = cts;
         var ct = cts.Token;
         var version = ++_loadVersion;
-        if (kind == LoadKind.Navigate) _navigationVersion++;
         _activeLoad = kind;
         IsLoading = true;
         _previewVersion = kind == LoadKind.Navigate ? version : 0;
@@ -409,6 +458,7 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
         int cursor;
         if (kind == LoadKind.Navigate)
         {
+            CancelMount(); // the panel has moved on
             var oldWatch = _watch;
             _watch = listing.Watch;
             // A change reported while the folder was being read may be missing from this listing.
@@ -466,7 +516,7 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
     private void FinishLoading()
     {
         _activeLoad = null;
-        IsLoading = false;
+        UpdateLoading();
         if (_watchRefreshAfterLoad)
         {
             _watchRefreshAfterLoad = false;

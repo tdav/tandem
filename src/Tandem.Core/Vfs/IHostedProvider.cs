@@ -20,9 +20,10 @@ public interface IHostedProvider
 {
     /// <summary>For a path whose "up" leaves the provider — its root, or a top folder such as a search result set —
     /// where "up" leads (the folder, and the name to put the cursor on). For other paths null; the registry then
-    /// looks at the path's ancestors.</summary>
+    /// looks at the path's ancestors. May be called from any thread (panels ask it off the UI thread too), so it
+    /// must be thread-safe and must not block.</summary>
     HostLocation? GetHostLocation(VfsPath path);
 
-    /// <summary>The path as the user reads it, e.g. "/a/b.zip/docs".</summary>
+    /// <summary>The path as the user reads it, e.g. "/a/b.zip/docs". May be called from any thread.</summary>
     string GetDisplayPath(VfsPath path);
 }

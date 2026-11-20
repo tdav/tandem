@@ -42,6 +42,16 @@ public sealed class ProviderRegistry
         lock (_mountersLock) _mounters = [.. _mounters, mounter];
     }
 
+    /// <summary>Whether any mounter has been added; without one, <see cref="TryMountAsync"/> always answers null, so
+    /// a caller may skip asking.</summary>
+    public bool HasMounters
+    {
+        get
+        {
+            lock (_mountersLock) return _mounters.Length > 0;
+        }
+    }
+
     /// <summary>The folder <paramref name="file"/> opens as: the answer of the first mounter that answers (they are
     /// asked in turn, in the order added); null when none does. A mounter's error ends the search and is
     /// thrown.</summary>
