@@ -247,6 +247,28 @@ public class SearchViewModelTests : LanguageTestBase
     }
 
     [AvaloniaFact]
+    public async Task Huge_size_shows_error_instead_of_overflowing()
+    {
+        using var search = New(FileSystem());
+
+        foreach (var unit in Enum.GetValues<SizeUnit>())
+        {
+            search.SizeUnit = unit;
+            search.MinSizeText = new string('9', 28); // fits a decimal; times 1024 it does not
+            await search.StartAsync();
+            Assert.Equal(Loc.Get("Search_BadSize"), search.Error);
+            Assert.False(search.IsRunning);
+        }
+
+        search.SizeUnit = SizeUnit.Gigabytes;
+        search.MinSizeText = (long.MaxValue / (1024L * 1024 * 1024) + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        Assert.Null(search.BuildQuery());
+        Assert.Equal(Loc.Get("Search_BadSize"), search.Error);
+        search.MinSizeText = (long.MaxValue / (1024L * 1024 * 1024)).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        Assert.NotNull(search.BuildQuery());
+    }
+
+    [AvaloniaFact]
     public async Task Second_start_replaces_previous_results()
     {
         using var search = New(FileSystem());

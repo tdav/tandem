@@ -1139,6 +1139,6 @@ Folder</value>
     <value>Stopped. Found: {0}. Folders: {1}. Skipped: {2} folders, {3} files.</value>
   </data>
   <data name="Search_StatusLimit" xml:space="preserve">
-    <value>Stopped at {0} results, the most that are shown. Folders: {1}. Skipped: {2} folders, {3} files.</value>
+    <value>Stopped: the most results that are shown ({0}). Folders: {1}. Skipped: {2} folders, {3} files.</value>
   </data>
 </root>

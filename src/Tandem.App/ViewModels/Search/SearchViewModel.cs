@@ -459,9 +459,9 @@ public sealed partial class SearchViewModel : ObservableObject, IDisposable
         if (!decimal.TryParse(text, NumberStyles.AllowDecimalPoint, Loc.Culture, out var value) &&
             !decimal.TryParse(text, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out value))
             return false;
-        var total = value * UnitFactors[(int)SizeUnit];
-        if (total > long.MaxValue) return false;
-        bytes = (long)decimal.Round(total, MidpointRounding.AwayFromZero);
+        var factor = UnitFactors[(int)SizeUnit];
+        if (value > long.MaxValue / factor) return false; // checked first: the product could overflow a decimal
+        bytes = (long)decimal.Round(value * factor, MidpointRounding.AwayFromZero);
         return true;
     }
 
@@ -482,7 +482,9 @@ public sealed partial class SearchViewModel : ObservableObject, IDisposable
         day is { } d ? new DateTimeOffset(DateTime.SpecifyKind(d.Date.AddDays(1), DateTimeKind.Local)).AddTicks(-1) : null;
 
     /// <summary>One search: what the walk found and has not been shown yet, its latest progress, and the signal that
-    /// wakes the UI side. <see cref="Finished"/> is UI thread only.</summary>
+    /// wakes the UI side. <see cref="Finished"/> is UI thread only. The token source and the semaphore are left to
+    /// the GC on purpose: a stopped walk may still use them on its own thread, and disposing them early raced with
+    /// it.</summary>
     private sealed class Run : IProgress<SearchProgress>
     {
         private int _signaled;

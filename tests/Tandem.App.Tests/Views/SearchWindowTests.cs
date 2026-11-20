@@ -96,9 +96,18 @@ public class SearchWindowTests : LanguageTestBase
         other.AddDirectory("/m");
         await using var app = await TestApp.StartAsync(FileSystem(), show: false, extraProviders: [other]);
         Assert.True(app.Main.Commands.CanExecute(CommandIds.SearchFiles));
+        var seen = new List<bool>(); // the availability each change announcement finds
+        app.Main.Commands.CanExecuteChanged +=
+            (_, _) => seen.Add(app.Main.Commands.CanExecute(CommandIds.SearchFiles));
 
         await app.Left.NavigateToAsync(new VfsPath("mem2", "/m"));
         Assert.False(app.Main.Commands.CanExecute(CommandIds.SearchFiles));
+        Assert.Contains(false, seen);
+        Assert.True(app.Main.RunCommand.CanExecute(CommandIds.SearchFiles) is false);
+        seen.Clear();
+        await app.Left.NavigateToAsync(VfsPath.Local("/home/docs"));
+        Assert.Contains(true, seen);
+        await app.Left.NavigateToAsync(new VfsPath("mem2", "/m"));
         Assert.False(await app.Main.Commands.ExecuteAsync(CommandIds.SearchFiles));
 
         // A result set is not a local folder either.
