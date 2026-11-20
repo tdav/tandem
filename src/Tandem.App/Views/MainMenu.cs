@@ -111,6 +111,8 @@ public static class MainMenu
         var fkeyBar = Toggle("Menu_FKeyBar", main.ToggleFKeyBar);
         var hidden = CommandItem(main, CommandIds.ViewToggleHidden);
         hidden.ToggleType = MenuItemToggleType.CheckBox;
+        var quickView = CommandItem(main, CommandIds.ViewQuickView);
+        quickView.ToggleType = MenuItemToggleType.CheckBox;
 
         (string? Code, NativeMenuItem Item)[] languages =
         [
@@ -129,6 +131,7 @@ public static class MainMenu
             commandLine.IsChecked = view.CommandLine;
             fkeyBar.IsChecked = view.FKeyBar;
             hidden.IsChecked = workspace.ShowHidden;
+            quickView.IsChecked = main.QuickView.IsOpen;
             foreach (var (code, item) in languages) item.IsChecked = workspace.Language == code;
         }
 
@@ -138,10 +141,15 @@ public static class MainMenu
             if (e.PropertyName is nameof(WorkspaceViewModel.View) or nameof(WorkspaceViewModel.ShowHidden)
                 or nameof(WorkspaceViewModel.Language)) Update();
         };
+        main.QuickView.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ViewModels.Viewing.QuickViewViewModel.IsOpen)) Update();
+        };
 
         return
         [
             sidebar, volumeBars, commandLine, fkeyBar, new NativeMenuItemSeparator(), hidden,
+            new NativeMenuItemSeparator(), quickView,
             new NativeMenuItemSeparator(),
             Submenu("Menu_Sort", SortItems(main)),
             new NativeMenuItemSeparator(),

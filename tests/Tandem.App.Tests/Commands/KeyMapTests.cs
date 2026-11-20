@@ -54,7 +54,7 @@ public class KeyMapTests
             "path.edit=Cmd+Shift+G", "cmdline.focus=Cmd+L", "select.toggleDown=Space", "select.all=Cmd+A",
             "select.byMask=Cmd+OemPlus", "unselect.byMask=Cmd+OemMinus", "select.invert=Cmd+Shift+A",
             "tab.new=Cmd+T", "tab.close=Cmd+W", "tab.next=Ctrl+Tab", "tab.prev=Ctrl+Shift+Tab",
-            "favorites.show=Cmd+D", "view.toggleHidden=Cmd+Shift+OemPeriod",
+            "favorites.show=Cmd+D", "view.toggleHidden=Cmd+Shift+OemPeriod", "view.quickView=Ctrl+Q",
             "sort.byName=Ctrl+Cmd+1", "sort.byExtension=Ctrl+Cmd+2", "sort.bySize=Ctrl+Cmd+3", "sort.byDate=Ctrl+Cmd+4",
             "sort.byMode=Ctrl+Cmd+5", "sort.reverse=Ctrl+Cmd+R", "tab.togglePin=Ctrl+Cmd+P",
         ];

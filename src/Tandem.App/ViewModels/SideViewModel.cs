@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Tandem.App.Resources;
 using Tandem.App.Services;
+using Tandem.App.ViewModels.Viewing;
 using Tandem.Core.Listing;
 using Tandem.Core.Platform;
 using Tandem.Core.Vfs;
@@ -56,6 +57,12 @@ public sealed partial class SideViewModel : ObservableObject
     }
 
     public bool IsActive => _main.Workspace.ActiveSide == Side;
+
+    /// <summary>The window's quick-view panel.</summary>
+    public QuickViewViewModel QuickView => _main.QuickView;
+
+    /// <summary>Whether the quick-view panel shows in place of this side's file list.</summary>
+    public bool ShowsQuickView => _main.QuickView.IsOpen && _main.QuickView.Side == Side;
 
     public bool ShowVolumeBar => _main.Workspace.View.VolumeBars;
 
@@ -346,6 +353,8 @@ public sealed partial class SideViewModel : ObservableObject
     }
 
     internal void OnActiveSideChanged() => OnPropertyChanged(nameof(IsActive));
+
+    internal void OnQuickViewChanged() => OnPropertyChanged(nameof(ShowsQuickView));
 
     internal void OnViewChanged() => OnPropertyChanged(nameof(ShowVolumeBar));
 

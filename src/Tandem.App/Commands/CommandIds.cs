@@ -53,6 +53,7 @@ public static class CommandIds
 
     public const string FavoritesShow = "favorites.show";
     public const string ViewToggleHidden = "view.toggleHidden";
+    public const string ViewQuickView = "view.quickView";
 
     // Invoked from menus only; no default key binding.
     public const string ShellReveal = "shell.reveal";

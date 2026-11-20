@@ -1010,4 +1010,14 @@
   <data name="ViewerMode_Image" xml:space="preserve">
     <value>Изображение</value>
   </data>
+  <data name="Menu_view_quickView" xml:space="preserve">
+    <value>Панель просмотра</value>
+  </data>
+  <data name="QuickView_Folder" xml:space="preserve">
+    <value>{0}
+Папка</value>
+  </data>
+  <data name="QuickView_OpenFailed" xml:space="preserve">
+    <value>Не удалось открыть «{0}»: {1}</value>
+  </data>
 </root>

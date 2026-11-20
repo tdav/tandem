@@ -1019,4 +1019,14 @@ Details were written to {1}.</value>
   <data name="ViewerMode_Image" xml:space="preserve">
     <value>Image</value>
   </data>
+  <data name="Menu_view_quickView" xml:space="preserve">
+    <value>Quick View Panel</value>
+  </data>
+  <data name="QuickView_Folder" xml:space="preserve">
+    <value>{0}
+Folder</value>
+  </data>
+  <data name="QuickView_OpenFailed" xml:space="preserve">
+    <value>Could not open “{0}”: {1}</value>
+  </data>
 </root>

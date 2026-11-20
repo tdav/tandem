@@ -69,8 +69,8 @@ public static class Composition
     /// <summary>The main view model on <paramref name="services"/>; not loaded yet.</summary>
     /// <param name="progressWindowDelay">How long an operation runs before the progress window appears; see
     /// <see cref="OperationsViewModel"/>.</param>
-    /// <param name="quickLookDelay">How long the cursor rests before an open Quick Look follows it; see
-    /// <see cref="ShellCommands"/>.</param>
+    /// <param name="quickLookDelay">How long the cursor rests before an open Quick Look or quick-view panel follows
+    /// it; see <see cref="ShellCommands"/> and <see cref="ViewModels.Viewing.QuickViewViewModel"/>.</param>
     public static MainViewModel Build(AppServices services, JsonStateStore store, string homeDirectory,
         Func<TimeSpan, CancellationToken, Task>? autosaveDelay = null,
         Func<TimeSpan, CancellationToken, Task>? progressWindowDelay = null,

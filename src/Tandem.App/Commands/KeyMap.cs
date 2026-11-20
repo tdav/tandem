@@ -56,6 +56,7 @@ public sealed class KeyMap
             (CommandIds.TabPrev, "Ctrl+Shift+Tab"),
             (CommandIds.FavoritesShow, "Cmd+D"),
             (CommandIds.ViewToggleHidden, "Cmd+Shift+OemPeriod"),
+            (CommandIds.ViewQuickView, "Ctrl+Q"),
             // Finder's "Sort By" chords. Not Ctrl+F3…F8: macOS keeps Ctrl with an F-key for keyboard focus moves.
             (CommandIds.SortByName, "Ctrl+Cmd+1"),
             (CommandIds.SortByExtension, "Ctrl+Cmd+2"),

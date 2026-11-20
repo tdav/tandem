@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Tandem.App.ViewModels"
              xmlns:v="using:Tandem.App.Views"
+             xmlns:vv="using:Tandem.App.Views.Viewing"
              xmlns:loc="using:Tandem.App.Resources"
              xmlns:platform="using:Tandem.Core.Platform"
              xmlns:listing="using:Tandem.Core.Listing"
@@ -132,7 +133,8 @@
         </Border>
 
         <!-- Column headers: a click sorts by the column, a second click reverses the order. -->
-        <Grid x:Name="Headers" DockPanel.Dock="Top" Background="{DynamicResource Tandem.HeaderBackground}">
+        <Grid x:Name="Headers" DockPanel.Dock="Top" Background="{DynamicResource Tandem.HeaderBackground}"
+              IsVisible="{Binding !ShowsQuickView}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="{x:Static v:FileListColumns.Name}" />
                 <ColumnDefinition Width="{x:Static v:FileListColumns.Extension}" />
@@ -178,6 +180,18 @@
             </Button>
         </Grid>
 
-        <v:FileListView x:Name="FileList" />
+        <Panel>
+            <v:FileListView x:Name="FileList" IsVisible="{Binding !ShowsQuickView}" />
+            <!-- Quick view (Ctrl+Q): the file under the other side's cursor, in place of this side's list. -->
+            <Panel x:Name="QuickViewArea" IsVisible="{Binding ShowsQuickView}">
+                <Panel IsVisible="{Binding QuickView.Viewer, Converter={x:Static ObjectConverters.IsNotNull}}">
+                    <vv:ViewerView x:Name="QuickViewer" DataContext="{Binding QuickView.Viewer}" />
+                </Panel>
+                <TextBlock x:Name="QuickViewMessage" Text="{Binding QuickView.Message}" Classes="secondary"
+                           IsVisible="{Binding QuickView.Message, Converter={x:Static ObjectConverters.IsNotNull}}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
+                           TextWrapping="Wrap" Margin="12" />
+            </Panel>
+        </Panel>
     </DockPanel>
 </UserControl>

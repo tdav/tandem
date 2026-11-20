@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using Tandem.App.Commands;
 using Tandem.App.Resources;
 using Tandem.App.Services;
+using Tandem.App.ViewModels.Viewing;
 using Tandem.Core.Listing;
 using Tandem.Core.Platform;
 using Tandem.Core.Vfs;
@@ -37,7 +38,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private volatile bool _disposed;
 
     /// <param name="progressWindowDelay">Waits before the progress window may appear; the real delay when null.</param>
-    /// <param name="quickLookDelay">Waits before an open Quick Look follows the cursor; the real delay when null.</param>
+    /// <param name="quickLookDelay">Waits before an open Quick Look or quick-view panel follows the cursor; the real
+    /// delay when null.</param>
     public MainViewModel(WorkspaceViewModel workspace, AppServices services, KeyMap keyMap,
         Func<TimeSpan, CancellationToken, Task>? progressWindowDelay = null,
         Func<TimeSpan, CancellationToken, Task>? quickLookDelay = null)
@@ -50,6 +52,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Workspace = workspace;
         Services = services;
         KeyMap = keyMap;
+        QuickView = new QuickViewViewModel(workspace, services.Providers, services.Temp, quickLookDelay,
+            ReportFailure);
         RunCommand = new RunCommand(Commands, ExecuteCommandAsync);
         Left = new SideViewModel(this, PanelSide.Left, workspace.Left);
         Right = new SideViewModel(this, PanelSide.Right, workspace.Right);
@@ -75,6 +79,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         CommandLine = new CommandLineViewModel(workspace, services.Processes, workspace.HomeDirectory);
         Commands.RaiseCanExecuteChanged();
         workspace.PropertyChanged += OnWorkspacePropertyChanged;
+        QuickView.PropertyChanged += OnQuickViewPropertyChanged;
         workspace.Left.StateChanged += OnTabsStateChanged;
         workspace.Right.StateChanged += OnTabsStateChanged;
         _volumeService = services.Volumes;
@@ -102,6 +107,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     /// <summary>Opening files, Quick Look, Reveal in Finder, the terminal, "Open With" and the properties dialog.</summary>
     public ShellCommands Shell { get; }
+
+    /// <summary>The quick-view panel (Ctrl+Q): the passive side shows the file under the cursor.</summary>
+    public QuickViewViewModel QuickView { get; }
 
     /// <summary>The command line under the panels and its output pane.</summary>
     public CommandLineViewModel CommandLine { get; }
@@ -250,10 +258,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _volumeService.Changed -= OnVolumesChanged;
         Services.Operations.Changed -= OnOperationsChanged;
         Workspace.PropertyChanged -= OnWorkspacePropertyChanged;
+        QuickView.PropertyChanged -= OnQuickViewPropertyChanged;
         Workspace.Left.StateChanged -= OnTabsStateChanged;
         Workspace.Right.StateChanged -= OnTabsStateChanged;
         Interaction.Close();
         Shell.CloseQuickLook();
+        QuickView.Dispose();
         CommandLine.Dispose();
         Shell.Dispose();
         Files.Dispose();
@@ -304,12 +314,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>The main window is closing: questions of running operations are answered as cancelled, so no
-    /// operation waits for a dialog that will never be shown, Quick Look closes, and a command still running in
-    /// the command line is killed.</summary>
+    /// operation waits for a dialog that will never be shown, Quick Look and the quick-view panel close, and a
+    /// command still running in the command line is killed.</summary>
     public void OnWindowClosing()
     {
         Interaction.Close();
         Shell.CloseQuickLook();
+        QuickView.Close();
         CommandLine.Dispose();
     }
 
@@ -397,6 +408,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         On(CommandIds.TabPrev, () => ActiveTabs().Previous());
         On(CommandIds.FavoritesShow, () => FavoritesMenuRequested?.Invoke(this, EventArgs.Empty));
         On(CommandIds.ViewToggleHidden, () => Workspace.ShowHidden = !Workspace.ShowHidden);
+        On(CommandIds.ViewQuickView, QuickView.Toggle, () => Workspace.IsLoaded);
         On(CommandIds.SortByName, () => ActiveSide.SortBy(SortColumn.Name));
         On(CommandIds.SortByExtension, () => ActiveSide.SortBy(SortColumn.Extension));
         On(CommandIds.SortBySize, () => ActiveSide.SortBy(SortColumn.Size));
@@ -422,6 +434,13 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
                 Right.OnViewChanged();
                 break;
         }
+    }
+
+    private void OnQuickViewPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is not (nameof(QuickViewViewModel.IsOpen) or nameof(QuickViewViewModel.Side))) return;
+        Left.OnQuickViewChanged();
+        Right.OnQuickViewChanged();
     }
 
     /// <summary>A side's tabs, active tab or a tab's pin changed: closing tabs may have become possible or not.</summary>
