@@ -1034,4 +1034,72 @@
   <data name="RejectionReason_FormatNotWritable" xml:space="preserve">
     <value>Этот формат нельзя создать</value>
   </data>
+
+  <!-- Archives in the app: commands, pack/unpack/password dialogs, archive errors -->
+  <data name="Menu_archive_pack" xml:space="preserve">
+    <value>Упаковать…</value>
+  </data>
+  <data name="Menu_archive_unpack" xml:space="preserve">
+    <value>Распаковать…</value>
+  </data>
+  <data name="Archive_PackTitle" xml:space="preserve">
+    <value>Упаковка</value>
+  </data>
+  <data name="Archive_PackOne" xml:space="preserve">
+    <value>Упаковать «{0}» в архив:</value>
+  </data>
+  <data name="Archive_PackMany" xml:space="preserve">
+    <value>Упаковать {0} в архив:</value>
+  </data>
+  <data name="Archive_Format" xml:space="preserve">
+    <value>Формат:</value>
+  </data>
+  <data name="Archive_PackButton" xml:space="preserve">
+    <value>Упаковать</value>
+  </data>
+  <data name="Archive_UnpackTitle" xml:space="preserve">
+    <value>Распаковка</value>
+  </data>
+  <data name="Archive_UnpackOne" xml:space="preserve">
+    <value>Распаковать «{0}» в:</value>
+  </data>
+  <data name="Archive_UnpackMany" xml:space="preserve">
+    <value>Распаковать {0} в:</value>
+  </data>
+  <data name="Archive_SeparateFolders" xml:space="preserve">
+    <value>Каждый архив в отдельную папку</value>
+  </data>
+  <data name="Archive_UnpackButton" xml:space="preserve">
+    <value>Распаковать</value>
+  </data>
+  <data name="Archive_PasswordTitle" xml:space="preserve">
+    <value>Пароль архива</value>
+  </data>
+  <data name="Archive_PasswordPrompt" xml:space="preserve">
+    <value>Архив «{0}» зашифрован. Введите пароль:</value>
+  </data>
+  <data name="Archive_PasswordWrong" xml:space="preserve">
+    <value>Пароль неверен. Попробуйте ещё раз.</value>
+  </data>
+  <data name="Archive_NeedsFileName" xml:space="preserve">
+    <value>{0} — это папка: введите имя файла архива.</value>
+  </data>
+  <data name="Archive_DestinationReadOnly" xml:space="preserve">
+    <value>В {0} нельзя ничего записать.</value>
+  </data>
+  <data name="Archive_DefaultName" xml:space="preserve">
+    <value>Архив</value>
+  </data>
+  <data name="OperationError_PasswordRequired" xml:space="preserve">
+    <value>Для {0} нужен пароль архива.</value>
+  </data>
+  <data name="OperationError_ArchiveDamaged" xml:space="preserve">
+    <value>{0} повреждён или не является архивом.</value>
+  </data>
+  <data name="OperationFailed_PasswordRequired" xml:space="preserve">
+    <value>пароль архива не введён или неверен.</value>
+  </data>
+  <data name="OperationFailed_ArchiveDamaged" xml:space="preserve">
+    <value>архив повреждён или не является архивом.</value>
+  </data>
 </root>

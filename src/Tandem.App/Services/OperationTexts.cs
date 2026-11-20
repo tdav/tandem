@@ -1,4 +1,5 @@
 using Tandem.App.Resources;
+using Tandem.Archives;
 using Tandem.Core.Operations;
 using Tandem.Core.Vfs;
 
@@ -31,6 +32,8 @@ public static class OperationTexts
             VfsNotFoundException or FileNotFoundException or DirectoryNotFoundException => "NotFound",
             VfsAlreadyExistsException => "AlreadyExists",
             ContentMismatchException => "ContentMismatch",
+            ArchivePasswordRequiredException => "PasswordRequired",
+            ArchiveDamagedException => "ArchiveDamaged",
             IOException { HResult: MacDiskFull or WindowsDiskFull or WindowsHandleDiskFull } => "DiskFull",
             IOException => "IO",
             _ => "Other",

@@ -24,6 +24,16 @@ public class ArchiveFormatsTests
         Assert.Equal(expected, ArchiveFormats.FromName(fileName));
 
     [Theory]
+    [InlineData("photos.ZIP", "photos")]
+    [InlineData("site.tar.gz", "site")]
+    [InlineData("site.tgz", "site")]
+    [InlineData("a.b.tar.xz", "a.b")]
+    [InlineData("notes.txt", "notes.txt")]
+    [InlineData(".zip", ".zip")]
+    public void NameWithoutSuffix(string fileName, string expected) =>
+        Assert.Equal(expected, ArchiveFormats.NameWithoutSuffix(fileName));
+
+    [Theory]
     [InlineData("sample.zip", ArchiveFormat.Zip)]
     [InlineData("encrypted.zip", ArchiveFormat.Zip)]
     [InlineData("cp866.zip", ArchiveFormat.Zip)]

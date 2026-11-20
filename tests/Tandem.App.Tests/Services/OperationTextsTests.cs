@@ -1,6 +1,7 @@
 using System.Runtime.Versioning;
 using Tandem.App.Resources;
 using Tandem.App.Services;
+using Tandem.Archives;
 using Tandem.Core.Vfs;
 using Tandem.Platform.Mac;
 
@@ -40,5 +41,21 @@ public class OperationTextsTests : LanguageTestBase
             OperationTexts.ForError(Item, SystemErrors.FromErrno(SystemErrors.ENOSPC)));
         Assert.NotEqual(Loc.Format("OperationError_IO", Item.Path),
             OperationTexts.ForError(Item, SystemErrors.FromErrno(SystemErrors.EACCES)));
+    }
+
+    [Fact]
+    public void Archive_errors_have_their_own_words()
+    {
+        var password = new ArchivePasswordRequiredException(VfsPath.Local("/a.zip"), wrongPassword: true);
+        var damaged = new ArchiveDamagedException("damaged");
+
+        Assert.Equal("/dst/a.txt needs the archive's password.", OperationTexts.ForError(Item, password));
+        Assert.Equal("/dst/a.txt is damaged or is not an archive.", OperationTexts.ForError(Item, damaged));
+        Assert.Equal(Loc.Get("OperationFailed_PasswordRequired"), OperationTexts.ForFailure(password));
+        Assert.Equal(Loc.Get("OperationFailed_ArchiveDamaged"), OperationTexts.ForFailure(damaged));
+        Assert.NotEqual(Loc.Get("OperationFailed_IO"), OperationTexts.ForFailure(damaged));
+        Loc.SetLanguage("ru");
+        Assert.Equal("Для /dst/a.txt нужен пароль архива.", OperationTexts.ForError(Item, password));
+        Assert.Equal("архив повреждён или не является архивом.", OperationTexts.ForFailure(damaged));
     }
 }

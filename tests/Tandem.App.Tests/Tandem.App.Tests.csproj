@@ -19,6 +19,13 @@
   <ItemGroup>
     <!-- Shared source: the counting stream of any declared size from the Core tests. -->
     <Compile Include="..\Tandem.Core.Tests\Viewing\SparseStream.cs" Link="ViewModels\SparseStream.cs" />
+    <!-- The archive fixtures and their loader (skips a test whose external fixture is absent). -->
+    <Compile Include="..\Tandem.Archives.Tests\Fixture.cs" Link="Views\Fixture.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\Tandem.Archives.Tests\Fixtures\**" Exclude="..\Tandem.Archives.Tests\Fixtures\*.sh;..\Tandem.Archives.Tests\Fixtures\*.py;..\Tandem.Archives.Tests\Fixtures\README.md" LinkBase="Fixtures" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\fixtures\external\**" Exclude="..\fixtures\external\README.md" LinkBase="Fixtures\external" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

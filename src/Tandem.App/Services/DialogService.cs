@@ -64,6 +64,15 @@ public sealed class DialogService : IDialogService
         Window? owner = null) =>
         await ShowAsync<object>(new EditorSaveDialog(question, fileName, encoding), owner: owner) is true;
 
+    public Task<PackAnswer?> AskPackAsync(PackRequest request) =>
+        ShowAsync<PackAnswer>(new PackDialog(new PackDialogViewModel(request)));
+
+    public Task<UnpackAnswer?> AskUnpackAsync(UnpackRequest request) =>
+        ShowAsync<UnpackAnswer>(new UnpackDialog(new UnpackDialogViewModel(request)));
+
+    public Task<string?> AskPasswordAsync(string archiveName, bool previousWasWrong, CancellationToken ct) =>
+        ShowAsync<string>(new PasswordDialog(new PasswordDialogViewModel(archiveName, previousWasWrong)), ct);
+
     public Task ShowMessageAsync(string text, string? detail = null) =>
         MessageDialog.ShowAsync(Owner, "Tandem", string.IsNullOrWhiteSpace(detail) ? text : text + "\n\n" + detail);
 

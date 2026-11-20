@@ -7,6 +7,7 @@ using Tandem.App.Commands;
 using Tandem.App.Resources;
 using Tandem.App.Services;
 using Tandem.App.ViewModels.Viewing;
+using Tandem.Archives;
 using Tandem.Core.Listing;
 using Tandem.Core.Platform;
 using Tandem.Core.Vfs;
@@ -22,8 +23,8 @@ public sealed record FKeyItem(string Key, string Label, string CommandId);
 /// </summary>
 /// <remarks>
 /// Created and called on the UI thread, before <see cref="WorkspaceViewModel.LoadAsync()"/>; keys and text are
-/// handled only once the workspace is loaded. Owns the workspace: <see cref="Dispose"/> disposes it. The services are
-/// the caller's.
+/// handled only once the workspace is loaded. Owns the workspace and <see cref="ArchiveMounts"/>: <see cref="Dispose"/>
+/// disposes them (the mounts last, after the panels that read archives). The services are the caller's.
 /// </remarks>
 public sealed partial class MainViewModel : ObservableObject, IDisposable
 {
@@ -40,9 +41,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <param name="progressWindowDelay">Waits before the progress window may appear; the real delay when null.</param>
     /// <param name="quickLookDelay">Waits before an open Quick Look or quick-view panel follows the cursor; the real
     /// delay when null.</param>
+    /// <param name="archiveMounts">Opens archive files as folders, already added to the services' providers as a
+    /// mounter; when null, one is made and added (<see cref="Composition.CreateArchiveMounts"/>).</param>
     public MainViewModel(WorkspaceViewModel workspace, AppServices services, KeyMap keyMap,
         Func<TimeSpan, CancellationToken, Task>? progressWindowDelay = null,
-        Func<TimeSpan, CancellationToken, Task>? quickLookDelay = null)
+        Func<TimeSpan, CancellationToken, Task>? quickLookDelay = null, ArchiveMounts? archiveMounts = null)
     {
         ArgumentNullException.ThrowIfNull(workspace);
         ArgumentNullException.ThrowIfNull(services);
@@ -77,6 +80,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             Commands, services.Providers, services.Metadata, services.Temp, ReportFailure, quickLookDelay,
             services.NativeCopy);
         CommandLine = new CommandLineViewModel(workspace, services.Processes, workspace.HomeDirectory);
+        ArchiveMounts = archiveMounts ?? Composition.CreateArchiveMounts(services);
+        Archives = new ArchiveCommands(workspace, services, ArchiveMounts, Files, Interaction, Commands,
+            ReportFailure);
         Commands.RaiseCanExecuteChanged();
         workspace.PropertyChanged += OnWorkspacePropertyChanged;
         QuickView.PropertyChanged += OnQuickViewPropertyChanged;
@@ -110,6 +116,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     /// <summary>The quick-view panel (Ctrl+Q): the passive side shows the file under the cursor.</summary>
     public QuickViewViewModel QuickView { get; }
+
+    /// <summary>Opens archive files as folders; closed when this model is disposed.</summary>
+    public ArchiveMounts ArchiveMounts { get; }
+
+    /// <summary>Packing and unpacking archives.</summary>
+    public ArchiveCommands Archives { get; }
 
     /// <summary>The command line under the panels and its output pane.</summary>
     public CommandLineViewModel CommandLine { get; }
@@ -266,9 +278,11 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         QuickView.Dispose();
         CommandLine.Dispose();
         Shell.Dispose();
+        Archives.Dispose();
         Files.Dispose();
         Operations.Dispose();
         Workspace.Dispose();
+        ArchiveMounts.Dispose();
     }
 
     /// <summary>How long quitting waits for stopped operations to clean up (remove their part files) before it

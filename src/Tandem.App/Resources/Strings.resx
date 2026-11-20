@@ -1043,4 +1043,72 @@ Folder</value>
   <data name="RejectionReason_FormatNotWritable" xml:space="preserve">
     <value>Archives of this format cannot be created</value>
   </data>
+
+  <!-- Archives in the app: commands, pack/unpack/password dialogs, archive errors -->
+  <data name="Menu_archive_pack" xml:space="preserve">
+    <value>Pack…</value>
+  </data>
+  <data name="Menu_archive_unpack" xml:space="preserve">
+    <value>Unpack…</value>
+  </data>
+  <data name="Archive_PackTitle" xml:space="preserve">
+    <value>Pack</value>
+  </data>
+  <data name="Archive_PackOne" xml:space="preserve">
+    <value>Pack “{0}” into the archive:</value>
+  </data>
+  <data name="Archive_PackMany" xml:space="preserve">
+    <value>Pack {0} into the archive:</value>
+  </data>
+  <data name="Archive_Format" xml:space="preserve">
+    <value>Format:</value>
+  </data>
+  <data name="Archive_PackButton" xml:space="preserve">
+    <value>Pack</value>
+  </data>
+  <data name="Archive_UnpackTitle" xml:space="preserve">
+    <value>Unpack</value>
+  </data>
+  <data name="Archive_UnpackOne" xml:space="preserve">
+    <value>Unpack “{0}” to:</value>
+  </data>
+  <data name="Archive_UnpackMany" xml:space="preserve">
+    <value>Unpack {0} to:</value>
+  </data>
+  <data name="Archive_SeparateFolders" xml:space="preserve">
+    <value>Each archive into a folder of its own</value>
+  </data>
+  <data name="Archive_UnpackButton" xml:space="preserve">
+    <value>Unpack</value>
+  </data>
+  <data name="Archive_PasswordTitle" xml:space="preserve">
+    <value>Archive Password</value>
+  </data>
+  <data name="Archive_PasswordPrompt" xml:space="preserve">
+    <value>“{0}” is encrypted. Enter its password:</value>
+  </data>
+  <data name="Archive_PasswordWrong" xml:space="preserve">
+    <value>That password is wrong. Try again.</value>
+  </data>
+  <data name="Archive_NeedsFileName" xml:space="preserve">
+    <value>{0} is a folder: type the name of the archive file.</value>
+  </data>
+  <data name="Archive_DestinationReadOnly" xml:space="preserve">
+    <value>Nothing can be written to {0}.</value>
+  </data>
+  <data name="Archive_DefaultName" xml:space="preserve">
+    <value>Archive</value>
+  </data>
+  <data name="OperationError_PasswordRequired" xml:space="preserve">
+    <value>{0} needs the archive's password.</value>
+  </data>
+  <data name="OperationError_ArchiveDamaged" xml:space="preserve">
+    <value>{0} is damaged or is not an archive.</value>
+  </data>
+  <data name="OperationFailed_PasswordRequired" xml:space="preserve">
+    <value>the archive's password was not given or is wrong.</value>
+  </data>
+  <data name="OperationFailed_ArchiveDamaged" xml:space="preserve">
+    <value>the archive is damaged or is not an archive.</value>
+  </data>
 </root>

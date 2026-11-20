@@ -525,12 +525,17 @@ public class HostedPanelTests : LanguageTestBase
     [AvaloniaFact]
     public async Task Without_mounters_enter_on_a_file_answers_at_once()
     {
-        await using var app = await TestApp.StartAsync(show: false);
-        var events = RecordEvents(app.Left);
+        // The app always has the archive mounter; a panel over a registry without one answers at once.
+        var fs = TestApp.DefaultFileSystem();
+        var providers = new ProviderRegistry();
+        providers.Register(fs);
+        using var panel = new PanelViewModel(providers);
+        await panel.NavigateToAsync(VfsPath.Local(TestApp.Home));
+        var events = RecordEvents(panel);
 
-        Cursor(app.Left, "notes.txt");
-        var activate = app.Left.ActivateAsync();
-        var enter = app.Left.EnterAsync();
+        Cursor(panel, "notes.txt");
+        var activate = panel.ActivateAsync();
+        var enter = panel.EnterAsync();
 
         Assert.True(activate.IsCompleted);
         Assert.True(enter.IsCompleted);

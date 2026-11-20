@@ -31,12 +31,14 @@ public class MainViewModelTests : LanguageTestBase
     [AvaloniaFact]
     public async Task Registers_every_command()
     {
-        await using var app = await TestApp.StartAsync(show: false);
+        var fs = TestApp.DefaultFileSystem();
+        fs.AddFile(TestApp.Home + "/notes.zip", "not read: unpacking is offered by the name");
+        await using var app = await TestApp.StartAsync(fs, show: false);
         // Closing tabs is available once there are two; the file and shell commands once the cursor is on a local
-        // file.
+        // file; unpacking once that file is named as an archive.
         await app.Main.Workspace.Left.NewTabAsync();
         var panel = app.Main.Workspace.ActivePanel;
-        panel.CursorIndex = panel.Rows.ToList().FindIndex(r => r.Name == "notes.txt");
+        panel.CursorIndex = panel.Rows.ToList().FindIndex(r => r.Name == "notes.zip");
 
         Assert.All(CommandIds.All, id => Assert.True(app.Main.Commands.CanExecute(id), id));
     }

@@ -62,6 +62,10 @@ public static class CommandIds
     public const string TabDuplicate = "tab.duplicate";
     public const string TabCloseOthers = "tab.closeOthers";
 
+    // Archives.
+    public const string ArchivePack = "archive.pack";
+    public const string ArchiveUnpack = "archive.unpack";
+
     /// <summary>Every id declared above, in declaration order.</summary>
     public static IReadOnlyList<string> All { get; } =
         typeof(CommandIds)
