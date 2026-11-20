@@ -38,10 +38,7 @@ public class MainViewModelTests : LanguageTestBase
         var panel = app.Main.Workspace.ActivePanel;
         panel.CursorIndex = panel.Rows.ToList().FindIndex(r => r.Name == "notes.txt");
 
-        // app.settings gets its handler with the settings window (Task 16); until then it is off on purpose.
-        Assert.All(CommandIds.All.Except([CommandIds.AppSettings]),
-            id => Assert.True(app.Main.Commands.CanExecute(id), id));
-        Assert.False(app.Main.Commands.CanExecute(CommandIds.AppSettings));
+        Assert.All(CommandIds.All, id => Assert.True(app.Main.Commands.CanExecute(id), id));
     }
 
     [AvaloniaFact]

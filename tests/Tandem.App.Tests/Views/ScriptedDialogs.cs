@@ -55,8 +55,13 @@ internal class ScriptedDialogs : IDialogService
         get;
     } = [];
 
+    public Queue<bool> ReassignAnswers { get; } = new();
+    /// <summary>Each "this shortcut is taken: reassign?" question: the chord, the label of the command that has it,
+    /// and the window it was modal to.</summary>
+    public List<(string Chord, string Owner, object? Window)> ReassignRequests { get; } = [];
+
     /// <summary>Every dialog asked for, in order, by kind ("copyMove", "name", "delete", "mask", "conflict", "error",
-    /// "summary", "message", "properties", "quit", "saveChanges", "editorSave").</summary>
+    /// "summary", "message", "properties", "quit", "saveChanges", "editorSave", "reassign").</summary>
     public List<string> Log { get; } = [];
 
     /// <summary>As a scripted destination: accept the text the dialog proposed.</summary>
@@ -175,6 +180,13 @@ internal class ScriptedDialogs : IDialogService
     {
         Record("editorSave", () => EditorSaveRequests.Add((question, fileName, encoding, owner)));
         return Task.FromResult(TryTake(EditorSaveAnswers, "editorSave", out var answer) && answer);
+    }
+
+    /// <summary>Unscripted, it answers no (the dialog's default).</summary>
+    public virtual Task<bool> ConfirmReassignShortcutAsync(string chord, string ownerLabel, Window? owner = null)
+    {
+        Record("reassign", () => ReassignRequests.Add((chord, ownerLabel, owner)));
+        return Task.FromResult(TryTake(ReassignAnswers, "reassign", out var answer) && answer);
     }
 
     public virtual Task ShowMessageAsync(string text, string? detail = null)

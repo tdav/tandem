@@ -20,7 +20,9 @@
                             Command="{Binding $parent[v:FKeyBar].((vm:MainViewModel)DataContext).RunCommand}"
                             CommandParameter="{Binding CommandId}">
                         <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="{Binding Key}" FontWeight="Bold" />
+                            <!-- An unbound command shows its label only. -->
+                            <TextBlock Text="{Binding Key}" FontWeight="Bold"
+                                       IsVisible="{Binding Key, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                             <TextBlock Text="{Binding Label}" />
                         </StackPanel>
                     </Button>

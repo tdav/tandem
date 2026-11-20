@@ -87,6 +87,11 @@ public interface IDialogService
     Task<bool> ConfirmEditorSaveAsync(EditorSaveQuestion question, string fileName, string encoding,
         Window? owner = null);
 
+    /// <summary>The settings window: the shortcut <paramref name="chord"/> belongs to the command labelled
+    /// <paramref name="ownerLabel"/>; true to take it from that command. "Cancel" is the default button; closing the
+    /// dialog answers false. Modal to <paramref name="owner"/> when given, else to the main window.</summary>
+    Task<bool> ConfirmReassignShortcutAsync(string chord, string ownerLabel, Window? owner = null);
+
     /// <summary>A message; <paramref name="detail"/>, when given, is secondary (e.g. the system's own words).</summary>
     Task ShowMessageAsync(string text, string? detail = null);
 }

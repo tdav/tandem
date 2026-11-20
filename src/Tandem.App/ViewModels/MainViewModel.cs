@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using Tandem.App.Commands;
 using Tandem.App.Resources;
 using Tandem.App.Services;
+using Tandem.App.ViewModels.Settings;
 using Tandem.App.ViewModels.Viewing;
 using Tandem.Core.Listing;
 using Tandem.Core.Platform;
@@ -504,6 +505,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         On(CommandIds.SortByDate, () => ActiveSide.SortBy(SortColumn.Modified));
         On(CommandIds.SortByMode, () => ActiveSide.SortBy(SortColumn.Mode));
         On(CommandIds.SortReverse, () => ActiveSide.ReverseSort());
+        // The window starts from the key map in effect; an open one comes to the front instead.
+        Commands.Register(CommandIds.AppSettings,
+            () => Services.Windows.ShowSettingsAsync(new SettingsViewModel(Settings, KeyMap)));
         Commands.RaiseCanExecuteChanged();
     }
 

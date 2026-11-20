@@ -11,7 +11,7 @@ using Tandem.Core.Settings;
 namespace Tandem.App.Views;
 
 /// <summary>
-/// The application's native menu: File, Selection, Go, View, Window. Every command has an item (one registered by a
+/// The application's native menus: the application menu, and the window's File, Selection, Go, View, Window. Every command has an item (one registered by a
 /// later part of the app shows disabled until then), labelled from <c>Menu_&lt;id&gt;</c> and showing its first
 /// chord from the key map.
 /// </summary>
@@ -48,6 +48,16 @@ public static class MainMenu
 
     /// <summary>The resource key of a command's menu label: "Menu_" and the id with '.' as '_'.</summary>
     public static string LabelKey(string commandId) => "Menu_" + commandId.Replace('.', '_');
+
+    /// <summary>The application menu ("Tandem", the leftmost one), for <see cref="NativeMenu.SetMenu"/> on the
+    /// application: the settings item; the system adds the rest (Hide, Quit, ...).</summary>
+    public static NativeMenu BuildApplicationMenu(MainViewModel main)
+    {
+        ArgumentNullException.ThrowIfNull(main);
+        var menu = new NativeMenu();
+        menu.Items.Add(CommandItem(main, CommandIds.AppSettings));
+        return menu;
+    }
 
     public static NativeMenu Build(MainViewModel main)
     {

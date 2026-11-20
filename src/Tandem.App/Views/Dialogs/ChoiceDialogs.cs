@@ -75,6 +75,21 @@ public sealed class EditorSaveDialog : DialogWindow
     }
 }
 
+/// <summary>The settings window: a recorded shortcut belongs to another command. True to take it from that command;
+/// "Cancel" is the default button, and Esc and closing the dialog cancel too.</summary>
+public sealed class ReassignShortcutDialog : DialogWindow
+{
+    public ReassignShortcutDialog(string chord, string ownerLabel) : base(Loc.Get("Settings_Reassign_Title"))
+    {
+        var reassign = MakeButton(Loc.Get("Button_Reassign"), name: "Reassign");
+        reassign.Click += (_, _) => Close(true);
+        var cancel = CancelButton(isDefault: true);
+        cancel.Click += (_, _) => Close(false);
+        SetContent(cancel, [Text(Loc.Format("Settings_Reassign_Message", chord, ownerLabel), name: "Message")],
+            reassign, cancel);
+    }
+}
+
 /// <summary>The destination exists: both files' size and date, the choices and "apply to all". Closing the window
 /// any other way cancels the operation.</summary>
 public sealed class ConflictDialog : DialogWindow

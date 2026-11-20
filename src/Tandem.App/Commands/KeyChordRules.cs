@@ -2,6 +2,22 @@ using Avalonia.Input;
 
 namespace Tandem.App.Commands;
 
+/// <summary>Why a chord cannot be bound to a command.</summary>
+public enum ChordRefusal
+{
+    /// <summary>No key, or a modifier key on its own.</summary>
+    NoKey,
+
+    /// <summary>Enter or Escape: the panel's own keys.</summary>
+    PanelKey,
+
+    /// <summary>A chord macOS keeps for itself.</summary>
+    System,
+
+    /// <summary>A key that moves the cursor or types quick search needs Cmd or Ctrl.</summary>
+    NeedsCmdOrCtrl,
+}
+
 /// <summary>Which chords the user may bind to a command.</summary>
 public static class KeyChordRules
 {
@@ -33,14 +49,21 @@ public static class KeyChordRules
     /// or Ctrl (they type quick search), for a modifier key on its own, and for the system's chords (Cmd+Q, Cmd+H,
     /// Cmd+Alt+H, Cmd+Tab, Cmd+Space, Cmd+Alt+Escape, Shift+Cmd+Q, Ctrl+Cmd+Q, Shift+Cmd+3/4/5, Cmd+`).
     /// </summary>
-    public static bool IsAssignable(KeyChord chord)
+    public static bool IsAssignable(KeyChord chord) => RefusalOf(chord) is null;
+
+    /// <summary>Why <paramref name="chord"/> cannot be bound (see <see cref="IsAssignable"/>), or null when it
+    /// can.</summary>
+    public static ChordRefusal? RefusalOf(KeyChord chord)
     {
         var (key, modifiers) = (chord.Key, chord.Modifiers);
-        if (key is Key.None or Key.Enter or Key.Escape || IsModifierKey(key) || SystemChords.Contains(chord))
-            return false;
-        if (key is >= Key.F1 and <= Key.F24) return true;
-        if ((modifiers & CmdOrCtrl) != 0) return true;
-        return key is Key.Tab or Key.Space or Key.Back or Key.Delete or Key.Insert;
+        if (key is Key.None || IsModifierKey(key)) return ChordRefusal.NoKey;
+        if (key is Key.Enter or Key.Escape) return ChordRefusal.PanelKey;
+        if (SystemChords.Contains(chord)) return ChordRefusal.System;
+        if (key is >= Key.F1 and <= Key.F24) return null;
+        if ((modifiers & CmdOrCtrl) != 0) return null;
+        return key is Key.Tab or Key.Space or Key.Back or Key.Delete or Key.Insert
+            ? null
+            : ChordRefusal.NeedsCmdOrCtrl;
     }
 
     private static bool IsModifierKey(Key key) => key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt

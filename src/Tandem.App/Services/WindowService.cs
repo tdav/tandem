@@ -1,8 +1,10 @@
 using Avalonia;
 using Avalonia.Controls;
 using Tandem.App.ViewModels.Editing;
+using Tandem.App.ViewModels.Settings;
 using Tandem.App.ViewModels.Viewing;
 using Tandem.App.Views.Editing;
+using Tandem.App.Views.Settings;
 using Tandem.App.Views.Viewing;
 using Tandem.Core.Vfs;
 
@@ -10,7 +12,7 @@ namespace Tandem.App.Services;
 
 /// <summary>
 /// Shows the editor and viewer windows as independent windows (not owned, so each comes forward on its own), placed over
-/// <see cref="Owner"/> (the main window) when it is shown. Their "save changes?" question goes through
+/// <see cref="Owner"/> (the main window) when it is shown, and the settings window modal to it. Their "save changes?" question goes through
 /// <paramref name="dialogs"/>; the files of <paramref name="providers"/> are told apart by what they really are, with
 /// links followed. UI thread only.
 /// </summary>
@@ -41,6 +43,42 @@ public sealed class WindowService(IDialogService dialogs, ProviderRegistry provi
     {
         ArgumentNullException.ThrowIfNull(viewer);
         Show(new ViewerWindow(viewer));
+    }
+
+    public async Task<bool> ShowSettingsAsync(SettingsViewModel settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        if (_open.OfType<SettingsWindow>().FirstOrDefault() is { } open)
+        {
+            Activate(open);
+            return false;
+        }
+        var window = new SettingsWindow(settings, _dialogs);
+        var closed = new TaskCompletionSource();
+        _open.Add(window);
+        window.Closed += (_, _) =>
+        {
+            _open.Remove(window);
+            closed.TrySetResult();
+        };
+        if (Owner is { IsVisible: true } owner)
+        {
+            window.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            _ = window.ShowDialog(owner);
+        }
+        else
+        {
+            window.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            window.Show();
+        }
+        await closed.Task;
+        return window.Applied;
+    }
+
+    private static void Activate(Window window)
+    {
+        if (window.WindowState == WindowState.Minimized) window.WindowState = WindowState.Normal;
+        window.Activate();
     }
 
     private void Show(Window window)
@@ -79,8 +117,7 @@ public sealed class WindowService(IDialogService dialogs, ProviderRegistry provi
     {
         if (_open.OfType<EditorWindow>().FirstOrDefault(w => w.Editor.Target == target) is not { } window)
             return false;
-        if (window.WindowState == WindowState.Minimized) window.WindowState = WindowState.Normal;
-        window.Activate();
+        Activate(window);
         return true;
     }
 

@@ -38,6 +38,7 @@ public class KeyMapTests
     [InlineData("Ctrl+Shift+Tab", "tab.prev")]
     [InlineData("Cmd+Shift+OemPeriod", "view.toggleHidden")]
     [InlineData("Ctrl+Cmd+P", "tab.togglePin")]
+    [InlineData("Cmd+OemComma", "app.settings")]
     public void Default_binding(string chord, string id) => Assert.Equal(id, KeyMap.Default.Find(KeyChord.Parse(chord)));
 
     [Fact]
@@ -59,6 +60,7 @@ public class KeyMapTests
             "favorites.show=Cmd+D", "view.toggleHidden=Cmd+Shift+OemPeriod", "view.quickView=Ctrl+Q",
             "sort.byName=Ctrl+Cmd+1", "sort.byExtension=Ctrl+Cmd+2", "sort.bySize=Ctrl+Cmd+3", "sort.byDate=Ctrl+Cmd+4",
             "sort.byMode=Ctrl+Cmd+5", "sort.reverse=Ctrl+Cmd+R", "tab.togglePin=Ctrl+Cmd+P",
+            "app.settings=Cmd+OemComma",
         ];
 
         var expectedBindings = expected.Select(e => e.Split('=')).Select(p => (p[0], KeyChord.Parse(p[1])));
@@ -134,8 +136,7 @@ public class KeyMapTests
     public void Every_command_except_menu_only_ones_has_a_default_chord()
     {
         var bound = KeyMap.Default.Bindings.Select(b => b.CommandId).ToHashSet();
-        // app.settings gets its chord (Cmd+,) with the settings window, in Task 16.
-        var unbound = ConstantIds().Where(id => !bound.Contains(id) && id != CommandIds.AppSettings).Order();
+        var unbound = ConstantIds().Where(id => !bound.Contains(id)).Order();
 
         Assert.Equal(
             [CommandIds.ShellOpenTerminal, CommandIds.ShellOpenWith, CommandIds.ShellReveal, CommandIds.TabCloseOthers,

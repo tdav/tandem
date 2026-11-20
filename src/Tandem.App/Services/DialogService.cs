@@ -64,6 +64,9 @@ public sealed class DialogService : IDialogService
         Window? owner = null) =>
         await ShowAsync<object>(new EditorSaveDialog(question, fileName, encoding), owner: owner) is true;
 
+    public async Task<bool> ConfirmReassignShortcutAsync(string chord, string ownerLabel, Window? owner = null) =>
+        await ShowAsync<object>(new ReassignShortcutDialog(chord, ownerLabel), owner: owner) is true;
+
     public Task ShowMessageAsync(string text, string? detail = null) =>
         MessageDialog.ShowAsync(Owner, "Tandem", string.IsNullOrWhiteSpace(detail) ? text : text + "\n\n" + detail);
 

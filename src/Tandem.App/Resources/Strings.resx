@@ -1065,4 +1065,169 @@ Folder</value>
   <data name="UserCommand_OtherPanelNotLocal" xml:space="preserve">
     <value>“{0}” uses the other panel’s folder, which is not on this Mac’s disk. The command was not run.</value>
   </data>
+  <data name="Settings_Title" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+  <data name="Settings_Tab_Keys" xml:space="preserve">
+    <value>Keys</value>
+  </data>
+  <data name="Settings_Tab_View" xml:space="preserve">
+    <value>View</value>
+  </data>
+  <data name="Settings_Tab_Columns" xml:space="preserve">
+    <value>Columns</value>
+  </data>
+  <data name="Settings_Tab_Buttons" xml:space="preserve">
+    <value>Button Bar</value>
+  </data>
+  <data name="Settings_Tab_Editing" xml:space="preserve">
+    <value>Editing</value>
+  </data>
+  <data name="Settings_Filter" xml:space="preserve">
+    <value>Search commands and shortcuts</value>
+  </data>
+  <data name="Settings_Recorder_Idle" xml:space="preserve">
+    <value>Click here and press a shortcut to add it</value>
+  </data>
+  <data name="Settings_Recorder_Recording" xml:space="preserve">
+    <value>Press a shortcut… (Esc to stop)</value>
+  </data>
+  <data name="Settings_ChordRefused_NoKey" xml:space="preserve">
+    <value>{0} cannot be a shortcut: press a key together with the modifiers.</value>
+  </data>
+  <data name="Settings_ChordRefused_PanelKey" xml:space="preserve">
+    <value>{0} cannot be a shortcut: Return and Esc belong to the panels.</value>
+  </data>
+  <data name="Settings_ChordRefused_System" xml:space="preserve">
+    <value>{0} cannot be a shortcut: macOS uses it.</value>
+  </data>
+  <data name="Settings_ChordRefused_NeedsCmdOrCtrl" xml:space="preserve">
+    <value>{0} cannot be a shortcut: without Cmd or Ctrl this key moves the cursor or types a quick search.</value>
+  </data>
+  <data name="Settings_ResetShortcut" xml:space="preserve">
+    <value>Reset to Default</value>
+  </data>
+  <data name="Settings_ResetAllShortcuts" xml:space="preserve">
+    <value>Reset All</value>
+  </data>
+  <data name="Settings_ChangedMark" xml:space="preserve">
+    <value>•</value>
+  </data>
+  <data name="Settings_ChangedTip" xml:space="preserve">
+    <value>Changed from the default</value>
+  </data>
+  <data name="Settings_Reassign_Title" xml:space="preserve">
+    <value>Shortcut in Use</value>
+  </data>
+  <data name="Settings_Reassign_Message" xml:space="preserve">
+    <value>{0} is already the shortcut of “{1}”. Reassign it?</value>
+  </data>
+  <data name="Button_Reassign" xml:space="preserve">
+    <value>Reassign</value>
+  </data>
+  <data name="Button_Apply" xml:space="preserve">
+    <value>Apply</value>
+  </data>
+  <data name="Settings_FontSize" xml:space="preserve">
+    <value>Font size</value>
+  </data>
+  <data name="Settings_RowHeight" xml:space="preserve">
+    <value>Row height</value>
+  </data>
+  <data name="Settings_FileColors" xml:space="preserve">
+    <value>Colors by File Type</value>
+  </data>
+  <data name="Settings_MaskWatermark" xml:space="preserve">
+    <value>Mask, e.g. *.jpg;*.png</value>
+  </data>
+  <data name="Settings_Add" xml:space="preserve">
+    <value>Add</value>
+  </data>
+  <data name="Settings_MoveUp" xml:space="preserve">
+    <value>↑</value>
+  </data>
+  <data name="Settings_MoveDown" xml:space="preserve">
+    <value>↓</value>
+  </data>
+  <data name="Settings_Remove" xml:space="preserve">
+    <value>✕</value>
+  </data>
+  <data name="Settings_MoveUpTip" xml:space="preserve">
+    <value>Move Up</value>
+  </data>
+  <data name="Settings_MoveDownTip" xml:space="preserve">
+    <value>Move Down</value>
+  </data>
+  <data name="Settings_RemoveTip" xml:space="preserve">
+    <value>Remove</value>
+  </data>
+  <data name="Settings_Color_Red" xml:space="preserve">
+    <value>Red</value>
+  </data>
+  <data name="Settings_Color_Orange" xml:space="preserve">
+    <value>Orange</value>
+  </data>
+  <data name="Settings_Color_Yellow" xml:space="preserve">
+    <value>Yellow</value>
+  </data>
+  <data name="Settings_Color_Green" xml:space="preserve">
+    <value>Green</value>
+  </data>
+  <data name="Settings_Color_Teal" xml:space="preserve">
+    <value>Teal</value>
+  </data>
+  <data name="Settings_Color_Blue" xml:space="preserve">
+    <value>Blue</value>
+  </data>
+  <data name="Settings_Color_Purple" xml:space="preserve">
+    <value>Purple</value>
+  </data>
+  <data name="Settings_Color_Gray" xml:space="preserve">
+    <value>Gray</value>
+  </data>
+  <data name="Settings_LeftPanel" xml:space="preserve">
+    <value>Left Panel</value>
+  </data>
+  <data name="Settings_RightPanel" xml:space="preserve">
+    <value>Right Panel</value>
+  </data>
+  <data name="Settings_ColumnsHint" xml:space="preserve">
+    <value>The Name column is always shown, first.</value>
+  </data>
+  <data name="Settings_ColumnWidth" xml:space="preserve">
+    <value>Width</value>
+  </data>
+  <data name="Settings_ButtonTitle" xml:space="preserve">
+    <value>Title</value>
+  </data>
+  <data name="Settings_ButtonProgram" xml:space="preserve">
+    <value>Program or .app</value>
+  </data>
+  <data name="Settings_ButtonArguments" xml:space="preserve">
+    <value>Arguments</value>
+  </data>
+  <data name="Settings_ButtonsHint" xml:space="preserve">
+    <value>In the arguments: %p is the active panel’s folder, %t the other panel’s folder, %f the item under the cursor, %n its name, %s the selected items, %% a percent sign.</value>
+  </data>
+  <data name="Settings_ExternalEditor" xml:space="preserve">
+    <value>External editor for F4</value>
+  </data>
+  <data name="Settings_ExternalEditorHint" xml:space="preserve">
+    <value>A program or an .app, e.g. /Applications/TextEdit.app. Leave it empty to use the built-in editor.</value>
+  </data>
+  <data name="Settings_Error_EmptyMask" xml:space="preserve">
+    <value>Each color rule needs a mask.</value>
+  </data>
+  <data name="Settings_Error_IncompleteButton" xml:space="preserve">
+    <value>Each button needs a title and a program.</value>
+  </data>
+  <data name="Settings_Error_FontSize" xml:space="preserve">
+    <value>The font size must be from {0} to {1}.</value>
+  </data>
+  <data name="Settings_Error_RowHeight" xml:space="preserve">
+    <value>The row height must be from {0} to {1}.</value>
+  </data>
+  <data name="Settings_Error_ColumnWidth" xml:space="preserve">
+    <value>Column widths must be from {0} to {1}.</value>
+  </data>
 </root>

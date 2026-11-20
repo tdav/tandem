@@ -52,6 +52,15 @@ public partial class MainWindow : Window
         DataContext = main;
         App.ApplyTheme(main.Theme);
         NativeMenu.SetMenu(this, MainMenu.Build(main));
+        if (Application.Current is { } app)
+        {
+            var appMenu = MainMenu.BuildApplicationMenu(main);
+            NativeMenu.SetMenu(app, appMenu);
+            Closed += (_, _) =>
+            {
+                if (NativeMenu.GetMenu(app) == appMenu) NativeMenu.SetMenu(app, null);
+            };
+        }
         ApplyPlacement();
 
         AddHandler(KeyDownEvent, OnKeyDown, RoutingStrategies.Tunnel, handledEventsToo: true);
@@ -213,9 +222,12 @@ public partial class MainWindow : Window
         else if (e.PropertyName == nameof(MainViewModel.Theme) && _main is { } themed)
             App.ApplyTheme(themed.Theme);
         // The menu shows each command's first chord: its items take the new key map's.
-        else if (e.PropertyName == nameof(MainViewModel.KeyMap) && _main is { } main &&
-                 NativeMenu.GetMenu(this) is { } menu)
-            MainMenu.ApplyShortcuts(menu, main.KeyMap);
+        else if (e.PropertyName == nameof(MainViewModel.KeyMap) && _main is { } main)
+        {
+            if (NativeMenu.GetMenu(this) is { } menu) MainMenu.ApplyShortcuts(menu, main.KeyMap);
+            if (Application.Current is { } app && NativeMenu.GetMenu(app) is { } appMenu)
+                MainMenu.ApplyShortcuts(appMenu, main.KeyMap);
+        }
     }
 
     private void FocusActivePanel()

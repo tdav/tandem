@@ -1056,4 +1056,169 @@
   <data name="UserCommand_OtherPanelNotLocal" xml:space="preserve">
     <value>«{0}» использует папку другой панели, а она не на диске этого Mac. Команда не запущена.</value>
   </data>
+  <data name="Settings_Title" xml:space="preserve">
+    <value>Настройки</value>
+  </data>
+  <data name="Settings_Tab_Keys" xml:space="preserve">
+    <value>Клавиши</value>
+  </data>
+  <data name="Settings_Tab_View" xml:space="preserve">
+    <value>Вид</value>
+  </data>
+  <data name="Settings_Tab_Columns" xml:space="preserve">
+    <value>Столбцы</value>
+  </data>
+  <data name="Settings_Tab_Buttons" xml:space="preserve">
+    <value>Панель кнопок</value>
+  </data>
+  <data name="Settings_Tab_Editing" xml:space="preserve">
+    <value>Правка</value>
+  </data>
+  <data name="Settings_Filter" xml:space="preserve">
+    <value>Поиск по командам и сочетаниям</value>
+  </data>
+  <data name="Settings_Recorder_Idle" xml:space="preserve">
+    <value>Щёлкните здесь и нажмите сочетание, чтобы добавить его</value>
+  </data>
+  <data name="Settings_Recorder_Recording" xml:space="preserve">
+    <value>Нажмите сочетание… (Esc — закончить)</value>
+  </data>
+  <data name="Settings_ChordRefused_NoKey" xml:space="preserve">
+    <value>«{0}» не может быть сочетанием: нажмите клавишу вместе с модификаторами.</value>
+  </data>
+  <data name="Settings_ChordRefused_PanelKey" xml:space="preserve">
+    <value>«{0}» не может быть сочетанием: Return и Esc нужны панелям.</value>
+  </data>
+  <data name="Settings_ChordRefused_System" xml:space="preserve">
+    <value>«{0}» не может быть сочетанием: его использует macOS.</value>
+  </data>
+  <data name="Settings_ChordRefused_NeedsCmdOrCtrl" xml:space="preserve">
+    <value>«{0}» не может быть сочетанием: без Cmd или Ctrl эта клавиша двигает курсор или набирает быстрый поиск.</value>
+  </data>
+  <data name="Settings_ResetShortcut" xml:space="preserve">
+    <value>Как по умолчанию</value>
+  </data>
+  <data name="Settings_ResetAllShortcuts" xml:space="preserve">
+    <value>Сбросить всё</value>
+  </data>
+  <data name="Settings_ChangedMark" xml:space="preserve">
+    <value>•</value>
+  </data>
+  <data name="Settings_ChangedTip" xml:space="preserve">
+    <value>Изменено</value>
+  </data>
+  <data name="Settings_Reassign_Title" xml:space="preserve">
+    <value>Сочетание занято</value>
+  </data>
+  <data name="Settings_Reassign_Message" xml:space="preserve">
+    <value>Сочетание {0} занято командой «{1}». Переназначить?</value>
+  </data>
+  <data name="Button_Reassign" xml:space="preserve">
+    <value>Переназначить</value>
+  </data>
+  <data name="Button_Apply" xml:space="preserve">
+    <value>Применить</value>
+  </data>
+  <data name="Settings_FontSize" xml:space="preserve">
+    <value>Размер шрифта</value>
+  </data>
+  <data name="Settings_RowHeight" xml:space="preserve">
+    <value>Высота строки</value>
+  </data>
+  <data name="Settings_FileColors" xml:space="preserve">
+    <value>Цвета по типам файлов</value>
+  </data>
+  <data name="Settings_MaskWatermark" xml:space="preserve">
+    <value>Маска, например *.jpg;*.png</value>
+  </data>
+  <data name="Settings_Add" xml:space="preserve">
+    <value>Добавить</value>
+  </data>
+  <data name="Settings_MoveUp" xml:space="preserve">
+    <value>↑</value>
+  </data>
+  <data name="Settings_MoveDown" xml:space="preserve">
+    <value>↓</value>
+  </data>
+  <data name="Settings_Remove" xml:space="preserve">
+    <value>✕</value>
+  </data>
+  <data name="Settings_MoveUpTip" xml:space="preserve">
+    <value>Выше</value>
+  </data>
+  <data name="Settings_MoveDownTip" xml:space="preserve">
+    <value>Ниже</value>
+  </data>
+  <data name="Settings_RemoveTip" xml:space="preserve">
+    <value>Удалить</value>
+  </data>
+  <data name="Settings_Color_Red" xml:space="preserve">
+    <value>Красный</value>
+  </data>
+  <data name="Settings_Color_Orange" xml:space="preserve">
+    <value>Оранжевый</value>
+  </data>
+  <data name="Settings_Color_Yellow" xml:space="preserve">
+    <value>Жёлтый</value>
+  </data>
+  <data name="Settings_Color_Green" xml:space="preserve">
+    <value>Зелёный</value>
+  </data>
+  <data name="Settings_Color_Teal" xml:space="preserve">
+    <value>Бирюзовый</value>
+  </data>
+  <data name="Settings_Color_Blue" xml:space="preserve">
+    <value>Синий</value>
+  </data>
+  <data name="Settings_Color_Purple" xml:space="preserve">
+    <value>Фиолетовый</value>
+  </data>
+  <data name="Settings_Color_Gray" xml:space="preserve">
+    <value>Серый</value>
+  </data>
+  <data name="Settings_LeftPanel" xml:space="preserve">
+    <value>Левая панель</value>
+  </data>
+  <data name="Settings_RightPanel" xml:space="preserve">
+    <value>Правая панель</value>
+  </data>
+  <data name="Settings_ColumnsHint" xml:space="preserve">
+    <value>Столбец «Имя» показывается всегда, первым.</value>
+  </data>
+  <data name="Settings_ColumnWidth" xml:space="preserve">
+    <value>Ширина</value>
+  </data>
+  <data name="Settings_ButtonTitle" xml:space="preserve">
+    <value>Название</value>
+  </data>
+  <data name="Settings_ButtonProgram" xml:space="preserve">
+    <value>Программа или .app</value>
+  </data>
+  <data name="Settings_ButtonArguments" xml:space="preserve">
+    <value>Аргументы</value>
+  </data>
+  <data name="Settings_ButtonsHint" xml:space="preserve">
+    <value>В аргументах: %p — папка активной панели, %t — папка другой панели, %f — элемент под курсором, %n — его имя, %s — выбранные элементы, %% — знак процента.</value>
+  </data>
+  <data name="Settings_ExternalEditor" xml:space="preserve">
+    <value>Внешний редактор для F4</value>
+  </data>
+  <data name="Settings_ExternalEditorHint" xml:space="preserve">
+    <value>Программа или .app, например /Applications/TextEdit.app. Пусто — встроенный редактор.</value>
+  </data>
+  <data name="Settings_Error_EmptyMask" xml:space="preserve">
+    <value>У каждого правила цвета должна быть маска.</value>
+  </data>
+  <data name="Settings_Error_IncompleteButton" xml:space="preserve">
+    <value>У каждой кнопки должны быть название и программа.</value>
+  </data>
+  <data name="Settings_Error_FontSize" xml:space="preserve">
+    <value>Размер шрифта должен быть от {0} до {1}.</value>
+  </data>
+  <data name="Settings_Error_RowHeight" xml:space="preserve">
+    <value>Высота строки должна быть от {0} до {1}.</value>
+  </data>
+  <data name="Settings_Error_ColumnWidth" xml:space="preserve">
+    <value>Ширина столбца должна быть от {0} до {1}.</value>
+  </data>
 </root>

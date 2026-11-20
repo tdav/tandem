@@ -1,0 +1,218 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Tandem.App.ViewModels.Settings"
+        xmlns:c="using:Tandem.App.Commands"
+        xmlns:s="using:Tandem.App.Views.Settings"
+        xmlns:loc="using:Tandem.App.Resources"
+        x:Class="Tandem.App.Views.Settings.SettingsWindow"
+        x:DataType="vm:SettingsViewModel"
+        Title="{loc:Tr Key=Settings_Title}"
+        Width="760" Height="580" MinWidth="560" MinHeight="420"
+        CanMinimize="False" ShowInTaskbar="False">
+    <Window.Resources>
+        <DataTemplate x:Key="ColumnTemplate" x:DataType="vm:ColumnRow">
+            <Grid ColumnDefinitions="*,Auto,110,Auto,Auto" ColumnSpacing="6" Margin="0,0,0,4">
+                <CheckBox Content="{Binding Label}" IsChecked="{Binding Visible}" />
+                <TextBlock Grid.Column="1" Text="{loc:Tr Key=Settings_ColumnWidth}" VerticalAlignment="Center"
+                           Classes="secondary" />
+                <NumericUpDown Grid.Column="2" Increment="2" FormatString="0" Value="{Binding Width}" />
+                <Button Grid.Column="3" Classes="moveUp" Tag="{Binding}" Content="{loc:Tr Key=Settings_MoveUp}"
+                        ToolTip.Tip="{loc:Tr Key=Settings_MoveUpTip}" />
+                <Button Grid.Column="4" Classes="moveDown" Tag="{Binding}" Content="{loc:Tr Key=Settings_MoveDown}"
+                        ToolTip.Tip="{loc:Tr Key=Settings_MoveDownTip}" />
+            </Grid>
+        </DataTemplate>
+    </Window.Resources>
+
+    <!-- Five tabs over a working copy of the settings; OK and Apply hand it to the settings service, Cancel drops it. -->
+    <DockPanel Margin="16">
+        <DockPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
+                <Button x:Name="Apply" MinWidth="90" HorizontalContentAlignment="Center"
+                        Content="{loc:Tr Key=Button_Apply}" Click="OnApply" />
+                <Button x:Name="Cancel" MinWidth="90" HorizontalContentAlignment="Center" IsCancel="True"
+                        Content="{loc:Tr Key=Button_Cancel}" Click="OnCancel" />
+                <Button x:Name="Ok" MinWidth="90" HorizontalContentAlignment="Center" IsDefault="True"
+                        Content="{loc:Tr Key=Button_OK}" Click="OnOk" />
+            </StackPanel>
+            <TextBlock x:Name="ErrorText" Text="{Binding Error}" TextWrapping="Wrap" VerticalAlignment="Center"
+                       Foreground="{DynamicResource Tandem.ErrorForeground}"
+                       IsVisible="{Binding Error, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+        </DockPanel>
+
+        <TabControl x:Name="Tabs">
+            <!-- Keys: every command with its shortcuts; the selected one gets new ones from the recorder. -->
+            <TabItem Header="{loc:Tr Key=Settings_Tab_Keys}">
+                <DockPanel Margin="0,8,0,0">
+                    <TextBox x:Name="ShortcutFilter" DockPanel.Dock="Top" Margin="0,0,0,8"
+                             PlaceholderText="{loc:Tr Key=Settings_Filter}" Text="{Binding ShortcutFilter}" />
+                    <StackPanel DockPanel.Dock="Bottom" Spacing="8" Margin="0,8,0,0"
+                                IsEnabled="{Binding SelectedShortcut, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <ItemsControl x:Name="SelectedChords" ItemsSource="{Binding SelectedShortcut.Chords}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="c:KeyChord">
+                                    <Border BorderBrush="{DynamicResource Tandem.DividerBrush}" BorderThickness="1"
+                                            CornerRadius="4" Padding="6,2" Margin="0,0,6,0">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <TextBlock Text="{Binding}" VerticalAlignment="Center" />
+                                            <Button Padding="2,0" Classes="flat removeChord" Tag="{Binding}"
+                                                    Content="{loc:Tr Key=Settings_Remove}"
+                                                    ToolTip.Tip="{loc:Tr Key=Settings_RemoveTip}" />
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <s:ShortcutRecorder x:Name="Recorder" />
+                        <TextBlock x:Name="ShortcutMessage" Text="{Binding ShortcutMessage}" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource Tandem.ErrorForeground}"
+                                   IsVisible="{Binding ShortcutMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="ResetShortcut" Content="{loc:Tr Key=Settings_ResetShortcut}"
+                                    Click="OnResetShortcut" />
+                            <Button x:Name="ResetAllShortcuts" Content="{loc:Tr Key=Settings_ResetAllShortcuts}"
+                                    Click="OnResetAllShortcuts" />
+                        </StackPanel>
+                    </StackPanel>
+                    <ListBox x:Name="ShortcutList" ItemsSource="{Binding VisibleShortcuts}"
+                             SelectedItem="{Binding SelectedShortcut}">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:ShortcutRow">
+                                <Grid ColumnDefinitions="16,*,Auto">
+                                    <TextBlock Text="{loc:Tr Key=Settings_ChangedMark}" IsVisible="{Binding IsChanged}"
+                                               ToolTip.Tip="{loc:Tr Key=Settings_ChangedTip}" FontWeight="Bold" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Grid.Column="2" Text="{Binding ChordsText}" Classes="secondary"
+                                               Margin="12,0,0,0" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </TabItem>
+
+            <!-- View: theme, font size, row height and the colour rules (the first matching rule wins). -->
+            <TabItem Header="{loc:Tr Key=Settings_Tab_View}">
+                <ScrollViewer>
+                    <StackPanel Spacing="10" Margin="0,8,0,0">
+                        <Grid ColumnDefinitions="160,220" RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
+                            <TextBlock Text="{loc:Tr Key=Menu_Theme}" VerticalAlignment="Center" />
+                            <ComboBox x:Name="ThemeChoice" Grid.Column="1" HorizontalAlignment="Stretch"
+                                      ItemsSource="{x:Static vm:SettingsViewModel.ThemeOptions}"
+                                      SelectedItem="{Binding SelectedTheme}">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:ThemeOption">
+                                        <TextBlock Text="{Binding Label}" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <TextBlock Grid.Row="1" Text="{loc:Tr Key=Settings_FontSize}" VerticalAlignment="Center" />
+                            <NumericUpDown x:Name="FontSizeField" Grid.Row="1" Grid.Column="1" Increment="1"
+                                           FormatString="0" Value="{Binding FontSize}" />
+                            <TextBlock Grid.Row="2" Text="{loc:Tr Key=Settings_RowHeight}" VerticalAlignment="Center" />
+                            <NumericUpDown x:Name="RowHeightField" Grid.Row="2" Grid.Column="1" Increment="1"
+                                           FormatString="0" Value="{Binding RowHeight}" />
+                        </Grid>
+                        <TextBlock Text="{loc:Tr Key=Settings_FileColors}" FontWeight="SemiBold" Margin="0,8,0,0" />
+                        <ItemsControl x:Name="FileColors" ItemsSource="{Binding FileColors}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:FileColorRuleRow">
+                                    <Grid ColumnDefinitions="*,160,Auto,Auto,Auto" ColumnSpacing="6" Margin="0,0,0,6">
+                                        <TextBox Text="{Binding Mask}" PlaceholderText="{loc:Tr Key=Settings_MaskWatermark}" />
+                                        <ComboBox Grid.Column="1" HorizontalAlignment="Stretch"
+                                                  ItemsSource="{x:Static vm:FileColorRuleRow.ColorOptions}"
+                                                  SelectedItem="{Binding SelectedColor}">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:ColorOption">
+                                                    <TextBlock Text="{Binding Label}" />
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
+                                        <Button Grid.Column="2" Classes="moveUp" Tag="{Binding}"
+                                                Content="{loc:Tr Key=Settings_MoveUp}"
+                                                ToolTip.Tip="{loc:Tr Key=Settings_MoveUpTip}" />
+                                        <Button Grid.Column="3" Classes="moveDown" Tag="{Binding}"
+                                                Content="{loc:Tr Key=Settings_MoveDown}"
+                                                ToolTip.Tip="{loc:Tr Key=Settings_MoveDownTip}" />
+                                        <Button Grid.Column="4" Classes="remove" Tag="{Binding}"
+                                                Content="{loc:Tr Key=Settings_Remove}"
+                                                ToolTip.Tip="{loc:Tr Key=Settings_RemoveTip}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Button x:Name="AddFileColor" Content="{loc:Tr Key=Settings_Add}" Click="OnAddFileColor" />
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- Columns: for each panel, which optional columns show, in which order and how wide. -->
+            <TabItem Header="{loc:Tr Key=Settings_Tab_Columns}">
+                <StackPanel Spacing="8" Margin="0,8,0,0">
+                    <TextBlock Text="{loc:Tr Key=Settings_ColumnsHint}" Classes="secondary" />
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="24">
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="{loc:Tr Key=Settings_LeftPanel}" FontWeight="SemiBold" />
+                            <ItemsControl x:Name="LeftColumns" ItemsSource="{Binding LeftColumns}"
+                                          ItemTemplate="{StaticResource ColumnTemplate}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Spacing="6">
+                            <TextBlock Text="{loc:Tr Key=Settings_RightPanel}" FontWeight="SemiBold" />
+                            <ItemsControl x:Name="RightColumns" ItemsSource="{Binding RightColumns}"
+                                          ItemTemplate="{StaticResource ColumnTemplate}" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </TabItem>
+
+            <!-- Button bar: the user's commands, left to right. -->
+            <TabItem Header="{loc:Tr Key=Settings_Tab_Buttons}">
+                <ScrollViewer>
+                    <StackPanel Spacing="8" Margin="0,8,0,0">
+                        <TextBlock Text="{loc:Tr Key=Settings_ButtonsHint}" Classes="secondary" TextWrapping="Wrap" />
+                        <ItemsControl x:Name="Buttons" ItemsSource="{Binding Buttons}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:UserButtonRow">
+                                    <Grid ColumnDefinitions="120,*,*,Auto,Auto,Auto" ColumnSpacing="6"
+                                          Margin="0,0,0,6">
+                                        <TextBox Text="{Binding Title}"
+                                                 PlaceholderText="{loc:Tr Key=Settings_ButtonTitle}" />
+                                        <TextBox Grid.Column="1" Text="{Binding Program}"
+                                                 PlaceholderText="{loc:Tr Key=Settings_ButtonProgram}" />
+                                        <TextBox Grid.Column="2" Text="{Binding Arguments}"
+                                                 PlaceholderText="{loc:Tr Key=Settings_ButtonArguments}" />
+                                        <Button Grid.Column="3" Classes="moveUp" Tag="{Binding}"
+                                                Content="{loc:Tr Key=Settings_MoveUp}"
+                                                ToolTip.Tip="{loc:Tr Key=Settings_MoveUpTip}" />
+                                        <Button Grid.Column="4" Classes="moveDown" Tag="{Binding}"
+                                                Content="{loc:Tr Key=Settings_MoveDown}"
+                                                ToolTip.Tip="{loc:Tr Key=Settings_MoveDownTip}" />
+                                        <Button Grid.Column="5" Classes="remove" Tag="{Binding}"
+                                                Content="{loc:Tr Key=Settings_Remove}"
+                                                ToolTip.Tip="{loc:Tr Key=Settings_RemoveTip}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Button x:Name="AddButton" Content="{loc:Tr Key=Settings_Add}" Click="OnAddButton" />
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- Editing: the program F4 opens files with; empty for the built-in editor. -->
+            <TabItem Header="{loc:Tr Key=Settings_Tab_Editing}">
+                <StackPanel Spacing="8" Margin="0,8,0,0">
+                    <TextBlock Text="{loc:Tr Key=Settings_ExternalEditor}" />
+                    <TextBox x:Name="ExternalEditor" Text="{Binding ExternalEditor}" />
+                    <TextBlock Text="{loc:Tr Key=Settings_ExternalEditorHint}" Classes="secondary" TextWrapping="Wrap" />
+                </StackPanel>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+
+</Window>
