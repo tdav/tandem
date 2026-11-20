@@ -73,6 +73,28 @@ public class AppearanceWindowTests : LanguageTestBase, IDisposable
         var leftRow = RowOf(app, PanelSide.Left, "notes.txt");
         Assert.True(Cell(leftRow, "RowExtension").TranslatePoint(default, leftRow)!.Value.X <
                     Cell(leftRow, "RowMode").TranslatePoint(default, leftRow)!.Value.X);
+        AssertHeadersLineUpWithCells(app, PanelSide.Left);
+        AssertHeadersLineUpWithCells(app, PanelSide.Right);
+    }
+
+    // Each visible column's header starts where its cells start (the cell's own margin left out), within a pixel.
+    private static void AssertHeadersLineUpWithCells(TestApp app, PanelSide side)
+    {
+        var row = RowOf(app, side, "notes.txt");
+        (string Header, string Cell)[] columns =
+        [
+            ("SortByName", "RowName"), ("SortByExtension", "RowExtension"), ("SortBySize", "RowSize"),
+            ("SortByDate", "RowModified"), ("SortByMode", "RowMode"),
+        ];
+        foreach (var (header, cell) in columns)
+        {
+            var button = Header(app, side, header);
+            if (!button.IsEffectivelyVisible) continue;
+            var block = Cell(row, cell);
+            var headerX = button.TranslatePoint(default, app.Window)!.Value.X;
+            var cellX = block.TranslatePoint(default, app.Window)!.Value.X - block.Margin.Left;
+            Assert.True(Math.Abs(headerX - cellX) <= 1, $"{side} {header}: header at {headerX}, cell at {cellX}.");
+        }
     }
 
     [AvaloniaFact]
@@ -115,7 +137,10 @@ public class AppearanceWindowTests : LanguageTestBase, IDisposable
             Assert.Equal(30, row.Bounds.Height, 1);
             Assert.Equal(18, Cell(row, "RowName").FontSize);
             Assert.Equal(18, Cell(row, "RowSize").FontSize);
+            foreach (var header in new[] { "SortByName", "SortBySize", "SortByMode" })
+                Assert.Equal(18, Header(app, side, header).FontSize);
         }
+        AssertHeadersLineUpWithCells(app, PanelSide.Left);
         var list = app.FileList(PanelSide.Left);
         Assert.Equal(Math.Max(1, (int)(list.Bounds.Height / 30) - 1), app.Main.PageSize);
     }

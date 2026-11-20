@@ -41,6 +41,11 @@ public sealed partial class ListLayoutViewModel : ObservableObject
     [ObservableProperty] public partial GridLength Cell3Width { get; private set; }
     [ObservableProperty] public partial GridLength Cell4Width { get; private set; }
 
+    /// <summary>Raised once at the end of an <see cref="Apply"/> that changed the cells (their order, widths or
+    /// visibility), when every cell property already holds the new layout. The view follows this one notification,
+    /// not the property changes one by one.</summary>
+    public event EventHandler? ColumnsChanged;
+
     /// <summary>Takes the layout of the settings (already normalized: <paramref name="columns"/> holds every column
     /// once); raises PropertyChanged only for what changed.</summary>
     public void Apply(IReadOnlyList<ColumnSetting> columns, double fontSize, double rowHeight)
@@ -51,11 +56,9 @@ public sealed partial class ListLayoutViewModel : ObservableObject
 
         FontSize = fontSize;
         RowHeight = rowHeight;
-        if (!Columns.SequenceEqual(columns))
-        {
-            Columns = columns.ToArray();
-            OnPropertyChanged(nameof(Columns));
-        }
+        if (Columns.SequenceEqual(columns)) return;
+        Columns = columns.ToArray();
+        OnPropertyChanged(nameof(Columns));
 
         int CellOf(ColumnId id) => 1 + Columns.ToList().FindIndex(c => c.Column == id);
         bool VisibleOf(ColumnId id) => Columns.First(c => c.Column == id).Visible;
@@ -73,5 +76,6 @@ public sealed partial class ListLayoutViewModel : ObservableObject
         Cell2Width = WidthOf(1);
         Cell3Width = WidthOf(2);
         Cell4Width = WidthOf(3);
+        ColumnsChanged?.Invoke(this, EventArgs.Empty);
     }
 }

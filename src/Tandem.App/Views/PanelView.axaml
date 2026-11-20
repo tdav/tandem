@@ -134,10 +134,11 @@
         </Border>
 
         <!-- Column headers: a click sorts by the column, a second click reverses the order. -->
-        <!-- This side's columns, in its order and widths (the rows use the same layout); the last cell is the
-             scroll bar's. -->
-        <Grid x:Name="Headers" DockPanel.Dock="Top" Background="{DynamicResource Tandem.HeaderBackground}"
-              IsVisible="{Binding !ShowsQuickView}" ColumnDefinitions="*,0,0,0,0,14"
+        <!-- This side's columns, in its order and widths (the rows use the same layout). The padding is the rows'
+             own (the list item padding), so each header starts where its cells start. The font size is the list's. -->
+        <Border x:Name="HeaderRow" DockPanel.Dock="Top" Background="{DynamicResource Tandem.HeaderBackground}"
+                IsVisible="{Binding !ShowsQuickView}" Padding="6,0">
+        <Grid x:Name="Headers" ColumnDefinitions="*,0,0,0,0" TextElement.FontSize="{Binding Layout.FontSize}"
               v:ListLayoutColumns.Layout="{Binding Layout}">
             <Button x:Name="SortByName" Classes="flat" Command="{Binding SortByCommand}"
                     CommandParameter="{x:Static listing:SortColumn.Name}">
@@ -175,6 +176,7 @@
                 </StackPanel>
             </Button>
         </Grid>
+        </Border>
 
         <Panel>
             <v:FileListView x:Name="FileList" IsVisible="{Binding !ShowsQuickView}" />

@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
 using Tandem.App.ViewModels;
@@ -41,7 +40,7 @@ public static class ListLayoutColumns
         grid.SetValue(FollowerProperty, follower);
     }
 
-    /// <summary>Applies the layout to the grid now and on every change while the grid is in the visual tree (so a
+    /// <summary>Applies the layout to the grid now and on every column change while the grid is in the visual tree (so a
     /// grid that is gone does not stay subscribed to the layout).</summary>
     private sealed class Follower
     {
@@ -78,11 +77,12 @@ public static class ListLayoutColumns
         {
             if (listen == _listening) return;
             _listening = listen;
-            if (listen) _layout.PropertyChanged += OnLayoutChanged;
-            else _layout.PropertyChanged -= OnLayoutChanged;
+            if (listen) _layout.ColumnsChanged += OnColumnsChanged;
+            else _layout.ColumnsChanged -= OnColumnsChanged;
         }
 
-        private void OnLayoutChanged(object? sender, PropertyChangedEventArgs e) => Apply();
+        // One notification per layout change, sent when the whole new layout is in place.
+        private void OnColumnsChanged(object? sender, EventArgs e) => Apply();
 
         private void Apply()
         {

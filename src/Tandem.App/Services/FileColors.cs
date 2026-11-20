@@ -21,9 +21,6 @@ public sealed class FileColors
         _rules = rules.Select(r => (new FileMask(r.Mask), r.Color)).ToArray();
     }
 
-    /// <summary>No rule at all.</summary>
-    public static FileColors None { get; } = new([]);
-
     /// <summary>The colour name (one of <see cref="AppSettings.ColorNames"/>) of the first rule matching the entry's
     /// name; null when none matches or the entry is folder-like.</summary>
     public string? ColorNameFor(FileEntry entry)

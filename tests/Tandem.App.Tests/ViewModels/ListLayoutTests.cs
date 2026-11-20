@@ -69,4 +69,36 @@ public class ListLayoutTests
         var layout = new ListLayoutViewModel();
         Assert.Throws<ArgumentException>(() => layout.Apply([new ColumnSetting(ColumnId.Size, true, 80)], 14, 22));
     }
+
+    [Fact]
+    public void Column_change_is_announced_once_with_the_whole_new_layout()
+    {
+        var layout = new ListLayoutViewModel();
+        var seen = new List<(int Ext, int Size, int Modified, int Mode, GridLength First)>();
+        layout.ColumnsChanged += (_, _) => seen.Add((layout.ExtensionCell, layout.SizeCell, layout.ModifiedCell,
+            layout.ModeCell, layout.Cell1Width));
+
+        layout.Apply([
+            new ColumnSetting(ColumnId.Size, true, 90),
+            new ColumnSetting(ColumnId.Extension, false, 50),
+            new ColumnSetting(ColumnId.Mode, true, 70),
+            new ColumnSetting(ColumnId.Modified, true, 130),
+        ], fontSize: 16, rowHeight: 26);
+
+        Assert.Equal([(2, 1, 4, 3, new GridLength(90))], seen);
+    }
+
+    [Fact]
+    public void Font_or_row_height_change_alone_does_not_announce_a_column_change()
+    {
+        var layout = new ListLayoutViewModel();
+        var announced = 0;
+        layout.ColumnsChanged += (_, _) => announced++;
+
+        layout.Apply(AppSettings.DefaultColumns.ToArray(), fontSize: 18, rowHeight: 30);
+        layout.Apply(AppSettings.DefaultColumns.ToArray(), fontSize: 18, rowHeight: 30);
+
+        Assert.Equal(0, announced);
+        Assert.Equal(18, layout.FontSize);
+    }
 }
