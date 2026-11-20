@@ -378,7 +378,7 @@ public sealed class ArchiveProviderTests : IDisposable
     [Fact]
     public async Task Every_write_is_refused()
     {
-        var archive = await OpenAsync("sample.zip");
+        var archive = await OpenAsync("sample.tar"); // a zip takes changes (ZipEditingTests)
         var file = Arc("/a.txt");
 
         Assert.Equal(ProviderCapabilities.None, archive.Capabilities);

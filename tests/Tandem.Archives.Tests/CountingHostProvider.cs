@@ -4,11 +4,13 @@ using Tandem.Core.Vfs.InMemory;
 namespace Tandem.Archives.Tests;
 
 /// <summary>A host for archives in tests: an <see cref="InMemoryFileSystem"/> that counts how often each file is
-/// opened for reading and can hand out streams that do not seek (like an entry of another archive).</summary>
+/// opened for reading and how often something is moved onto it (a rewritten archive put in place), and can hand out
+/// streams that do not seek (like an entry of another archive).</summary>
 internal sealed class CountingHostProvider(string id = "mem") : IFileSystemProvider
 {
     private readonly Lock _lock = new();
     private readonly Dictionary<string, int> _reads = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, int> _movesOnto = new(StringComparer.Ordinal);
 
     public InMemoryFileSystem Files { get; } = new(id);
 
@@ -18,6 +20,12 @@ internal sealed class CountingHostProvider(string id = "mem") : IFileSystemProvi
     public int ReadsOf(string path)
     {
         lock (_lock) return _reads.GetValueOrDefault(path);
+    }
+
+    /// <summary>How many moves onto <paramref name="path"/> succeeded: how often a file was replaced there.</summary>
+    public int ReplacementsOf(string path)
+    {
+        lock (_lock) return _movesOnto.GetValueOrDefault(path);
     }
 
     public string Id => Files.Id;
@@ -43,8 +51,11 @@ internal sealed class CountingHostProvider(string id = "mem") : IFileSystemProvi
     public Task DeleteAsync(VfsPath path, bool recursive, CancellationToken ct) =>
         Files.DeleteAsync(path, recursive, ct);
 
-    public Task MoveAsync(VfsPath source, VfsPath destination, CancellationToken ct) =>
-        Files.MoveAsync(source, destination, ct);
+    public async Task MoveAsync(VfsPath source, VfsPath destination, CancellationToken ct)
+    {
+        await Files.MoveAsync(source, destination, ct);
+        lock (_lock) _movesOnto[destination.Path] = _movesOnto.GetValueOrDefault(destination.Path) + 1;
+    }
 
     public Task CreateSymlinkAsync(VfsPath path, string target, CancellationToken ct) =>
         Files.CreateSymlinkAsync(path, target, ct);

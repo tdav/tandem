@@ -12,7 +12,8 @@ using Tandem.Core.Vfs;
 namespace Tandem.Archives;
 
 /// <summary>
-/// An archive file of a host provider, opened as a read-only folder tree (<see cref="ArchiveIndex"/>).
+/// An archive file of a host provider, opened as a folder tree (<see cref="ArchiveIndex"/>); a zip can also be changed
+/// (see <c>ArchiveProvider.Zip.cs</c>), every other format is read-only.
 /// <para>Formats with random access (zip, tar, 7z and rar that are not solid) open an entry directly; the others
 /// (tar.gz, tar.bz2, tar.xz, solid 7z and rar) read the archive from its start up to the entry. In a batch
 /// (<see cref="BeginBatchAsync"/>, then <see cref="IProviderBatch.PrepareReadAsync"/>) such an archive is read once:
@@ -50,6 +51,7 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
     private Snapshot? _preparedFor;
     private volatile Snapshot _snapshot = null!;
     private volatile string? _password;
+    private volatile bool _stale; // the listing must be read again even if the host file looks the same
     private bool _disposed;
 
     static ArchiveProvider()
@@ -125,8 +127,6 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
     /// (<see cref="ArchiveIndex.RenamedOrDroppedCount"/>).</summary>
     public int RenamedOrDroppedCount => _snapshot.Index.RenamedOrDroppedCount;
 
-    public ProviderCapabilities Capabilities => ProviderCapabilities.None;
-
     public IBatchProvider? BatchHost { get; }
 
     // ---- Reading -------------------------------------------------------------------------------------------
@@ -134,6 +134,16 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
     public async IAsyncEnumerable<FileEntry> EnumerateAsync(VfsPath directory,
         [EnumeratorCancellation] CancellationToken ct)
     {
+        if (PendingEdits() is { } edits)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            foreach (var entry in PendingChildren(edits, directory))
+            {
+                ct.ThrowIfCancellationRequested();
+                yield return entry;
+            }
+            yield break;
+        }
         var snapshot = await CurrentAsync(ct).ConfigureAwait(false);
         var children = snapshot.Index.ChildrenOf(directory.Path);
         if (children is null)
@@ -151,6 +161,11 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
 
     public async Task<FileEntry?> GetEntryAsync(VfsPath path, CancellationToken ct)
     {
+        if (PendingEdits() is { } edits)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            return PendingEntry(edits, path);
+        }
         var snapshot = await CurrentAsync(ct).ConfigureAwait(false);
         return snapshot.Index.Find(path.Path) is { } node ? ToEntry(node) : null;
     }
@@ -162,6 +177,11 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
     /// given, the user declined, or <see cref="ArchiveMounts.MaxPasswordAttempts"/> answers were wrong.</exception>
     public async Task<Stream> OpenReadAsync(VfsPath path, CancellationToken ct)
     {
+        if (PendingEdits() is { } edits)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            return await OpenPendingAsync(edits, path, ct).ConfigureAwait(false);
+        }
         var snapshot = await CurrentAsync(ct).ConfigureAwait(false);
         var node = snapshot.Index.Find(path.Path)
                    ?? throw new VfsNotFoundException($"'{GetDisplayPath(path)}' does not exist.");
@@ -203,38 +223,17 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
 
     public string GetDisplayPath(VfsPath path) => _providers.DisplayPath(Host) + (path.IsRoot ? "" : path.Path);
 
-    // ---- Writing: refused in this read-only provider -------------------------------------------------------
-
-    public Task<Stream> OpenWriteAsync(VfsPath path, CancellationToken ct) =>
-        Task.FromException<Stream>(ReadOnly(path));
-
-    public Task CreateDirectoryAsync(VfsPath path, CancellationToken ct) => Task.FromException(ReadOnly(path));
-
-    public Task DeleteAsync(VfsPath path, bool recursive, CancellationToken ct) => Task.FromException(ReadOnly(path));
-
-    public Task MoveAsync(VfsPath source, VfsPath destination, CancellationToken ct) =>
-        Task.FromException(ReadOnly(source));
-
-    public Task CreateSymlinkAsync(VfsPath path, string target, CancellationToken ct) =>
-        Task.FromException(ReadOnly(path));
-
-    public Task SetModifiedAsync(VfsPath path, DateTimeOffset modified, CancellationToken ct) =>
-        Task.FromException(ReadOnly(path));
-
-    public Task SetModeAsync(VfsPath path, UnixFileMode mode, CancellationToken ct) =>
-        Task.FromException(ReadOnly(path));
-
-    private VfsAccessDeniedException ReadOnly(VfsPath path) =>
-        new($"'{GetDisplayPath(path)}' is in an archive that cannot be changed.");
-
     // ---- Batches -------------------------------------------------------------------------------------------
 
-    /// <summary>A batch only gathers reads: <see cref="IProviderBatch.PrepareReadAsync"/> unpacks the files of a
-    /// sequential archive in one pass; <see cref="IProviderBatch.CommitAsync"/> has nothing to apply.</summary>
+    /// <summary>A batch collects the changes of a zip until <see cref="IProviderBatch.CommitAsync"/> rewrites it once
+    /// (see the remarks of the zip part), and gathers reads: <see cref="IProviderBatch.PrepareReadAsync"/> unpacks the
+    /// files of a sequential archive in one pass. A second batch waits until the first one is disposed.</summary>
     public async Task<IProviderBatch> BeginBatchAsync(CancellationToken ct)
     {
         await _batchGate.WaitAsync(ct).ConfigureAwait(false);
-        return new Batch(this);
+        var batch = new Batch(this);
+        lock (_editLock) _openBatch = batch;
+        return batch;
     }
 
     /// <summary>Closes the archives kept open and removes the provider's temporary files.</summary>
@@ -242,6 +241,7 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
     {
         if (_disposed) return;
         _disposed = true;
+        OpenBatch()?.Discard();
         ReleasePrepared();
         _snapshot?.Retire(_temp);
     }
@@ -264,14 +264,15 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
         ObjectDisposedException.ThrowIf(_disposed, this);
         var stamp = await HostStampAsync(ct).ConfigureAwait(false);
         var snapshot = _snapshot;
-        if (snapshot.Stamp == stamp) return snapshot;
+        if (snapshot.Stamp == stamp && !_stale) return snapshot;
         await _reload.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             snapshot = _snapshot;
-            if (snapshot.Stamp == stamp) return snapshot;
+            if (snapshot.Stamp == stamp && !_stale) return snapshot;
             var fresh = await LoadAsync(stamp, ct).ConfigureAwait(false);
             _snapshot = fresh;
+            _stale = false;
             snapshot.Retire(_temp);
             return fresh;
         }
@@ -338,7 +339,8 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
             var listed = archive.Entries.ToList();
             var index = ArchiveIndex.Build(listed.Select(ToRaw), stamp.Modified);
             var sequential = format is ArchiveFormat.SevenZip or ArchiveFormat.Rar && archive.IsSolid;
-            var snapshot = new Snapshot(stamp, format, index, sequential, localCopy, HostProvider, Host);
+            var snapshot = new Snapshot(stamp, format, index, sequential, localCopy, HostProvider, Host,
+                storedLinks: format == ArchiveFormat.Zip && listed.Any(IsStoredLink));
             if (!sequential)
             {
                 snapshot.Return(new OpenedArchive(stream, archive, password, listed));
@@ -355,6 +357,11 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
             }
         }
     }
+
+    /// <summary>A zip entry kept as a file whose Unix mode (the high half of its external attributes) marks a
+    /// link; it is listed as the file it is stored as.</summary>
+    private static bool IsStoredLink(IArchiveEntry entry) =>
+        entry.Attrib is { } attributes && ((attributes >>> 16) & 0xF000) == 0xA000;
 
     private static IArchive OpenArchive(Stream stream, ArchiveFormat format, ReaderOptions options) => format switch
     {
@@ -677,8 +684,9 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
     private readonly record struct HostStamp(long Size, DateTimeOffset Modified);
 
     /// <summary>The listing of one version of the host file, and the archives opened on that version.</summary>
+    /// <param name="storedLinks">Whether the archive keeps links its listing shows as files (a zip's).</param>
     private sealed class Snapshot(HostStamp stamp, ArchiveFormat format, ArchiveIndex index, bool sequential,
-        string? localCopy, IFileSystemProvider hostProvider, VfsPath host)
+        string? localCopy, IFileSystemProvider hostProvider, VfsPath host, bool storedLinks = false)
     {
         private readonly Lock _lock = new();
         private readonly Stack<OpenedArchive> _pool = new();
@@ -689,7 +697,10 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
         public ArchiveIndex Index { get; } = index;
         public bool Sequential { get; } = sequential;
 
-        public bool HasEncryptedEntries { get; } = HasEncrypted(index);
+        public bool HasEncryptedEntries { get; } = Any(index, node => node.IsEncrypted);
+
+        /// <summary>Whether the archive holds links: listed as such, or kept as files (<c>storedLinks</c>).</summary>
+        public bool HasLinks { get; } = storedLinks || Any(index, node => node.Kind == EntryKind.Symlink);
 
         /// <summary>A new stream over the archive's bytes: the local copy, or the host file.</summary>
         public async Task<Stream> OpenSourceAsync(CancellationToken ct)
@@ -748,13 +759,13 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
             }
         }
 
-        private static bool HasEncrypted(ArchiveIndex index)
+        private static bool Any(ArchiveIndex index, Func<ArchiveNode, bool> predicate)
         {
             var pending = new Stack<string>([Root]);
             while (pending.TryPop(out var path))
                 foreach (var child in index.ChildrenOf(path) ?? [])
                 {
-                    if (child.IsEncrypted) return true;
+                    if (predicate(child)) return true;
                     if (child.Kind == EntryKind.Directory) pending.Push(child.Path);
                 }
             return false;
@@ -801,24 +812,64 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
     {
         private int _disposed;
 
+        /// <summary>The changes collected so far; null until the first change. Guarded by the owner's edit
+        /// lock.</summary>
+        public Edits? PendingEdits { get; private set; }
+
         public Task PrepareReadAsync(IReadOnlyList<VfsPath> files, CancellationToken ct)
         {
             ArgumentNullException.ThrowIfNull(files);
-            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+            ThrowIfDisposed();
             return owner.PrepareAsync(files, ct);
         }
 
-        /// <summary>Nothing to apply: the provider takes no changes.</summary>
-        public Task CommitAsync(CancellationToken ct) => Task.CompletedTask;
+        /// <summary>Rewrites the archive with the collected changes, if there are any.</summary>
+        public Task CommitAsync(CancellationToken ct)
+        {
+            ThrowIfDisposed();
+            return owner.CommitEditsAsync(this, ct);
+        }
 
-        /// <summary>Removes the files unpacked for the batch and lets the next batch begin.</summary>
+        /// <summary>The changes to add to: those collected so far, or a new set over the current listing.</summary>
+        public async Task<Edits> EditsAsync(CancellationToken ct)
+        {
+            ThrowIfDisposed();
+            lock (owner._editLock)
+                if (PendingEdits is { } edits)
+                    return edits;
+            var snapshot = await owner.CurrentAsync(ct).ConfigureAwait(false);
+            var fresh = Edits.From(snapshot);
+            lock (owner._editLock) return PendingEdits ??= fresh;
+        }
+
+        /// <summary>Drops the collected changes and their temporary files.</summary>
+        public void Discard()
+        {
+            Edits? edits;
+            lock (owner._editLock)
+            {
+                edits = PendingEdits;
+                PendingEdits = null;
+            }
+            if (edits is null) return;
+            foreach (var file in edits.TempFiles) owner.ReleaseQuietly(file);
+        }
+
+        /// <summary>Drops uncommitted changes, removes the files unpacked for the batch and lets the next batch
+        /// begin.</summary>
         public ValueTask DisposeAsync()
         {
             if (Interlocked.Exchange(ref _disposed, 1) != 0) return ValueTask.CompletedTask;
+            lock (owner._editLock)
+                if (ReferenceEquals(owner._openBatch, this))
+                    owner._openBatch = null;
+            Discard();
             owner.ReleasePrepared();
             owner._batchGate.Release();
             return ValueTask.CompletedTask;
         }
+
+        private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
     }
 
     /// <summary>A forward pass over the entries, telling each by key and occurrence as the listing did.</summary>

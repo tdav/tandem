@@ -1,0 +1,644 @@
+using System.Text;
+using SharpCompress.Archives.Zip;
+using SharpCompress.Common;
+using SharpCompress.Writers.Zip;
+using Tandem.Core.Operations;
+using Tandem.Core.Vfs;
+
+namespace Tandem.Archives;
+
+/// <summary>
+/// Changing a zip. A zip without encrypted entries, links or entries its listing renamed or left out
+/// (<see cref="ArchiveIndex.RenamedOrDroppedCount"/>), whose host takes writes, offers
+/// <see cref="ProviderCapabilities.Write"/>.
+/// <para>Changes are collected: a written file's content goes to a file of the <see cref="TempFileStore"/>; deletions,
+/// renames (of a folder with its subtree), new folders and times are kept in memory, as a tree of the archive as it
+/// will be. Reads see that tree. In a batch the changes are applied by <see cref="IProviderBatch.CommitAsync"/>;
+/// outside one, each call applies its own change at once (a write when its stream is closed). While a batch is open,
+/// every change goes into it: the provider cannot tell the batch's own calls from others.</para>
+/// <para>Applying them rewrites the archive: the new archive is written through the host provider under
+/// <c>.{name}.tandem-part</c> next to it (every entry of the tree, each folder before its contents and as an entry of
+/// its own; unchanged files with their content and time; Deflate; UTF-8 names; Zip64 when the entries or the content
+/// need it), read back and its listing checked against what was written,
+/// and only then put in place by <see cref="SafeReplace.MoveIntoPlaceAsync"/>. If any of that fails, the part file is
+/// removed, the original archive is left as it was, the collected changes are dropped, and the error goes to the
+/// caller. The provider never begins its host's batch: when the host collects changes too (a zip inside a zip, in an
+/// operation's <see cref="BatchScope"/>), the rewrite lands in the host's batch and the host rewrites once at its own
+/// commit.</para>
+/// </summary>
+public sealed partial class ArchiveProvider
+{
+    /// <summary>Content this large or larger is written in Zip64 form: 4 GiB, less room for deflate's growth of data
+    /// that does not compress.</summary>
+    private const long Zip64Size = 4L * 1024 * 1024 * 1024 - 64L * 1024 * 1024;
+
+    /// <summary>The most entries a zip without Zip64 can count.</summary>
+    private const int MaxPlainZipEntries = ushort.MaxValue;
+
+    private static readonly DateTime EarliestZipTime = new(1980, 1, 1, 0, 0, 0, DateTimeKind.Local);
+
+    private readonly Lock _editLock = new();
+    private Batch? _openBatch; // guarded by _editLock
+
+    public ProviderCapabilities Capabilities =>
+        IsEditable(_snapshot) ? ProviderCapabilities.Write : ProviderCapabilities.None;
+
+    /// <summary>Whether the whole archive uses Zip64: more entries than a plain zip counts, or so much content that
+    /// offsets may pass 4 GiB.</summary>
+    internal static bool NeedsZip64(int entries, long totalBytes) =>
+        entries > MaxPlainZipEntries || totalBytes >= Zip64Size;
+
+    /// <summary>Whether one entry of <paramref name="size"/> bytes is written in Zip64 form.</summary>
+    internal static bool EntryNeedsZip64(long size) => size >= Zip64Size;
+
+    // ---- The changing calls --------------------------------------------------------------------------------
+
+    /// <summary>Creates the file, or empties it; the content is the archive's once the stream is closed (outside a
+    /// batch: closing it rewrites the archive, and fails if that fails).</summary>
+    public async Task<Stream> OpenWriteAsync(VfsPath path, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        RequireEditable(path);
+        if (OpenBatch() is { } open)
+            return CreateFile(await open.EditsAsync(ct).ConfigureAwait(false), path, commitOnClose: null);
+        var batch = (Batch)await BeginBatchAsync(ct).ConfigureAwait(false);
+        try
+        {
+            return CreateFile(await batch.EditsAsync(ct).ConfigureAwait(false), path, commitOnClose: batch);
+        }
+        catch
+        {
+            await batch.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    public Task CreateDirectoryAsync(VfsPath path, CancellationToken ct) =>
+        ChangeAsync(path, edits => CreateDirectory(edits, path), ct);
+
+    public Task DeleteAsync(VfsPath path, bool recursive, CancellationToken ct) =>
+        ChangeAsync(path, edits => Delete(edits, path, recursive), ct);
+
+    public Task MoveAsync(VfsPath source, VfsPath destination, CancellationToken ct) =>
+        ChangeAsync(source, edits => Move(edits, source, destination), ct);
+
+    public Task SetModifiedAsync(VfsPath path, DateTimeOffset modified, CancellationToken ct) =>
+        ChangeAsync(path, edits => SetModified(edits, path, modified), ct);
+
+    /// <summary>A zip keeps no links.</summary>
+    public Task CreateSymlinkAsync(VfsPath path, string target, CancellationToken ct) =>
+        Task.FromException(NotSupported(path, "links"));
+
+    /// <summary>A zip keeps no permissions here.</summary>
+    public Task SetModeAsync(VfsPath path, UnixFileMode mode, CancellationToken ct) =>
+        Task.FromException(NotSupported(path, "permissions"));
+
+    private VfsException NotSupported(VfsPath path, string what) => IsEditable(_snapshot)
+        ? new VfsException($"'{GetDisplayPath(path)}' is in an archive, which keeps no {what}.")
+        : ReadOnly(path);
+
+    private VfsAccessDeniedException ReadOnly(VfsPath path) =>
+        new($"'{GetDisplayPath(path)}' is in an archive that cannot be changed.");
+
+    /// <summary>A zip whose every entry the rewrite can carry over as it is, in a host that takes writes. A host
+    /// that lives inside another provider must collect changes itself (<see cref="BatchHost"/>): a rewrite is
+    /// never written past a middle layer that does not.</summary>
+    private bool IsEditable(Snapshot snapshot)
+    {
+        if (snapshot.Format != ArchiveFormat.Zip || snapshot.HasEncryptedEntries || snapshot.HasLinks ||
+            snapshot.Index.RenamedOrDroppedCount != 0)
+            return false;
+        var host = _providers.TryGet(Host.ProviderId, out var found) ? found : null;
+        return host is not null && host.Capabilities.HasFlag(ProviderCapabilities.Write) &&
+               (host is not IHostedProvider || BatchHost is not null);
+    }
+
+    private void RequireEditable(VfsPath path)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (!IsEditable(_snapshot)) throw ReadOnly(path);
+    }
+
+    private Batch? OpenBatch()
+    {
+        lock (_editLock) return _openBatch;
+    }
+
+    /// <summary>Applies <paramref name="change"/> (true when it changed something) to the open batch, or, with
+    /// none, in a batch of its own that is committed right away.</summary>
+    private async Task ChangeAsync(VfsPath path, Func<Edits, bool> change, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        RequireEditable(path);
+        if (OpenBatch() is { } open)
+        {
+            Apply(await open.EditsAsync(ct).ConfigureAwait(false), change);
+            return;
+        }
+        await using var batch = (Batch)await BeginBatchAsync(ct).ConfigureAwait(false);
+        Apply(await batch.EditsAsync(ct).ConfigureAwait(false), change);
+        await batch.CommitAsync(ct).ConfigureAwait(false);
+    }
+
+    private void Apply(Edits edits, Func<Edits, bool> change)
+    {
+        lock (_editLock)
+            if (change(edits))
+                edits.Changed = true;
+    }
+
+    // ---- The tree of changes (callers hold _editLock) ------------------------------------------------------
+
+    private Stream CreateFile(Edits edits, VfsPath path, Batch? commitOnClose)
+    {
+        lock (_editLock)
+        {
+            if (path.IsRoot) throw new VfsException($"'{GetDisplayPath(path)}' is the archive's root.");
+            var parent = RequireDirectory(edits, path.Parent!.Value);
+            if (parent.Children!.TryGetValue(path.Name, out var existing) && existing.Kind == EntryKind.Directory)
+                throw new VfsException($"'{GetDisplayPath(path)}' is a directory.");
+            var content = _temp.NewFile("entry");
+            FileStream file;
+            try
+            {
+                file = new FileStream(content, FileMode.CreateNew, FileAccess.Write, FileShare.Read, CopyBufferSize,
+                    useAsync: true);
+            }
+            catch
+            {
+                ReleaseQuietly(content);
+                throw;
+            }
+            edits.TempFiles.Add(content);
+            var node = EditNode.NewFile(content, DateTimeOffset.Now);
+            parent.Children[path.Name] = node;
+            edits.Changed = true;
+            return new EditStream(this, file, node, commitOnClose);
+        }
+    }
+
+    private bool CreateDirectory(Edits edits, VfsPath path)
+    {
+        var node = edits.Root;
+        var created = false;
+        var walked = "/";
+        foreach (var name in Segments(path.Path))
+        {
+            walked = Join(walked, name);
+            if (!node.Children!.TryGetValue(name, out var child))
+            {
+                node.Children[name] = child = EditNode.NewDirectory(DateTimeOffset.Now);
+                created = true;
+            }
+            else if (child.Kind != EntryKind.Directory)
+            {
+                throw new VfsAlreadyExistsException(
+                    $"'{GetDisplayPath(new VfsPath(Id, walked))}' exists and is not a directory.");
+            }
+            node = child;
+        }
+        return created;
+    }
+
+    private bool Delete(Edits edits, VfsPath path, bool recursive)
+    {
+        if (path.IsRoot) throw new VfsAccessDeniedException("The archive's root cannot be deleted.");
+        var parent = RequireDirectory(edits, path.Parent!.Value);
+        if (!parent.Children!.TryGetValue(path.Name, out var node))
+            throw new VfsNotFoundException($"'{GetDisplayPath(path)}' does not exist.");
+        if (node.Kind == EntryKind.Directory && node.Children!.Count > 0 && !recursive)
+            throw new VfsException($"Directory '{GetDisplayPath(path)}' is not empty.");
+        parent.Children.Remove(path.Name);
+        return true;
+    }
+
+    private bool Move(Edits edits, VfsPath source, VfsPath destination)
+    {
+        if (source.IsRoot) throw new VfsAccessDeniedException("The archive's root cannot be moved.");
+        if (!string.Equals(destination.ProviderId, Id, StringComparison.Ordinal))
+            throw new ArgumentException($"'{destination}' is not in this archive.", nameof(destination));
+        var sourceParent = Find(edits, source.Parent!.Value);
+        if (sourceParent?.Children is null || !sourceParent.Children.TryGetValue(source.Name, out var node))
+            throw new VfsNotFoundException($"'{GetDisplayPath(source)}' does not exist.");
+        if (Find(edits, destination) is not null)
+            throw new VfsAlreadyExistsException($"'{GetDisplayPath(destination)}' already exists.");
+        if (destination.IsSameOrDescendantOf(source))
+            throw new VfsException($"'{GetDisplayPath(source)}' cannot be moved into itself.");
+        var destinationParent = RequireDirectory(edits, destination.Parent!.Value);
+        sourceParent.Children.Remove(source.Name);
+        destinationParent.Children![destination.Name] = node;
+        return true;
+    }
+
+    private bool SetModified(Edits edits, VfsPath path, DateTimeOffset modified)
+    {
+        if (path.IsRoot) return false; // the root is no entry: its time is the archive file's
+        var node = Find(edits, path) ?? throw new VfsNotFoundException($"'{GetDisplayPath(path)}' does not exist.");
+        node.Modified = modified;
+        return true;
+    }
+
+    private EditNode RequireDirectory(Edits edits, VfsPath path)
+    {
+        var node = Find(edits, path) ?? throw new VfsNotFoundException($"'{GetDisplayPath(path)}' does not exist.");
+        if (node.Kind != EntryKind.Directory) throw new VfsException($"'{GetDisplayPath(path)}' is not a directory.");
+        return node;
+    }
+
+    private static EditNode? Find(Edits edits, VfsPath path)
+    {
+        var node = edits.Root;
+        foreach (var name in Segments(path.Path))
+            if (node.Children is null || !node.Children.TryGetValue(name, out node))
+                return null;
+        return node;
+    }
+
+    private static string[] Segments(string path) => path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+
+    private static string Join(string parent, string name) => parent == "/" ? "/" + name : parent + "/" + name;
+
+    // ---- Reads that see the changes ------------------------------------------------------------------------
+
+    /// <summary>The changes of the open batch, when it has any; reads then see the tree as it will be.</summary>
+    private Edits? PendingEdits()
+    {
+        lock (_editLock) return _openBatch?.PendingEdits;
+    }
+
+    private FileEntry? PendingEntry(Edits edits, VfsPath path)
+    {
+        lock (_editLock) return Find(edits, path) is { } node ? ToEntry(path.Path, node) : null;
+    }
+
+    private List<FileEntry> PendingChildren(Edits edits, VfsPath directory)
+    {
+        lock (_editLock)
+        {
+            var node = Find(edits, directory)
+                       ?? throw new VfsNotFoundException($"'{GetDisplayPath(directory)}' does not exist.");
+            if (node.Children is null) throw new VfsException($"'{GetDisplayPath(directory)}' is not a directory.");
+            return node.Children.Select(child => ToEntry(Join(directory.Path, child.Key), child.Value)).ToList();
+        }
+    }
+
+    private async Task<Stream> OpenPendingAsync(Edits edits, VfsPath path, CancellationToken ct)
+    {
+        EditNode node;
+        lock (_editLock)
+        {
+            node = Find(edits, path) ?? throw new VfsNotFoundException($"'{GetDisplayPath(path)}' does not exist.");
+            if (node.Kind != EntryKind.File) throw new VfsException($"'{GetDisplayPath(path)}' is not a file.");
+        }
+        return await OpenContentAsync(edits, node, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>A file's content as it will be: written in this batch, or the archive's entry as last read.</summary>
+    private Task<Stream> OpenContentAsync(Edits edits, EditNode node, CancellationToken ct) =>
+        node.Content is { } content
+            ? Task.FromResult<Stream>(new FileStream(content, FileMode.Open, FileAccess.Read, FileShare.ReadWrite,
+                CopyBufferSize, useAsync: true))
+            : OpenEntryAsync(edits.Base, node.Original!, _password, ct);
+
+    private FileEntry ToEntry(string path, EditNode node)
+    {
+        var name = path == "/" ? "" : path[(path.LastIndexOf('/') + 1)..];
+        var size = node.Kind != EntryKind.File ? 0
+            : node.Content is { } content ? new FileInfo(content).Length : node.Size;
+        return new FileEntry(new VfsPath(Id, path), node.Kind, size, node.Modified, node.Modified, Mode: null,
+            IsHidden: name.StartsWith('.'), LinkTarget: null);
+    }
+
+    // ---- Rewriting ------------------------------------------------------------------------------------------
+
+    /// <summary>Rewrites the archive with the batch's changes, if it has any (see the class remarks). The batch's
+    /// changes are dropped afterwards, whether it worked or not.</summary>
+    private async Task CommitEditsAsync(Batch batch, CancellationToken ct)
+    {
+        Edits? edits;
+        lock (_editLock) edits = batch.PendingEdits;
+        if (edits is null) return;
+        if (!edits.Changed)
+        {
+            batch.Discard();
+            return;
+        }
+        var host = HostProvider;
+        var part = SafeReplace.PartPathFor(Host);
+        try
+        {
+            if (await HostStampAsync(ct).ConfigureAwait(false) != edits.Base.Stamp)
+                throw new VfsException(
+                    $"'{_providers.DisplayPath(Host)}' was changed elsewhere after it was read; it was left as it is.");
+            var written = await WriteArchiveAsync(edits, host, part, ct).ConfigureAwait(false);
+            await CheckArchiveAsync(host, part, written, ct).ConfigureAwait(false);
+            await SafeReplace.MoveIntoPlaceAsync(host, part, Host, replace: true).ConfigureAwait(false);
+        }
+        catch
+        {
+            await DeletePartQuietlyAsync(host, part).ConfigureAwait(false);
+            batch.Discard();
+            throw;
+        }
+        batch.Discard();
+        await ReloadAfterRewriteAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>Writes the archive as the changes make it to <paramref name="part"/>; returns the entries written:
+    /// name → (folder, size). The zip writer cannot write Zip64 to a stream that does not seek (a file inside another
+    /// archive): such an archive is written to a temporary file first and copied.</summary>
+    private async Task<Dictionary<string, (bool Directory, long Size)>> WriteArchiveAsync(Edits edits,
+        IFileSystemProvider host, VfsPath part, CancellationToken ct)
+    {
+        List<(string Key, EditNode Node, long Size)> entries;
+        lock (_editLock) entries = Flatten(edits.Root);
+        var zip64 = NeedsZip64(entries.Count, entries.Sum(e => e.Size));
+        await using var output = await host.OpenWriteAsync(part, ct).ConfigureAwait(false);
+        if (output.CanSeek || !zip64)
+        {
+            var direct = await WriteEntriesAsync(output, edits, entries, zip64, ct).ConfigureAwait(false);
+            await output.FlushAsync(ct).ConfigureAwait(false);
+            return direct;
+        }
+        var local = _temp.NewFile("rewrite.zip");
+        try
+        {
+            await using var file = new FileStream(local, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None,
+                CopyBufferSize, useAsync: true);
+            var written = await WriteEntriesAsync(file, edits, entries, zip64, ct).ConfigureAwait(false);
+            file.Position = 0;
+            await file.CopyToAsync(output, CopyBufferSize, ct).ConfigureAwait(false);
+            await output.FlushAsync(ct).ConfigureAwait(false);
+            return written;
+        }
+        finally
+        {
+            ReleaseQuietly(local);
+        }
+    }
+
+    private async Task<Dictionary<string, (bool Directory, long Size)>> WriteEntriesAsync(Stream output, Edits edits,
+        List<(string Key, EditNode Node, long Size)> entries, bool zip64, CancellationToken ct)
+    {
+        var written = new Dictionary<string, (bool, long)>(StringComparer.Ordinal);
+        // Stored by default, Deflate per file: a folder written under a Deflate default is marked deflated with no
+        // data, which other tools (unzip) reject.
+        var options = new ZipWriterOptions(CompressionType.None)
+        {
+            LeaveStreamOpen = true,
+            ArchiveEncoding = new ArchiveEncoding { Default = Encoding.UTF8 },
+            UseZip64 = zip64,
+        };
+        var writer = new ZipWriter(output, options);
+        // Not disposed after a failure: disposing writes the central directory, which would only hide the error.
+        foreach (var (key, node, size) in entries)
+        {
+            ct.ThrowIfCancellationRequested();
+            var time = ZipTime(node.Modified);
+            if (node.Kind == EntryKind.Directory)
+            {
+                writer.WriteDirectory(key, time);
+                written[key + "/"] = (true, 0);
+                continue;
+            }
+            await using (var content = await OpenContentAsync(edits, node, ct).ConfigureAwait(false))
+                writer.Write(key, content, new ZipWriterEntryOptions
+                {
+                    CompressionType = CompressionType.Deflate,
+                    ModificationDateTime = time,
+                    EnableZip64 = EntryNeedsZip64(size),
+                });
+            written[key] = (false, size);
+        }
+        writer.Dispose(); // the central directory
+        return written;
+    }
+
+    /// <summary>Every node below the root with its zip name, each folder before what it holds.</summary>
+    private static List<(string Key, EditNode Node, long Size)> Flatten(EditNode root)
+    {
+        var entries = new List<(string, EditNode, long)>();
+        var pending = new Stack<(string Prefix, EditNode Directory)>([("", root)]);
+        while (pending.TryPop(out var item))
+        {
+            var directories = new List<(string, EditNode)>();
+            foreach (var (name, node) in item.Directory.Children!.OrderBy(c => c.Key, StringComparer.Ordinal))
+            {
+                var key = item.Prefix + name;
+                var size = node.Kind != EntryKind.File ? 0
+                    : node.Content is { } content ? new FileInfo(content).Length : node.Size;
+                entries.Add((key, node, size));
+                if (node.Kind == EntryKind.Directory) directories.Add((key + "/", node));
+            }
+            for (var i = directories.Count - 1; i >= 0; i--) pending.Push(directories[i]);
+        }
+        return entries;
+    }
+
+    /// <summary>The time for the zip writer: local, as zip stores the wall clock; not before what zip can hold.
+    /// </summary>
+    private static DateTime ZipTime(DateTimeOffset time)
+    {
+        var local = time.LocalDateTime;
+        return local < EarliestZipTime ? EarliestZipTime : local;
+    }
+
+    /// <summary>Reads the written archive back and compares its listing with what was written.</summary>
+    /// <exception cref="VfsException">The archive cannot be read back, or lists other entries.</exception>
+    private async Task CheckArchiveAsync(IFileSystemProvider host, VfsPath part,
+        Dictionary<string, (bool Directory, long Size)> written, CancellationToken ct)
+    {
+        var stream = await host.OpenReadAsync(part, ct).ConfigureAwait(false);
+        string? copy = null;
+        try
+        {
+            if (!stream.CanSeek)
+            {
+                copy = _temp.NewFile("check.zip");
+                await using (var local = new FileStream(copy, FileMode.CreateNew, FileAccess.Write, FileShare.None,
+                                 CopyBufferSize, useAsync: true))
+                    await stream.CopyToAsync(local, CopyBufferSize, ct).ConfigureAwait(false);
+                await stream.DisposeAsync().ConfigureAwait(false);
+                stream = OpenLocalCopy(copy);
+            }
+            var listed = new Dictionary<string, (bool, long)>(StringComparer.Ordinal);
+            try
+            {
+                using var archive = ZipArchive.Open(stream, Options(password: null));
+                foreach (var entry in archive.Entries)
+                    if (!listed.TryAdd(entry.Key ?? "", (entry.IsDirectory, entry.IsDirectory ? 0 : entry.Size)))
+                        throw new VfsException($"'{entry.Key}' is in the rewritten archive twice.");
+            }
+            catch (Exception e) when (e is not (OperationCanceledException or VfsException))
+            {
+                throw new VfsException(
+                    $"The rewritten '{_providers.DisplayPath(Host)}' cannot be read back; it was not put in place.", e);
+            }
+            if (listed.Count != written.Count ||
+                written.Any(w => !listed.TryGetValue(w.Key, out var found) || found != w.Value))
+                throw new VfsException(
+                    $"The rewritten '{_providers.DisplayPath(Host)}' does not list what was written; it was not put " +
+                    "in place.");
+        }
+        finally
+        {
+            await stream.DisposeAsync().ConfigureAwait(false);
+            if (copy is not null) ReleaseQuietly(copy);
+        }
+    }
+
+    private static async Task DeletePartQuietlyAsync(IFileSystemProvider host, VfsPath part)
+    {
+        try
+        {
+            if (await host.GetEntryAsync(part, CancellationToken.None).ConfigureAwait(false) is not null)
+                await host.DeleteAsync(part, recursive: false, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // the error being handled is what gets reported; the stray part file has a recognisable name
+        }
+    }
+
+    /// <summary>Reads the listing of the archive just put in place. Even if the host file kept its size and time
+    /// (a coarse clock), the old listing must not stay: if reading fails now, the next call reads it.</summary>
+    private async Task ReloadAfterRewriteAsync()
+    {
+        await _reload.WaitAsync(CancellationToken.None).ConfigureAwait(false);
+        try
+        {
+            var old = _snapshot;
+            try
+            {
+                var stamp = await HostStampAsync(CancellationToken.None).ConfigureAwait(false);
+                _snapshot = await LoadAsync(stamp, CancellationToken.None).ConfigureAwait(false);
+                _stale = false;
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                _stale = true; // the change is in place; reading its listing is left to the next call
+                return;
+            }
+            old.Retire(_temp);
+        }
+        finally
+        {
+            _reload.Release();
+        }
+    }
+
+    // ---- Parts ---------------------------------------------------------------------------------------------
+
+    /// <summary>The changes of one batch: the tree as it will be, over the listing it was made from.</summary>
+    private sealed class Edits(Snapshot @base, EditNode root)
+    {
+        public Snapshot Base { get; } = @base;
+        public EditNode Root { get; } = root;
+        public List<string> TempFiles { get; } = [];
+        public bool Changed { get; set; }
+
+        public static Edits From(Snapshot snapshot) => new(snapshot, Copy(snapshot.Index, snapshot.Index.Find("/")!));
+
+        private static EditNode Copy(ArchiveIndex index, ArchiveNode node)
+        {
+            if (node.Kind != EntryKind.Directory) return EditNode.FromArchive(node);
+            var directory = EditNode.NewDirectory(node.Modified);
+            foreach (var child in index.ChildrenOf(node.Path) ?? [])
+                directory.Children![child.Name] = Copy(index, child);
+            return directory;
+        }
+    }
+
+    /// <summary>A file or folder of the archive as it will be. A file's content is <see cref="Content"/> (written
+    /// in this batch) or else <see cref="Original"/>'s.</summary>
+    private sealed class EditNode
+    {
+        private EditNode(EntryKind kind, DateTimeOffset modified)
+        {
+            Kind = kind;
+            Modified = modified;
+        }
+
+        public EntryKind Kind { get; }
+        public DateTimeOffset Modified { get; set; }
+        public long Size { get; private init; }
+        public ArchiveNode? Original { get; private init; }
+        public string? Content { get; private init; }
+        public Dictionary<string, EditNode>? Children { get; private init; }
+
+        public static EditNode FromArchive(ArchiveNode node) =>
+            new(node.Kind, node.Modified) { Size = node.Size, Original = node };
+
+        public static EditNode NewFile(string content, DateTimeOffset modified) =>
+            new(EntryKind.File, modified) { Content = content };
+
+        public static EditNode NewDirectory(DateTimeOffset modified) =>
+            new(EntryKind.Directory, modified) { Children = new Dictionary<string, EditNode>(StringComparer.Ordinal) };
+    }
+
+    /// <summary>Writes a file of the changes. Closing it sets the file's time and, for a write outside a batch,
+    /// rewrites the archive (an error of that is thrown from closing).</summary>
+    private sealed class EditStream(ArchiveProvider owner, FileStream file, EditNode node, Batch? commitOnClose)
+        : Stream
+    {
+        private bool _closed;
+
+        public override bool CanRead => false;
+        public override bool CanSeek => false;
+        public override bool CanWrite => !_closed;
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position
+        {
+            get => file.Position;
+            set => throw new NotSupportedException();
+        }
+
+        public override void Write(byte[] buffer, int offset, int count) => file.Write(buffer, offset, count);
+
+        public override void Write(ReadOnlySpan<byte> buffer) => file.Write(buffer);
+
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken ct = default) =>
+            file.WriteAsync(buffer, ct);
+
+        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken ct) =>
+            file.WriteAsync(buffer, offset, count, ct);
+
+        public override void Flush() => file.Flush();
+
+        public override Task FlushAsync(CancellationToken ct) => file.FlushAsync(ct);
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override async ValueTask DisposeAsync()
+        {
+            await CloseAsync().ConfigureAwait(false);
+            await base.DisposeAsync().ConfigureAwait(false);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) CloseAsync().GetAwaiter().GetResult();
+            base.Dispose(disposing);
+        }
+
+        private async Task CloseAsync()
+        {
+            if (_closed) return;
+            _closed = true;
+            try
+            {
+                await file.DisposeAsync().ConfigureAwait(false);
+                lock (owner._editLock) node.Modified = DateTimeOffset.Now;
+                if (commitOnClose is not null)
+                    await commitOnClose.CommitAsync(CancellationToken.None).ConfigureAwait(false);
+            }
+            finally
+            {
+                if (commitOnClose is not null) await commitOnClose.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+    }
+}
