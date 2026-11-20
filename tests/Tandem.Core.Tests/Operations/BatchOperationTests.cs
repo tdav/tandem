@@ -249,6 +249,47 @@ public sealed class BatchOperationTests
     }
 
     [Fact]
+    public async Task Cancelled_move_deletes_committed_sources_when_a_nested_scope_marked_the_cancellation()
+    {
+        // A cancellation that a failed BeginAsync elsewhere already marked with its own dispose error: this
+        // operation's scope disposed fine, so the committed source is still deleted.
+        var marked = await MarkedCancellationAsync();
+        Arrange();
+        _mem.AddFile("/src/c.txt", "c");
+        JournalSourceDeletes();
+        var op = Move(Arc("/dst"), Mem("/src/a.txt"), Mem("/src/c.txt"));
+        _arc.Files.FailOn((name, path) =>
+        {
+            if (name != "OpenWrite" || !path.Path.Contains("c.txt", StringComparison.Ordinal)) return false;
+            op.Cancel();
+            return true;
+        }, () => marked);
+
+        var result = await op.RunAsync().WaitAsync(Timeout, Ct);
+
+        Assert.Equal(OperationState.Cancelled, result.State);
+        Assert.False(_mem.Exists("/src/a.txt"));
+        Assert.Equal("c", _mem.ReadAllText("/src/c.txt"));
+        Assert.Equal(1, _journal.Count("arc:Commit"));
+    }
+
+    /// <summary>The cancellation thrown by a <see cref="BatchScope.BeginAsync"/> whose second begin is cancelled
+    /// and whose first batch then fails to dispose: it carries <see cref="BatchScope.DisposeErrorKey"/>.</summary>
+    private static async Task<OperationCanceledException> MarkedCancellationAsync()
+    {
+        var providers = new ProviderRegistry();
+        var journal = new BatchJournal();
+        var first = new BatchingProvider("p1", journal) { FailDispose = () => new IOException("dispose failed") };
+        var second = new BatchingProvider("p2", journal) { OnBegin = _ => throw new OperationCanceledException() };
+        providers.Register(first);
+        providers.Register(second);
+        var error = await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            BatchScope.BeginAsync(providers, [new VfsPath("p1", "/"), new VfsPath("p2", "/")], Ct));
+        Assert.True(error.Data.Contains(BatchScope.DisposeErrorKey));
+        return error;
+    }
+
+    [Fact]
     public async Task Move_out_of_batching_provider_deletes_its_sources_in_the_batch()
     {
         _arc.Files.AddFile("/src/a.txt", "a");

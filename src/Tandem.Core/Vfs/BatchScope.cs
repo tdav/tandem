@@ -143,17 +143,20 @@ public sealed class BatchScope : IAsyncDisposable
     }
 
     /// <summary>Disposes the scope after <paramref name="outcome"/> has already gone wrong: an error of the disposal
-    /// does not replace it, but is attached to it under <see cref="DisposeErrorKey"/>.</summary>
-    internal async ValueTask DisposeKeepingAsync(Exception outcome)
+    /// does not replace it, but is attached to it under <see cref="DisposeErrorKey"/>. Returns whether this disposal
+    /// failed (the outcome may carry a key set by another scope).</summary>
+    internal async ValueTask<bool> DisposeKeepingAsync(Exception outcome)
     {
         ArgumentNullException.ThrowIfNull(outcome);
         try
         {
             await DisposeAsync().ConfigureAwait(false);
+            return false;
         }
         catch (Exception e)
         {
             outcome.Data[DisposeErrorKey] = e;
+            return true;
         }
     }
 

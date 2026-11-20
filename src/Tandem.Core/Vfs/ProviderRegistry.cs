@@ -15,7 +15,8 @@ public sealed class ProviderRegistry
     /// <exception cref="InvalidOperationException">A provider with the same id is registered; or the provider is a
     /// hosted <see cref="IBatchProvider"/> whose <see cref="IBatchProvider.BatchHost"/> is not the registered provider
     /// of its root's host location (or null when that provider takes no batches), or whose host is not
-    /// registered.</exception>
+    /// registered. Only the host location of the provider's root is checked: a provider whose host locations sit
+    /// elsewhere (a search result set "/n") is not.</exception>
     public void Register(IFileSystemProvider provider)
     {
         ArgumentNullException.ThrowIfNull(provider);
@@ -61,8 +62,9 @@ public sealed class ProviderRegistry
     /// <summary>Where the hosted part of the provider that holds <paramref name="path"/> belongs in its host: the
     /// <see cref="IHostedProvider.GetHostLocation"/> of the nearest of <paramref name="path"/> and its ancestors that
     /// has one (the root of an archive, a search result set "/n"). Null for a provider that is not hosted, or a path
-    /// none of whose ancestors has a host location.</summary>
-    /// <exception cref="KeyNotFoundException">The path's provider is not registered.</exception>
+    /// none of whose ancestors has a host location. For where "up" goes, see <see cref="UpOf"/>.</summary>
+    /// <exception cref="KeyNotFoundException">The path's provider is not registered (the host's provider need not
+    /// be).</exception>
     public HostLocation? HostLocationOf(VfsPath path)
     {
         if (For(path) is not IHostedProvider hosted) return null;
@@ -71,6 +73,17 @@ public sealed class ProviderRegistry
             if (hosted.GetHostLocation(current) is { } location) return location;
         }
         return null;
+    }
+
+    /// <summary>Where "up" from <paramref name="path"/> goes: the path's own host location when it has one (the root
+    /// of an archive leads to the archive's folder with the archive focused; a search result set to the folder
+    /// searched), otherwise the parent with <paramref name="path"/>'s name focused; null at a root without a host
+    /// location. Unlike <see cref="HostLocationOf"/>, ancestors are not looked at.</summary>
+    /// <exception cref="KeyNotFoundException">The path's provider is not registered.</exception>
+    public HostLocation? UpOf(VfsPath path)
+    {
+        if (For(path) is IHostedProvider hosted && hosted.GetHostLocation(path) is { } location) return location;
+        return path.Parent is { } parent ? new HostLocation(parent, path.Name) : null;
     }
 
     /// <summary>The path as the user reads it: <see cref="IHostedProvider.GetDisplayPath"/> for a hosted provider,
@@ -99,7 +112,8 @@ public sealed class ProviderRegistry
     }
 
     /// <summary>A hosted batching provider must name its host's provider as its batch host (see
-    /// <see cref="IHostedProvider"/>), or the batch lock order would not hold.</summary>
+    /// <see cref="IHostedProvider"/>), or the batch lock order would not hold. Checked at the provider's root
+    /// only.</summary>
     private void CheckBatchHost(IFileSystemProvider provider)
     {
         if (provider is not (IBatchProvider batching and IHostedProvider hosted)) return;

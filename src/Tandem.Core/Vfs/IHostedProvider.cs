@@ -7,13 +7,14 @@ public readonly record struct HostLocation(VfsPath Directory, string? FocusName)
 /// <summary>
 /// A provider that lives inside another one: in a file of a host provider (an archive opened as a folder), or above a
 /// place in it (search results, each result set a folder "/n" that leads back to where the search ran). Panels ask
-/// <see cref="ProviderRegistry.HostLocationOf"/>, <see cref="ProviderRegistry.DisplayPath"/> and
-/// <see cref="ProviderRegistry.PersistentLocationOf"/>, never this interface or the kind of provider directly.
+/// <see cref="ProviderRegistry.UpOf"/>, <see cref="ProviderRegistry.HostLocationOf"/>,
+/// <see cref="ProviderRegistry.DisplayPath"/> and <see cref="ProviderRegistry.PersistentLocationOf"/>, never this
+/// interface or the kind of provider directly.
 /// <para>If such a provider is also an <see cref="IBatchProvider"/>, its <see cref="IBatchProvider.BatchHost"/> is the
 /// provider of its root's host location when that provider takes batches, and null otherwise: the changes of the
 /// hosted provider end up in that file, so a <see cref="BatchScope"/> batches the host first and commits it last,
 /// which keeps the global lock order. <see cref="ProviderRegistry.Register"/> refuses a provider that breaks
-/// this.</para>
+/// this (it checks the host location of the root only).</para>
 /// </summary>
 public interface IHostedProvider
 {

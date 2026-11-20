@@ -68,6 +68,32 @@ public sealed class TempFileStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Cancelled_materialize_stays_cancelled_when_cleanup_fails()
+    {
+        _mem.AddFile("/a/big.bin", new byte[1_000_000]);
+        var store = new TempFileStore(StoreDirectory);
+        using var cancel = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        string? folder = null;
+        try
+        {
+            // The file's folder loses write permission mid-copy, so removing the part file fails.
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => store.MaterializeAsync(_mem,
+                new VfsPath("mem", "/a/big.bin"), new SyncProgress(_ =>
+                {
+                    folder = Assert.Single(Directory.GetDirectories(store.Directory));
+                    File.SetUnixFileMode(folder, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+                    cancel.Cancel();
+                }), cancel.Token));
+        }
+        finally
+        {
+            if (folder is not null)
+                File.SetUnixFileMode(folder, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            store.Dispose();
+        }
+    }
+
+    [Fact]
     public async Task Failed_materialize_leaves_nothing()
     {
         _mem.AddFile("/a/big.bin", new byte[1_000_000]);

@@ -204,6 +204,86 @@ public class ProviderRegistryTests
         Assert.Null(((IBatchProvider)registry.Get("inner")).BatchHost);
     }
 
+    // ---- Up ------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void Up_from_a_hosted_root_leads_to_the_host_folder_with_the_container_focused()
+    {
+        var registry = ArchiveAndSearch();
+
+        Assert.Equal(new HostLocation(new VfsPath("mem", "/a"), "b.zip"), registry.UpOf(new VfsPath("zip", "/")));
+    }
+
+    [Fact]
+    public void Up_inside_a_hosted_provider_goes_to_the_parent()
+    {
+        var registry = ArchiveAndSearch();
+
+        Assert.Equal(new HostLocation(new VfsPath("zip", "/"), "docs"), registry.UpOf(new VfsPath("zip", "/docs")));
+        Assert.Equal(new HostLocation(new VfsPath("find", "/1"), "sub"), registry.UpOf(new VfsPath("find", "/1/sub")));
+    }
+
+    [Fact]
+    public void Up_from_a_search_result_set_leads_to_the_searched_folder()
+    {
+        var registry = ArchiveAndSearch();
+
+        Assert.Equal(new HostLocation(new VfsPath("mem", "/src"), null), registry.UpOf(new VfsPath("find", "/1")));
+    }
+
+    [Fact]
+    public void Up_in_a_plain_provider_goes_to_the_parent_and_ends_at_the_root()
+    {
+        var registry = ArchiveAndSearch();
+
+        Assert.Equal(new HostLocation(new VfsPath("mem", "/"), "a"), registry.UpOf(new VfsPath("mem", "/a")));
+        Assert.Null(registry.UpOf(new VfsPath("mem", "/")));
+    }
+
+    private static ProviderRegistry ArchiveAndSearch()
+    {
+        var registry = new ProviderRegistry();
+        registry.Register(new InMemoryFileSystem());
+        registry.Register(HostedFileSystem.InFile("zip", registry, new VfsPath("mem", "/a/b.zip")));
+        var results = new HostedFileSystem("find");
+        results.SetHostLocation("/1", new HostLocation(new VfsPath("mem", "/src"), null));
+        registry.Register(results);
+        return registry;
+    }
+
+    // ---- Unregistered hosts, hosts in hosts ------------------------------------------------------------
+
+    [Fact]
+    public void Host_location_needs_the_paths_provider_and_persistent_location_its_hosts()
+    {
+        var registry = new ProviderRegistry();
+        registry.Register(HostedFileSystem.InFile("zip", registry, new VfsPath("gone", "/a/b.zip")));
+
+        Assert.Throws<KeyNotFoundException>(() => registry.HostLocationOf(new VfsPath("nope", "/")));
+        Assert.Equal(new HostLocation(new VfsPath("gone", "/a"), "b.zip"),
+            registry.HostLocationOf(new VfsPath("zip", "/docs")));
+        Assert.Throws<KeyNotFoundException>(() => registry.PersistentLocationOf(new VfsPath("zip", "/docs")));
+    }
+
+    [Fact]
+    public void Hosted_batching_provider_in_a_hosted_host_that_does_not_batch_has_no_BatchHost()
+    {
+        var registry = new ProviderRegistry();
+        var journal = new BatchJournal();
+        registry.Register(new BatchingProvider("arc", journal));
+        registry.Register(HostedFileSystem.InFile("outer", registry, new VfsPath("arc", "/a.iso")));
+        var inner = new BatchingProvider("inner", journal);
+        inner.HostedIn(registry, new VfsPath("outer", "/c.zip"));
+
+        registry.Register(inner);
+
+        Assert.Null(((IBatchProvider)registry.Get("inner")).BatchHost);
+        var wrong = new BatchingProvider("wrong", journal);
+        wrong.HostedIn(registry, new VfsPath("outer", "/d.zip"));
+        wrong.BatchHost = (IBatchProvider)registry.Get("arc");
+        Assert.Throws<InvalidOperationException>(() => registry.Register(wrong));
+    }
+
     // ---- Mounters ------------------------------------------------------------------------------------
 
     [Fact]

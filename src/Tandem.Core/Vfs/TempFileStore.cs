@@ -42,7 +42,8 @@ public sealed class TempFileStore : IDisposable
 
     /// <summary>Copies <paramref name="file"/> of <paramref name="provider"/> to a new temporary file of the same name
     /// and returns its path. <paramref name="bytes"/> gets the number of bytes copied so far after each block. On
-    /// cancellation or an error nothing is left behind.</summary>
+    /// cancellation or an error the partly copied file is removed; if even that fails, the original error or
+    /// cancellation is still what is thrown, and the leftover goes with the next <see cref="Clear"/>.</summary>
     public async Task<string> MaterializeAsync(IFileSystemProvider provider, VfsPath file, IProgress<long>? bytes,
         CancellationToken ct)
     {
@@ -66,7 +67,14 @@ public sealed class TempFileStore : IDisposable
         }
         catch
         {
-            Release(target);
+            try
+            {
+                Release(target);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                // The original error or cancellation stays the outcome; Clear removes the leftover later.
+            }
             throw;
         }
         return target;

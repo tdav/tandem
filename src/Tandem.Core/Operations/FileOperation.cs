@@ -184,8 +184,7 @@ public abstract class FileOperation
         var disposeFailed = false;
         if ((commitError ?? bodyError) is { } outcome)
         {
-            await scope.DisposeKeepingAsync(outcome.SourceException).ConfigureAwait(false);
-            disposeFailed = outcome.SourceException.Data.Contains(BatchScope.DisposeErrorKey);
+            disposeFailed = await scope.DisposeKeepingAsync(outcome.SourceException).ConfigureAwait(false);
         }
         else
         {
