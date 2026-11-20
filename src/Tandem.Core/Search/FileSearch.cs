@@ -18,19 +18,19 @@ public sealed class FileSearch(ProviderRegistry providers)
 
     /// <summary>Checks that <paramref name="query"/> can be run.</summary>
     /// <exception cref="SearchQueryException">The name regular expression is invalid (<see cref="SearchField.Name"/>);
-    /// or the query searches contents, which is not supported yet (<see cref="SearchField.Content"/>).</exception>
+    /// or the content query is (see <see cref="ContentMatcher(ContentQuery)"/>).</exception>
     /// <exception cref="ArgumentOutOfRangeException"><see cref="SearchQuery.MaxDepth"/> is negative.</exception>
     public static void Validate(SearchQuery query)
     {
         ArgumentNullException.ThrowIfNull(query);
         if (query.MaxDepth is < 0)
             throw new ArgumentOutOfRangeException(nameof(query), query.MaxDepth, "MaxDepth must not be negative.");
-        if (query.Content is not null)
-            throw new SearchQueryException(SearchField.Content, "Searching file contents is not supported.");
         if (query.NameIsRegex) NameRegex(query.NameMasks);
+        if (query.Content is not null) _ = new ContentMatcher(query.Content);
     }
 
-    /// <summary>Runs <paramref name="query"/>. A folder that cannot be read (<see cref="IOException"/>,
+    /// <summary>Runs <paramref name="query"/>. Contents are read only for plain files (<see cref="EntryKind.File"/>)
+    /// that meet every other condition. A folder or such a file that cannot be read (<see cref="IOException"/>,
     /// <see cref="UnauthorizedAccessException"/>) is skipped and counted; <paramref name="progress"/> hears at most
     /// ten times a second while the search runs, and once more when it ends: that final report (with a null
     /// <see cref="SearchProgress.CurrentFolder"/>) is sent whether the search finishes, is cancelled or fails.</summary>
@@ -41,11 +41,12 @@ public sealed class FileSearch(ProviderRegistry providers)
     {
         Validate(query);
         var filter = new Filter(query);
+        var content = query.Content is null ? null : new ContentMatcher(query.Content);
         var excluded = HasParts(query.ExcludedFolders) ? new FileMask(query.ExcludedFolders) : null;
         var foldersAreResults = query.Content is null && query.MinSize is null && query.MaxSize is null;
         var provider = providers.For(query.Root);
 
-        long foldersScanned = 0, filesChecked = 0, found = 0, foldersSkipped = 0;
+        long foldersScanned = 0, filesChecked = 0, found = 0, foldersSkipped = 0, filesSkipped = 0;
         var lastReport = Environment.TickCount64;
         var stack = new Stack<Folder>();
         stack.Push(new Folder(query.Root, 0));
@@ -57,7 +58,7 @@ public sealed class FileSearch(ProviderRegistry providers)
                 if (progress is not null && Environment.TickCount64 - lastReport >= ProgressIntervalMs)
                 {
                     lastReport = Environment.TickCount64;
-                    progress.Report(new SearchProgress(foldersScanned, filesChecked, found, foldersSkipped, 0,
+                    progress.Report(new SearchProgress(foldersScanned, filesChecked, found, foldersSkipped, filesSkipped,
                         providers.DisplayPath(folder.Path)));
                 }
 
@@ -86,18 +87,23 @@ public sealed class FileSearch(ProviderRegistry providers)
                 else
                 {
                     filesChecked++;
-                    if (filter.Matches(entry, isFile: true))
+                    if (!filter.Matches(entry, isFile: true)) continue;
+                    if (content is not null)
                     {
-                        found++;
-                        yield return entry;
+                        if (entry.Kind != EntryKind.File) continue;
+                        var matched = await ContentMatchesAsync(provider, entry, content, ct).ConfigureAwait(false);
+                        if (matched is null) filesSkipped++;
+                        if (matched is not true) continue;
                     }
+                    found++;
+                    yield return entry;
                 }
             }
         }
         finally
         {
             while (stack.TryPop(out var open)) await open.DisposeAsync().ConfigureAwait(false);
-            progress?.Report(new SearchProgress(foldersScanned, filesChecked, found, foldersSkipped, 0, null));
+            progress?.Report(new SearchProgress(foldersScanned, filesChecked, found, foldersSkipped, filesSkipped, null));
         }
     }
 
@@ -113,6 +119,22 @@ public sealed class FileSearch(ProviderRegistry providers)
         catch (Exception e) when (folder.Depth > 0 && e is IOException or UnauthorizedAccessException)
         {
             folder.Failed = true;
+            return null;
+        }
+    }
+
+    /// <summary>Whether the file's contents match; null when it cannot be opened or read to the end.</summary>
+    private static async Task<bool?> ContentMatchesAsync(IFileSystemProvider provider, FileEntry file,
+        ContentMatcher content, CancellationToken ct)
+    {
+        try
+        {
+            var stream = await provider.OpenReadAsync(file.Path, ct).ConfigureAwait(false);
+            await using (stream.ConfigureAwait(false))
+                return await content.IsMatchAsync(stream, ct).ConfigureAwait(false);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
             return null;
         }
     }

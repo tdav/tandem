@@ -57,6 +57,58 @@ public static class TextEncodingDetector
     }
 
     /// <summary>
+    /// Whether a UTF-16 guess <see cref="Detect"/> made without a byte order mark is unlikely to be text; callers
+    /// should then treat the content as binary. The guess comes from the share of zero bytes at odd or even positions
+    /// alone, which arrays of small 16-bit numbers (tables, sound samples) share with text, and binary data is not
+    /// looked for after it. So the sample is decoded here and judged like the 8-bit check: binary when control
+    /// characters other than tab, line feed, form feed, carriage return and escape make up more than
+    /// <see cref="BinaryControlShare"/> of the units. A lone surrogate is binary at once; a high surrogate at the very
+    /// end of a sample cut from a longer file is not counted. Any other guess gives false.
+    /// </summary>
+    public static bool IsUnlikelyUtf16(EncodingGuess guess, ReadOnlySpan<byte> sample, bool sampleIsWholeFile)
+    {
+        if (guess.BomLength != 0 || guess.LooksBinary) return false;
+        bool bigEndian;
+        if (guess.Encoding == TextEncodings.Utf16LE) bigEndian = false;
+        else if (guess.Encoding == TextEncodings.Utf16BE) bigEndian = true;
+        else return false;
+
+        var units = sample.Length / 2;
+        if (units == 0) return false;
+        var controls = 0;
+        for (var i = 0; i < units; i++)
+        {
+            var unit = Unit(sample, i, bigEndian);
+            if (unit < 0x20)
+            {
+                if (unit is not ('\t' or '\n' or '\f' or '\r' or '\u001b')) controls++;
+            }
+            else if (char.IsHighSurrogate(unit))
+            {
+                if (i + 1 < units)
+                {
+                    if (!char.IsLowSurrogate(Unit(sample, i + 1, bigEndian))) return true;
+                    i++;
+                }
+                else if (sampleIsWholeFile)
+                {
+                    return true;
+                }
+            }
+            else if (char.IsLowSurrogate(unit))
+            {
+                return true;
+            }
+        }
+        return (double)controls / units > BinaryControlShare;
+    }
+
+    private static char Unit(ReadOnlySpan<byte> bytes, int index, bool bigEndian) =>
+        (char)(bigEndian
+            ? bytes[2 * index] << 8 | bytes[2 * index + 1]
+            : bytes[2 * index + 1] << 8 | bytes[2 * index]);
+
+    /// <summary>
     /// Share of bytes equal to 0x00 or 0x04 (the high byte of Latin and Cyrillic UTF-16 code units)
     /// at even and at odd positions, counted over whole byte pairs only.
     /// </summary>

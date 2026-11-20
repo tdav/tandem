@@ -7,7 +7,8 @@ namespace Tandem.Core.Tests.Vfs;
 /// Wraps any <see cref="IFileSystemProvider"/> (same id and capabilities) and counts the calls made through it, per
 /// method and per path. A method is named as in <c>InMemoryFileSystem.FailOn</c>: the interface method name without
 /// "Async" ("Enumerate", "OpenRead", ...). A call is counted when it is made, before it reaches the inner provider;
-/// a call with two paths (Move, IsSameEntry) counts once for each. Thread-safe.
+/// a call with two paths (Move, IsSameEntry) counts once for each. Thread-safe. <see cref="ReplaceRead"/> lets a test
+/// hand out a stream of its own in place of the one the inner provider opened.
 /// </summary>
 public sealed class CountingProvider(IFileSystemProvider inner) : IFileSystemProvider
 {
@@ -15,6 +16,10 @@ public sealed class CountingProvider(IFileSystemProvider inner) : IFileSystemPro
     private readonly ConcurrentDictionary<(string Method, VfsPath Path), int> _byPath = new();
 
     public IFileSystemProvider Inner => inner;
+
+    /// <summary>When set, <see cref="OpenReadAsync"/> returns what this gives for the path and the inner provider's
+    /// stream (which it then owns).</summary>
+    public Func<VfsPath, Stream, Stream>? ReplaceRead { get; set; }
 
     /// <summary>How many times <paramref name="method"/> was called, for any path.</summary>
     public int Count(string method) => _byMethod.GetValueOrDefault(method);
@@ -47,7 +52,10 @@ public sealed class CountingProvider(IFileSystemProvider inner) : IFileSystemPro
     public Task<Stream> OpenReadAsync(VfsPath path, CancellationToken ct)
     {
         Hit("OpenRead", path);
-        return inner.OpenReadAsync(path, ct);
+        return ReplaceRead is { } replace ? Replaced(replace) : inner.OpenReadAsync(path, ct);
+
+        async Task<Stream> Replaced(Func<VfsPath, Stream, Stream> replace) =>
+            replace(path, await inner.OpenReadAsync(path, ct).ConfigureAwait(false));
     }
 
     public Task<Stream> OpenWriteAsync(VfsPath path, CancellationToken ct)

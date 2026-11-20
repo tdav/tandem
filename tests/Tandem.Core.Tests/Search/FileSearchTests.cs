@@ -1,5 +1,6 @@
 using System.Text;
 using Tandem.Core.Search;
+using Tandem.Core.Tests.Viewing;
 using Tandem.Core.Tests.Vfs;
 using Tandem.Core.Vfs;
 using Tandem.Core.Vfs.InMemory;
@@ -90,13 +91,20 @@ public class FileSearchTests
     }
 
     [Fact]
-    public void Content_is_rejected_until_content_search_exists()
+    public async Task Invalid_content_query_is_rejected_before_anything_is_read()
     {
-        var query = Query() with { Content = new ContentQuery("hello") };
-
-        var thrown = Assert.Throws<SearchQueryException>(() => FileSearch.Validate(query));
-
-        Assert.Equal(SearchField.Content, thrown.Field);
+        foreach (var (content, field) in new[]
+                 {
+                     (new ContentQuery(""), SearchField.Content),
+                     (new ContentQuery("a(", IsRegex: true), SearchField.Content),
+                     (new ContentQuery("a", EncodingId: "klingon"), SearchField.Encoding),
+                 })
+        {
+            var query = Query() with { Content = content };
+            Assert.Equal(field, Assert.Throws<SearchQueryException>(() => FileSearch.Validate(query)).Field);
+            Assert.Equal(field, (await Assert.ThrowsAsync<SearchQueryException>(() => Run(query))).Field);
+        }
+        Assert.Equal(0, _counting.Count("Enumerate"));
     }
 
     [Fact]
@@ -321,5 +329,84 @@ public class FileSearchTests
         Assert.Equal(new SearchProgress(FoldersScanned: 2, FilesChecked: 3, Found: 2, FoldersSkipped: 1,
             FilesSkipped: 0, CurrentFolder: null), progress.Reports[^1]);
         Assert.Single(progress.Reports, r => r.CurrentFolder is null);
+    }
+
+    [Fact]
+    public async Task Search_with_content_returns_only_matching_files()
+    {
+        _fs.AddFile("/r/a.txt", "say Hello, world");
+        _fs.AddFile("/r/b.txt", "nothing here");
+        _fs.AddFile("/r/sub/c.log", "HELLO again");
+        _fs.AddFile("/r/sub/d.txt", "hel\nlo");
+        _fs.AddDirectory("/r/hello");
+        await _fs.CreateSymlinkAsync(P("/r/link.txt"), "/r/a.txt", Ct);
+        var progress = new Recorder();
+
+        var found = await Run(Query() with { Content = new ContentQuery("hello") }, progress);
+
+        Assert.Equal(["/r/a.txt", "/r/sub/c.log"], Sorted(found));
+        Assert.Equal(0, _counting.Count("OpenRead", P("/r/link.txt"))); // only plain files are read
+        Assert.Equal(new SearchProgress(FoldersScanned: 3, FilesChecked: 5, Found: 2, FoldersSkipped: 0, FilesSkipped: 0,
+            CurrentFolder: null), progress.Reports[^1]);
+
+        // Only files that pass the other conditions are read.
+        Assert.Equal(["/r/a.txt"], await Run(Query() with { NameMasks = "*.txt", Content = new ContentQuery("hello") }));
+        Assert.Equal(2, _counting.Count("OpenRead", P("/r/a.txt")));
+        Assert.Equal(1, _counting.Count("OpenRead", P("/r/sub/c.log")));
+    }
+
+    [Fact]
+    public async Task File_that_cannot_be_read_is_skipped_and_counted()
+    {
+        _fs.AddFile("/r/a.txt", "needle");
+        _fs.AddFile("/r/denied.txt", "needle");
+        _fs.AddFile("/r/unauthorized.txt", "needle");
+        _fs.AddFile("/r/broken.txt", "needle");
+        _fs.AddFile("/r/z.txt", "needle");
+        _fs.FailOn((op, path) => op == "OpenRead" && path.Path == "/r/denied.txt", () => new VfsAccessDeniedException("denied"));
+        _fs.FailOn((op, path) => op == "OpenRead" && path.Path == "/r/unauthorized.txt",
+            () => new UnauthorizedAccessException("denied"));
+        _counting.ReplaceRead = (path, stream) => path.Path != "/r/broken.txt"
+            ? stream
+            : new SparseStream(10L * ContentMatcher.BlockSize,
+                position => position < ContentMatcher.BlockSize ? (byte)'x' : throw new IOException("gone"));
+        var progress = new Recorder();
+
+        var found = await Run(Query() with { Content = new ContentQuery("needle") }, progress);
+
+        Assert.Equal(["/r/a.txt", "/r/z.txt"], Sorted(found));
+        var last = progress.Reports[^1];
+        Assert.Equal(3, last.FilesSkipped);
+        Assert.Equal(5, last.FilesChecked);
+    }
+
+    [Fact]
+    public async Task Cancel_inside_a_large_file_stops_the_search()
+    {
+        _fs.AddFile("/r/big.bin");
+        _fs.AddFile("/r/later.txt", "needle");
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        SparseStream? big = null;
+        _counting.ReplaceRead = (path, stream) =>
+        {
+            if (path.Path != "/r/big.bin") return stream;
+            stream.Dispose();
+            return big = new SparseStream(1L << 30, position =>
+            {
+                if (position == 3L * ContentMatcher.BlockSize) cts.Cancel();
+                return (byte)'a';
+            });
+        };
+        var progress = new Recorder();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+        {
+            await foreach (var _ in _search.RunAsync(Query() with { Content = new ContentQuery("needle") }, progress, cts.Token)) { }
+        });
+
+        Assert.NotNull(big);
+        Assert.True(big.BytesRead <= 5L * ContentMatcher.BlockSize, $"read {big.BytesRead} bytes");
+        Assert.Equal(0, _counting.Count("OpenRead", P("/r/later.txt")));
+        Assert.Null(progress.Reports[^1].CurrentFolder);
     }
 }
