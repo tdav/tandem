@@ -32,12 +32,16 @@ public sealed class SearchResultsProvider(ProviderRegistry providers) : IFileSys
 
     /// <summary>A new folder "/{n}" (n = 1, 2, …) listing <paramref name="results"/> in their order; up from it leads
     /// to <paramref name="origin"/>, the folder searched. <paramref name="title"/> is the text for the path line, as it
-    /// is shown.</summary>
+    /// is shown. A path given more than once is listed once, where it first appears.</summary>
+    /// <exception cref="ArgumentException">A result is a path of this provider.</exception>
     public VfsPath Add(VfsPath origin, string title, IReadOnlyList<VfsPath> results)
     {
         ArgumentNullException.ThrowIfNull(title);
         ArgumentNullException.ThrowIfNull(results);
-        var paths = results.ToList();
+        foreach (var result in results)
+            if (string.Equals(result.ProviderId, ProviderId, StringComparison.Ordinal))
+                throw new ArgumentException($"A result cannot be a search path: '{result}'.", nameof(results));
+        var paths = results.Distinct().ToList();
         lock (_lock)
         {
             var set = new ResultSet(++_lastNumber, origin, title, paths, DateTimeOffset.UtcNow);
@@ -50,11 +54,18 @@ public sealed class SearchResultsProvider(ProviderRegistry providers) : IFileSys
     // ---- IHostedProvider ----------------------------------------------------------------------------
 
     /// <summary>For a result set, the folder searched with nothing particular focused; null otherwise.</summary>
-    public HostLocation? GetHostLocation(VfsPath path) =>
-        Find(path) is { } set ? new HostLocation(set.Origin, null) : null;
+    public HostLocation? GetHostLocation(VfsPath path)
+    {
+        CheckOwn(path);
+        return Find(path) is { } set ? new HostLocation(set.Origin, null) : null;
+    }
 
     /// <summary>A result set's title; otherwise the path itself.</summary>
-    public string GetDisplayPath(VfsPath path) => Find(path)?.Title ?? path.Path;
+    public string GetDisplayPath(VfsPath path)
+    {
+        CheckOwn(path);
+        return Find(path)?.Title ?? path.Path;
+    }
 
     // ---- IFileSystemProvider ------------------------------------------------------------------------
 

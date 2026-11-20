@@ -240,4 +240,39 @@ public sealed class SearchResultsProviderTests
         Assert.False(_mem.Exists("/src/sub/b.txt"));
         Assert.Equal([Mem("/src/sub")], (await List(set)).Select(e => e.Path));
     }
+
+    [Fact]
+    public void Results_in_search_itself_are_refused()
+    {
+        var set = AddFoundSet();
+
+        Assert.Throws<ArgumentException>(() => _search.Add(Mem("/"), "nested", [Mem("/src/a.txt"), set]));
+        Assert.Throws<ArgumentException>(() => _search.Add(Mem("/"), "root", [Search("/")]));
+        Assert.Null(_search.GetHostLocation(Search("/2")));
+    }
+
+    [Fact]
+    public async Task Repeated_results_are_listed_once_and_drop_out_together()
+    {
+        _mem.AddFile("/src/a.txt", "alpha");
+        _mem.AddFile("/src/b.txt", "beta");
+        var set = _search.Add(Mem("/src"), "dups",
+            [Mem("/src/a.txt"), Mem("/src/b.txt"), Mem("/src/a.txt"), Mem("/src/a.txt")]);
+
+        Assert.Equal([Mem("/src/a.txt"), Mem("/src/b.txt")], (await List(set)).Select(e => e.Path));
+
+        await _mem.DeleteAsync(Mem("/src/a.txt"), recursive: false, Ct);
+        Assert.Equal([Mem("/src/b.txt")], (await List(set)).Select(e => e.Path));
+        _mem.AddFile("/src/a.txt", "back");
+        Assert.Equal([Mem("/src/b.txt")], (await List(set)).Select(e => e.Path));
+    }
+
+    [Fact]
+    public void Host_location_and_display_path_of_another_provider_are_refused()
+    {
+        AddFoundSet();
+
+        Assert.Throws<ArgumentException>(() => _search.GetHostLocation(Mem("/1")));
+        Assert.Throws<ArgumentException>(() => _search.GetDisplayPath(Mem("/1")));
+    }
 }
