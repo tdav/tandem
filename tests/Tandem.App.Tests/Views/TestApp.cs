@@ -305,6 +305,9 @@ internal sealed class InMemoryNativeCopy(InMemoryFileSystem fs) : INativeCopy
 
     public Task CopyDirectoryMetadataAsync(string sourcePath, string destinationPath, CancellationToken ct) =>
         Task.CompletedTask;
+
+    public Task CopyFileMetadataAsync(string sourcePath, string destinationPath, CancellationToken ct) =>
+        Task.CompletedTask;
 }
 
 /// <summary>A provider with capabilities added to or taken from another's, e.g. the Trash for the in-memory "local
@@ -477,6 +480,8 @@ internal sealed class FakePlatform : IShellIntegration, IQuickLook, IFileMetadat
         Func<CancellationToken, ValueTask> pauseCheckpoint, CancellationToken ct) => throw NotHere();
     public Task CopyFlagsAsync(string sourcePath, string destinationPath, CancellationToken ct) => throw NotHere();
     public Task CopyDirectoryMetadataAsync(string sourcePath, string destinationPath, CancellationToken ct) =>
+        throw NotHere();
+    public Task CopyFileMetadataAsync(string sourcePath, string destinationPath, CancellationToken ct) =>
         throw NotHere();
     public IRunningProcess Start(ProcessSpec spec) => throw NotHere();
 }

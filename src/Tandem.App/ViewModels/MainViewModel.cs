@@ -70,7 +70,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             services.NativeCopy, Commands, Operations, Interaction, ReportFailure);
         Drops = new DropHandler(workspace, Files);
         Shell = new ShellCommands(workspace, services.Shell, services.QuickLook, services.Dialogs, services.Windows,
-            Commands, services.Providers, services.Metadata, services.Temp, ReportFailure, quickLookDelay);
+            Commands, services.Providers, services.Metadata, services.Temp, ReportFailure, quickLookDelay,
+            services.NativeCopy);
         CommandLine = new CommandLineViewModel(workspace, services.Processes, workspace.HomeDirectory);
         Commands.RaiseCanExecuteChanged();
         workspace.PropertyChanged += OnWorkspacePropertyChanged;

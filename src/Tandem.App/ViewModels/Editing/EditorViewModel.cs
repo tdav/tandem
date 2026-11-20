@@ -1,8 +1,10 @@
+using System.Text;
 using AvaloniaEdit.Document;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Tandem.App.Resources;
 using Tandem.App.Services;
 using Tandem.Core.Operations;
+using Tandem.Core.Platform;
 using Tandem.Core.Viewing;
 using Tandem.Core.Vfs;
 
@@ -30,37 +32,55 @@ public sealed class EditorRefusedException(EditorRefusal reason)
 /// it back the same way.
 /// </summary>
 /// <remarks>
-/// Created (by <see cref="OpenAsync"/>) and used on the UI thread; reading and writing the file run off it. The text
-/// is decoded with the encoding <see cref="TextEncodingDetector"/> guesses, without the byte order mark; saving
-/// encodes it with the same encoding and puts the same mark back, so a file saved unchanged keeps its bytes. Line
-/// endings are whatever the document holds: the file's own, and the editor inserts the line's own ending on Enter.
-/// Saving writes through the provider's batch (<see cref="BatchScope"/>) and <see cref="SafeReplace"/>: the new text
-/// goes to a part file, which gets the original's Unix mode (where the provider has modes) and only then replaces the
-/// original; if any step fails, the original stays as it was.
+/// <para>Created (by <see cref="OpenAsync"/>) and used on the UI thread; reading, decoding, encoding and writing run
+/// off it. A symbolic link is followed to the file it leads to (on the same provider): that file is read and
+/// written, so the link stays a link; <see cref="File"/> and <see cref="Title"/> keep the path that was opened.</para>
+/// <para>The text is decoded with the encoding <see cref="TextEncodingDetector"/> guesses, without the byte order
+/// mark; saving encodes it with the same encoding and puts the same mark back, so a file saved unchanged keeps its
+/// bytes. Line endings are whatever the document holds: the file's own, and the editor inserts the line's own ending
+/// on Enter.</para>
+/// <para>Nothing is ever changed silently. A save asks (<see cref="ConfirmSave"/>; no answerer means no) when the file
+/// changed on disk since it was read or saved, when its bytes do not survive decoding (see <see cref="Notice"/>),
+/// and when the text has characters its encoding cannot hold (then UTF-8 is offered, and kept for later saves).</para>
+/// <para>Saving writes through the provider's batch (<see cref="BatchScope"/>) and <see cref="SafeReplace"/>: the new
+/// text goes to a part file, which gets the original's Unix mode (where the provider has modes) and, on the local
+/// disk, its extended attributes, ACL and flags (<see cref="INativeCopy.CopyFileMetadataAsync"/>), and only then
+/// replaces the original; if any step fails, the original stays as it was.</para>
 /// </remarks>
 public sealed partial class EditorViewModel : ObservableObject
 {
     /// <summary>The largest file the editor opens: 32 MiB.</summary>
     public const long MaxFileBytes = 32 * 1024 * 1024;
 
+    private const int MaxLinkHops = 40;
+
     private readonly ProviderRegistry _providers;
+    private readonly INativeCopy? _nativeCopy;
     private readonly string _displayPath;
-    private readonly byte[] _bom;
+    private readonly VfsPath _target;
     private readonly UnixFileMode? _openedMode;
+    private byte[] _bom;
+    private bool _roundTrips;
+    private (long Size, DateTimeOffset Modified) _onDisk;
     private Task<bool>? _saving;
     private int _changes;
 
-    private EditorViewModel(ProviderRegistry providers, VfsPath file, string displayPath, string text,
-        TextEncodingInfo encoding, byte[] bom, UnixFileMode? mode, bool isReadOnly)
+    private EditorViewModel(ProviderRegistry providers, INativeCopy? nativeCopy, VfsPath file, string displayPath,
+        Loaded loaded, bool isReadOnly)
     {
         _providers = providers;
+        _nativeCopy = nativeCopy;
         _displayPath = displayPath;
-        _bom = bom;
-        _openedMode = mode;
+        _target = loaded.Target;
+        _openedMode = loaded.Mode;
+        _bom = loaded.Bom;
+        _roundTrips = loaded.RoundTrips;
+        _onDisk = (loaded.Size, loaded.Modified);
         File = file;
-        Encoding = encoding;
+        Encoding = loaded.Encoding;
         IsReadOnly = isReadOnly;
-        Document = new TextDocument(text);
+        Notice = _roundTrips ? null : Loc.Format("Editor_LossyNotice", loaded.Encoding.Id);
+        Document = new TextDocument(loaded.Text);
         Document.UndoStack.ClearAll();
         Document.Changed += (_, _) => _changes++;
         Document.UndoStack.PropertyChanged += (_, e) =>
@@ -71,28 +91,25 @@ public sealed partial class EditorViewModel : ObservableObject
         };
     }
 
-    /// <summary>Reads <paramref name="file"/> off the UI thread and returns its editor. Call on the UI thread.</summary>
+    /// <summary>Reads and decodes <paramref name="file"/> off the UI thread and returns its editor. Call on the UI
+    /// thread.</summary>
+    /// <param name="nativeCopy">Gives a local file's new content the original's metadata on save; none is copied
+    /// when null.</param>
     /// <exception cref="EditorRefusedException">The file is too large or looks binary.</exception>
-    /// <exception cref="IOException">The file cannot be read (<see cref="VfsNotFoundException"/> when it is
-    /// gone).</exception>
+    /// <exception cref="IOException">The file cannot be read (<see cref="VfsNotFoundException"/> when it is gone,
+    /// or a link leads nowhere).</exception>
     public static async Task<EditorViewModel> OpenAsync(ProviderRegistry providers, VfsPath file,
-        CancellationToken ct)
+        CancellationToken ct, INativeCopy? nativeCopy = null)
     {
         ArgumentNullException.ThrowIfNull(providers);
         var provider = providers.For(file);
         var displayPath = providers.DisplayPath(file);
-        var (content, mode) = await Task.Run(() => ReadAsync(provider, file, ct), ct);
-
-        var sampleLength = Math.Min(content.Length, TextEncodingDetector.SampleSize);
-        var guess = TextEncodingDetector.Detect(content.AsSpan(0, sampleLength),
-            sampleIsWholeFile: content.Length <= TextEncodingDetector.SampleSize);
-        if (guess.LooksBinary) throw new EditorRefusedException(EditorRefusal.Binary);
-        var text = guess.Encoding.Encoding.GetString(content, guess.BomLength, content.Length - guess.BomLength);
-        return new EditorViewModel(providers, file, displayPath, text, guess.Encoding, content[..guess.BomLength], mode,
+        var loaded = await Task.Run(() => LoadAsync(provider, file, ct), ct);
+        return new EditorViewModel(providers, nativeCopy, file, displayPath, loaded,
             !provider.Capabilities.HasFlag(ProviderCapabilities.Write));
     }
 
-    /// <summary>The file being edited.</summary>
+    /// <summary>The file opened (a link stays the link's path).</summary>
     public VfsPath File { get; }
 
     /// <summary>The file's path as the user reads it, with " *" while there are unsaved changes.</summary>
@@ -101,8 +118,11 @@ public sealed partial class EditorViewModel : ObservableObject
     /// <summary>The text; edit it through the editor control (or directly).</summary>
     public TextDocument Document { get; }
 
-    /// <summary>The encoding the file was read in and is saved in.</summary>
-    public TextEncodingInfo Encoding { get; }
+    /// <summary>The encoding the file was read in and is saved in; UTF-8 once the user chose it for text the
+    /// original encoding cannot hold.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasBom))]
+    public partial TextEncodingInfo Encoding { get; private set; }
 
     /// <summary>The file starts with a byte order mark, which saving keeps.</summary>
     public bool HasBom => _bom.Length > 0;
@@ -117,10 +137,19 @@ public sealed partial class EditorViewModel : ObservableObject
     [ObservableProperty]
     public partial string? Error { get; private set; }
 
+    /// <summary>A lasting remark on the file, in words: its bytes do not survive decoding in its encoding, so saving
+    /// would change them (a save asks first). Null otherwise, and after a save.</summary>
+    [ObservableProperty]
+    public partial string? Notice { get; private set; }
+
+    /// <summary>Answers a question a save asks before it writes: true to go on. While null every question is answered
+    /// no, and nothing is written.</summary>
+    public Func<EditorSaveQuestion, Task<bool>>? ConfirmSave { get; set; }
+
     /// <summary>Writes the text back to the file. True when saved: the text is then unmodified, unless it changed
-    /// while the save ran. False when the save failed (<see cref="Error"/> says why) or the file is read-only; the
-    /// original file is then unchanged and the text stays modified. A save asked for while one runs waits for it and
-    /// gives its result.</summary>
+    /// while the save ran. False when the save failed (<see cref="Error"/> says why), a question was answered no,
+    /// or the file is read-only; the original file is then unchanged and the text stays modified. A save asked for
+    /// while one runs waits for it and gives its result.</summary>
     public async Task<bool> SaveAsync()
     {
         if (_saving is { } running) return await running;
@@ -144,11 +173,40 @@ public sealed partial class EditorViewModel : ObservableObject
             return false;
         }
         var changes = _changes;
-        byte[] content = [.. _bom, .. Encoding.Encoding.GetBytes(Document.Text)];
-        var (providers, file, mode) = (_providers, File, _openedMode);
+        var snapshot = Document.CreateSnapshot();
+        var (providers, target, nativeCopy) = (_providers, _target, _nativeCopy);
         try
         {
-            await Task.Run(() => WriteAsync(providers, file, content, mode));
+            var provider = providers.For(target);
+            var current = await Task.Run(() => provider.GetEntryAsync(target, CancellationToken.None));
+            if (current is not null && (current.Size, current.Modified) != _onDisk &&
+                !await ConfirmAsync(EditorSaveQuestion.OverwriteChangedFile))
+                return false;
+            var replaceUnsavable = !_roundTrips;
+            if (replaceUnsavable && !await ConfirmAsync(EditorSaveQuestion.ReplaceUnsavableBytes)) return false;
+
+            var (encoding, bom) = (Encoding, _bom);
+            var content = await Task.Run(() => Encode(snapshot, encoding, bom, replaceUnsavable));
+            if (content is null)
+            {
+                if (!await ConfirmAsync(EditorSaveQuestion.SaveAsUtf8)) return false;
+                _bom = [];
+                Encoding = TextEncodings.Utf8;
+                (encoding, bom) = (Encoding, _bom);
+                content = await Task.Run(() => Encode(snapshot, encoding, bom, replaceUnsavable));
+                if (content is null)
+                {
+                    Error = Loc.Format("Editor_SaveFailed", File.Name, Loc.Get("OperationFailed_Other"));
+                    return false;
+                }
+            }
+
+            var mode = provider.Capabilities.HasFlag(ProviderCapabilities.UnixPermissions)
+                ? current?.Mode ?? _openedMode
+                : null;
+            var saved = await Task.Run(() => WriteAsync(providers, target, content, mode, current is not null,
+                nativeCopy));
+            if (saved is not null) _onDisk = (saved.Size, saved.Modified);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
@@ -156,51 +214,136 @@ public sealed partial class EditorViewModel : ObservableObject
             return false;
         }
         Error = null;
+        _roundTrips = true;
+        Notice = null;
         if (changes == _changes) Document.UndoStack.MarkAsOriginalFile();
         return true;
     }
 
-    /// <summary>Reads the whole file, refusing one over <see cref="MaxFileBytes"/> before reading it (by its size) or
-    /// while reading it (a size that was not reported or changed).</summary>
-    private static async Task<(byte[] Content, UnixFileMode? Mode)> ReadAsync(IFileSystemProvider provider,
+    private Task<bool> ConfirmAsync(EditorSaveQuestion question) =>
+        ConfirmSave is { } confirm ? confirm(question) : Task.FromResult(false);
+
+    /// <summary>What a file read gives the editor: the file it led to, its decoded text and how to write it back.</summary>
+    private sealed record Loaded(VfsPath Target, string Text, TextEncodingInfo Encoding, byte[] Bom,
+        UnixFileMode? Mode, long Size, DateTimeOffset Modified, bool RoundTrips);
+
+    /// <summary>Follows links, reads the whole file (refusing one over <see cref="MaxFileBytes"/> by its size or while
+    /// reading it), detects the encoding, decodes, and checks that encoding the text again gives the same
+    /// bytes.</summary>
+    private static async Task<Loaded> LoadAsync(IFileSystemProvider provider, VfsPath file, CancellationToken ct)
+    {
+        var (target, entry) = await ResolveAsync(provider, file, ct).ConfigureAwait(false);
+        if (entry.Size > MaxFileBytes) throw new EditorRefusedException(EditorRefusal.TooLarge);
+        byte[] content;
+        await using (var stream = await provider.OpenReadAsync(target, ct).ConfigureAwait(false))
+        {
+            using var buffered = new MemoryStream();
+            var buffer = new byte[81920];
+            int read;
+            while ((read = await stream.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
+            {
+                if (buffered.Length + read > MaxFileBytes) throw new EditorRefusedException(EditorRefusal.TooLarge);
+                buffered.Write(buffer, 0, read);
+            }
+            content = buffered.ToArray();
+        }
+
+        var sampleLength = Math.Min(content.Length, TextEncodingDetector.SampleSize);
+        var guess = TextEncodingDetector.Detect(content.AsSpan(0, sampleLength),
+            sampleIsWholeFile: content.Length <= TextEncodingDetector.SampleSize);
+        if (guess.LooksBinary) throw new EditorRefusedException(EditorRefusal.Binary);
+        var encoding = guess.Encoding.Encoding;
+        var body = content.AsSpan(guess.BomLength);
+        var text = encoding.GetString(body);
+        var roundTrips = encoding.GetBytes(text).AsSpan().SequenceEqual(body);
+        return new Loaded(target, text, guess.Encoding, content[..guess.BomLength], entry.Mode, entry.Size,
+            entry.Modified, roundTrips);
+    }
+
+    /// <summary>The file <paramref name="file"/> leads to on its own provider, through any symbolic links, with its
+    /// entry.</summary>
+    /// <exception cref="VfsNotFoundException">The file, or a link's target, does not exist.</exception>
+    private static async Task<(VfsPath Target, FileEntry Entry)> ResolveAsync(IFileSystemProvider provider,
         VfsPath file, CancellationToken ct)
     {
-        var entry = await provider.GetEntryAsync(file, ct).ConfigureAwait(false)
-                    ?? throw new VfsNotFoundException($"'{file.Path}' does not exist.");
-        if (entry.Kind == EntryKind.File && entry.Size > MaxFileBytes)
-            throw new EditorRefusedException(EditorRefusal.TooLarge);
-        await using var stream = await provider.OpenReadAsync(file, ct).ConfigureAwait(false);
-        using var content = new MemoryStream();
-        var buffer = new byte[81920];
-        int read;
-        while ((read = await stream.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
+        var path = file;
+        for (var hop = 0; hop < MaxLinkHops; hop++)
         {
-            if (content.Length + read > MaxFileBytes) throw new EditorRefusedException(EditorRefusal.TooLarge);
-            content.Write(buffer, 0, read);
+            var entry = await provider.GetEntryAsync(path, ct).ConfigureAwait(false)
+                        ?? throw new VfsNotFoundException($"'{path.Path}' does not exist.");
+            if (entry.Kind != EntryKind.Symlink) return (path, entry);
+            path = LinkDestination(path, entry.LinkTarget)
+                   ?? throw new VfsNotFoundException($"The link '{path.Path}' leads nowhere.");
         }
-        return (content.ToArray(), entry.Mode);
+        throw new VfsException($"Too many levels of symbolic links at '{file.Path}'.");
+    }
+
+    private static VfsPath? LinkDestination(VfsPath link, string? target)
+    {
+        if (string.IsNullOrEmpty(target)) return null;
+        try
+        {
+            return new VfsPath(link.ProviderId,
+                target.StartsWith('/') ? target : link.Parent!.Value.Path + "/" + target);
+        }
+        catch (ArgumentException)
+        {
+            return null; // the target climbs above the root
+        }
+    }
+
+    /// <summary>The bytes to write: the mark, then the text in <paramref name="encoding"/>; null when the text has a
+    /// character the encoding cannot hold. With <paramref name="replaceUnsavable"/> (the user agreed), the
+    /// replacement characters decoding put in are written as the encoding writes them, or as '?'.</summary>
+    private static byte[]? Encode(ITextSource snapshot, TextEncodingInfo encoding, byte[] bom, bool replaceUnsavable)
+    {
+        var strict = (System.Text.Encoding)encoding.Encoding.Clone();
+        strict.EncoderFallback = EncoderFallback.ExceptionFallback;
+        var text = snapshot.Text;
+        try
+        {
+            if (replaceUnsavable && !CanEncode(strict, "�")) text = text.Replace('�', '?');
+            return [.. bom, .. strict.GetBytes(text)];
+        }
+        catch (EncoderFallbackException)
+        {
+            return null;
+        }
+    }
+
+    private static bool CanEncode(System.Text.Encoding strict, string text)
+    {
+        try
+        {
+            strict.GetByteCount(text);
+            return true;
+        }
+        catch (EncoderFallbackException)
+        {
+            return false;
+        }
     }
 
     /// <summary>One batch on the file's provider, the safe replace inside it, then the commit; the batch is disposed
-    /// (discarding what was not committed) whatever happens. The part file gets the file's current mode, or the one
-    /// it had when opened, when the provider has modes.</summary>
-    private static async Task WriteAsync(ProviderRegistry providers, VfsPath file, byte[] content,
-        UnixFileMode? openedMode)
+    /// (discarding what was not committed) whatever happens. The part file gets <paramref name="mode"/>, and on the
+    /// local disk the original's metadata, before it replaces the original. The file's entry once written (null
+    /// if it cannot be seen yet).</summary>
+    private static async Task<FileEntry?> WriteAsync(ProviderRegistry providers, VfsPath target, byte[] content,
+        UnixFileMode? mode, bool exists, INativeCopy? nativeCopy)
     {
         var ct = CancellationToken.None;
-        var provider = providers.For(file);
-        await using var batch = await BatchScope.BeginAsync(providers, [file], ct).ConfigureAwait(false);
-        var existing = await provider.GetEntryAsync(file, ct).ConfigureAwait(false);
-        var mode = provider.Capabilities.HasFlag(ProviderCapabilities.UnixPermissions)
-            ? existing?.Mode ?? openedMode
-            : null;
+        var provider = providers.For(target);
+        await using var batch = await BatchScope.BeginAsync(providers, [target], ct).ConfigureAwait(false);
         // A file deleted meanwhile is written anew rather than failing on the missing original.
-        await SafeReplace.WriteAsync(provider, file, replace: existing is not null, async part =>
+        await SafeReplace.WriteAsync(provider, target, replace: exists, async part =>
         {
             await using (var stream = await provider.OpenWriteAsync(part, ct).ConfigureAwait(false))
                 await stream.WriteAsync(content, ct).ConfigureAwait(false);
             if (mode is { } m) await provider.SetModeAsync(part, m, ct).ConfigureAwait(false);
+            if (exists && nativeCopy is not null && target.ProviderId == VfsPath.LocalProviderId)
+                await nativeCopy.CopyFileMetadataAsync(target.Path, part.Path, ct).ConfigureAwait(false);
         }).ConfigureAwait(false);
         await batch.CommitAsync(ct).ConfigureAwait(false);
+        return await provider.GetEntryAsync(target, ct).ConfigureAwait(false);
     }
 }

@@ -581,6 +581,9 @@ public sealed class CopyControlTests
             return Task.CompletedTask;
         }
 
+        public Task CopyFileMetadataAsync(string sourcePath, string destinationPath, CancellationToken ct) =>
+            Task.CompletedTask;
+
         public Task CopyDirectoryMetadataAsync(string sourcePath, string destinationPath, CancellationToken ct)
         {
             lock (_lock)
@@ -622,6 +625,9 @@ public sealed class CopyControlTests
 
             public Task CopyFlagsAsync(string sourcePath, string destinationPath, CancellationToken ct) => Task.CompletedTask;
 
+        public Task CopyFileMetadataAsync(string sourcePath, string destinationPath, CancellationToken ct) =>
+            Task.CompletedTask;
+
         public Task CopyDirectoryMetadataAsync(string sourcePath, string destinationPath, CancellationToken ct) =>
             Task.CompletedTask;
     }
@@ -645,6 +651,9 @@ public sealed class CopyControlTests
 
             public Task CopyFlagsAsync(string sourcePath, string destinationPath, CancellationToken ct) => Task.CompletedTask;
 
+        public Task CopyFileMetadataAsync(string sourcePath, string destinationPath, CancellationToken ct) =>
+            Task.CompletedTask;
+
         public Task CopyDirectoryMetadataAsync(string sourcePath, string destinationPath, CancellationToken ct) =>
             Task.CompletedTask;
     }
@@ -666,6 +675,9 @@ public sealed class CopyControlTests
         }
 
             public Task CopyFlagsAsync(string sourcePath, string destinationPath, CancellationToken ct) => Task.CompletedTask;
+
+        public Task CopyFileMetadataAsync(string sourcePath, string destinationPath, CancellationToken ct) =>
+            Task.CompletedTask;
 
         public Task CopyDirectoryMetadataAsync(string sourcePath, string destinationPath, CancellationToken ct) =>
             Task.CompletedTask;

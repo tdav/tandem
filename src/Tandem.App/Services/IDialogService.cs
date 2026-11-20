@@ -1,3 +1,4 @@
+using Avalonia.Controls;
 using Tandem.App.ViewModels;
 using Tandem.Core.Operations;
 using Tandem.Core.Vfs;
@@ -21,6 +22,20 @@ public sealed record CopyMoveAnswer(string Destination, bool VerifyContent, bool
 
 /// <summary>The answer to "save the changes?" when an editor with unsaved changes closes.</summary>
 public enum SaveChangesAnswer { Save, Discard, Cancel }
+
+/// <summary>What an editor asks before it saves, when saving would change more than the user typed or overwrite
+/// someone else's change.</summary>
+public enum EditorSaveQuestion
+{
+    /// <summary>The file changed on disk since the editor read or saved it: overwrite it?</summary>
+    OverwriteChangedFile,
+
+    /// <summary>The file has bytes its encoding cannot give back unchanged: save with them replaced?</summary>
+    ReplaceUnsavableBytes,
+
+    /// <summary>The text has characters the file's encoding cannot hold: save in UTF-8 instead?</summary>
+    SaveAsUtf8,
+}
 
 /// <summary>
 /// The dialogs the file commands and running operations show. Called on the UI thread. Each completes when the
@@ -62,8 +77,15 @@ public interface IDialogService
     Task<bool> ConfirmQuitAsync(int operationCount);
 
     /// <summary>An editor with unsaved changes to <paramref name="fileName"/> is closing: save them, discard them, or
-    /// keep the editor open (<see cref="SaveChangesAnswer.Cancel"/>, also when the dialog is closed otherwise).</summary>
-    Task<SaveChangesAnswer> AskSaveChangesAsync(string fileName);
+    /// keep the editor open (<see cref="SaveChangesAnswer.Cancel"/>, also when the dialog is closed otherwise).
+    /// Modal to <paramref name="owner"/> (the editor's window) when given, else to the main window.</summary>
+    Task<SaveChangesAnswer> AskSaveChangesAsync(string fileName, Window? owner = null);
+
+    /// <summary>An editor's <paramref name="question"/> before saving <paramref name="fileName"/>, which is in
+    /// <paramref name="encoding"/>: true to go on. "Cancel" is the default button; closing the dialog answers false.
+    /// Modal to <paramref name="owner"/> when given, else to the main window.</summary>
+    Task<bool> ConfirmEditorSaveAsync(EditorSaveQuestion question, string fileName, string encoding,
+        Window? owner = null);
 
     /// <summary>A message; <paramref name="detail"/>, when given, is secondary (e.g. the system's own words).</summary>
     Task ShowMessageAsync(string text, string? detail = null);

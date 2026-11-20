@@ -120,6 +120,29 @@ public sealed class MacNativeCopy : INativeCopy
     }
 
     /// <summary>The flags a copy must not carry while the caller still writes, times and renames it.</summary>
+    public Task CopyFileMetadataAsync(string sourcePath, string destinationPath, CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(sourcePath);
+        ArgumentException.ThrowIfNullOrEmpty(destinationPath);
+        return Task.Run(() =>
+        {
+            using var sourceAccess = _broker.Access(sourcePath);
+            using var destinationAccess = _broker.Access(destinationPath);
+            // No COPYFILE_STAT: the new content keeps its own times and mode (and gets no lock).
+            if (LibC.copyfile(sourcePath, destinationPath, IntPtr.Zero,
+                    LibC.COPYFILE_ACL | LibC.COPYFILE_XATTR | LibC.COPYFILE_NOFOLLOW) < 0)
+                throw Error(Marshal.GetLastPInvokeError());
+            var wanted = FlagsOf(sourcePath) & CarriedFileFlags;
+            var current = FlagsOf(destinationPath);
+            if ((current & wanted) != wanted && LibC.lchflags(destinationPath, current | wanted) != 0)
+                throw Error(Marshal.GetLastPInvokeError());
+        }, ct);
+    }
+
+    /// <summary>The user flags a file's new content takes over: no dump, opaque, hidden. Not the lock or
+    /// append-only (they would stop the replace), nor the ones the file system manages (compressed, tracked).</summary>
+    private const uint CarriedFileFlags = 0x00000001 | 0x00000008 | 0x00008000;
+
     private const uint BlockingFlags = LibC.UF_IMMUTABLE | LibC.UF_APPEND;
 
     private static uint FlagsOf(string path) =>

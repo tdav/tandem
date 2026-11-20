@@ -13,7 +13,7 @@ namespace Tandem.App.Views.Editing;
 /// The window of one <see cref="EditorViewModel"/>: an AvaloniaEdit text editor (line numbers, its search panel on
 /// Cmd+F, undo on Cmd+Z). Cmd+S saves; Cmd+W and Esc close the window (Esc closes an open search panel first). Closing
 /// it with unsaved changes, in any way, asks first (<see cref="IDialogService.AskSaveChangesAsync"/>): Save closes only
-/// once the save succeeded, Cancel keeps the window open.
+/// once the save succeeded, Cancel keeps the window open. Every question of the editor is modal to this window.
 /// </summary>
 public partial class EditorWindow : Window
 {
@@ -41,13 +41,23 @@ public partial class EditorWindow : Window
         _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
         DataContext = editor;
         TextEditor.Document = editor.Document;
-        EncodingText.Text = (editor.HasBom ? Loc.Format("Editor_EncodingWithBom", editor.Encoding.Id) : editor.Encoding.Id)
-                            + (editor.IsReadOnly ? " · " + Loc.Get("Editor_ReadOnlyStatus") : "");
+        ShowEncoding();
+        editor.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(EditorViewModel.Encoding)) ShowEncoding();
+        };
+        // The editor's questions belong to this window.
+        editor.ConfirmSave = question =>
+            dialogs.ConfirmEditorSaveAsync(question, editor.File.Name, editor.Encoding.Id, this);
         AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
         Opened += (_, _) => TextEditor.TextArea.Focus();
         Closing += OnClosing;
         Closed += (_, _) => _closed = true;
     }
+
+    private void ShowEncoding() =>
+        EncodingText.Text = (Editor.HasBom ? Loc.Format("Editor_EncodingWithBom", Editor.Encoding.Id) : Editor.Encoding.Id)
+                            + (Editor.IsReadOnly ? " · " + Loc.Get("Editor_ReadOnlyStatus") : "");
 
     /// <summary>The file shown.</summary>
     public EditorViewModel Editor { get; }
@@ -66,7 +76,7 @@ public partial class EditorWindow : Window
         if (_closed) return true;
         if (Editor.IsModified && _dialogs is { } dialogs)
         {
-            var answer = await dialogs.AskSaveChangesAsync(Editor.File.Name);
+            var answer = await dialogs.AskSaveChangesAsync(Editor.File.Name, this);
             if (answer == SaveChangesAnswer.Cancel) return false;
             if (answer == SaveChangesAnswer.Save && !await Editor.SaveAsync()) return false;
         }

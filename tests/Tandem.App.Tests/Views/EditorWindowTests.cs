@@ -9,6 +9,7 @@ using Tandem.App.Services;
 using Tandem.App.ViewModels;
 using Tandem.App.ViewModels.Editing;
 using Tandem.App.Views.Editing;
+using Tandem.Core.Viewing;
 
 namespace Tandem.App.Tests.Views;
 
@@ -43,6 +44,14 @@ public class EditorWindowTests : LanguageTestBase
         var editor = Assert.IsType<EditorWindow>(app.Windows.Open[^1]);
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
         return editor;
+    }
+
+    private static byte[] Bytes(Tandem.Core.Vfs.InMemory.InMemoryFileSystem fs, string path)
+    {
+        using var stream = fs.OpenReadAsync(Tandem.Core.Vfs.VfsPath.Local(path), CancellationToken.None).Result;
+        using var copy = new MemoryStream();
+        stream.CopyTo(copy);
+        return copy.ToArray();
     }
 
     private static TextEditor TextEditorOf(Window window) =>
@@ -156,6 +165,51 @@ public class EditorWindowTests : LanguageTestBase
         Assert.True(await window.Editor.SaveAsync());
 
         Assert.Equal("one\r\n\r\ntwo", app.Fs.ReadAllText(TestApp.Home + "/dos.txt"));
+    }
+
+    [AvaloniaFact]
+    public async Task Editor_questions_are_modal_to_the_editor_window()
+    {
+        var fs = TestApp.DefaultFileSystem();
+        fs.AddFile(TestApp.Home + "/ru.txt", TextEncodings.Windows1251.Encoding.GetBytes("Привет"));
+        await using var app = await TestApp.StartAsync(fs);
+        var window = await OpenEditorAsync(app, "ru.txt");
+        Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "windows-1251");
+
+        TextEditorOf(window).CaretOffset = 6;
+        Type(window, "😀");
+        app.Dialogs.EditorSaveAnswers.Enqueue(true);
+        Press(window, Key.S, RawInputModifiers.Meta, PhysicalKey.S, "s");
+        await TestApp.WaitUntil(() =>
+        {
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            return !window.Editor.IsModified;
+        });
+
+        Assert.Equal([(EditorSaveQuestion.SaveAsUtf8, "ru.txt", "windows-1251", (object?)window)],
+            app.Dialogs.EditorSaveRequests);
+        Assert.Equal(System.Text.Encoding.UTF8.GetBytes("Привет😀"), Bytes(app.Fs, TestApp.Home + "/ru.txt"));
+        Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "utf-8");
+
+        Type(window, "X");
+        app.Dialogs.SaveChangesAnswers.Enqueue(SaveChangesAnswer.Cancel);
+        Press(window, Key.W, RawInputModifiers.Meta, PhysicalKey.W, "w");
+        await TestApp.WaitUntil(() => app.Dialogs.SaveChangesOwners.Count == 1);
+        Assert.Same(window, app.Dialogs.SaveChangesOwners[0]);
+    }
+
+    [AvaloniaFact]
+    public async Task File_that_cannot_be_saved_unchanged_shows_a_notice()
+    {
+        var fs = TestApp.DefaultFileSystem();
+        fs.AddFile(TestApp.Home + "/odd.txt", [0xFF, 0xFE, (byte)'o', 0, (byte)'k', 0, 0x00, 0xD8]);
+        await using var app = await TestApp.StartAsync(fs);
+
+        var window = await OpenEditorAsync(app, "odd.txt");
+
+        var notice = window.GetVisualDescendants().OfType<TextBlock>()
+            .Single(t => t.Text == "This file contains bytes that cannot be saved unchanged in utf-16le.");
+        Assert.True(notice.IsEffectivelyVisible);
     }
 
     [AvaloniaFact]

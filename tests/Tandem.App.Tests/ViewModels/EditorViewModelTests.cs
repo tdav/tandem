@@ -1,6 +1,8 @@
 using System.Text;
 using Avalonia.Headless.XUnit;
+using Tandem.App.Services;
 using Tandem.App.Tests.Views;
+using Tandem.Core.Platform;
 using Tandem.App.ViewModels.Editing;
 using Tandem.Core.Operations;
 using Tandem.Core.Viewing;
@@ -298,6 +300,206 @@ public class EditorViewModelTests : LanguageTestBase
         Assert.Equal("/home/data.pack/docs/a.txt", editor.Title);
         Assert.Equal("more hosted text", hosted.Files.ReadAllText("/docs/a.txt"));
         Assert.Equal(["/docs", "/docs/a.txt"], hosted.Files.AllPaths);
+    }
+
+    /// <summary>Answers the editor's save questions from <paramref name="answers"/> in order (no when they run out)
+    /// and records each question.</summary>
+    private static List<EditorSaveQuestion> Answer(EditorViewModel editor, params bool[] answers)
+    {
+        var asked = new List<EditorSaveQuestion>();
+        var queue = new Queue<bool>(answers);
+        editor.ConfirmSave = question =>
+        {
+            asked.Add(question);
+            return Task.FromResult(queue.TryDequeue(out var yes) && yes);
+        };
+        return asked;
+    }
+
+    [AvaloniaFact]
+    public async Task Emoji_in_a_1251_file_is_not_saved_as_a_question_mark()
+    {
+        var original = Cp1251.GetBytes("Привет");
+        var (providers, fs) = Setup(original);
+        var editor = await OpenAsync(providers);
+        var asked = Answer(editor, false, true);
+        editor.Document.Insert(editor.Document.TextLength, " 😀");
+
+        Assert.False(await editor.SaveAsync());
+        Assert.Equal(original, Bytes(fs, Path));
+        Assert.True(editor.IsModified);
+        Assert.Equal("windows-1251", editor.Encoding.Id);
+
+        Assert.True(await editor.SaveAsync());
+        Assert.Equal([EditorSaveQuestion.SaveAsUtf8, EditorSaveQuestion.SaveAsUtf8], asked);
+        Assert.Equal(Encoding.UTF8.GetBytes("Привет 😀"), Bytes(fs, Path));
+        Assert.Equal("utf-8", editor.Encoding.Id);
+        Assert.False(editor.HasBom);
+
+        // Later saves stay in UTF-8 without asking again.
+        editor.Document.Insert(0, "Ж");
+        Assert.True(await editor.SaveAsync());
+        Assert.Equal(2, asked.Count);
+        Assert.Equal(Encoding.UTF8.GetBytes("ЖПривет 😀"), Bytes(fs, Path));
+    }
+
+    [AvaloniaFact]
+    public async Task File_with_an_invalid_byte_past_the_sample_is_not_rewritten_silently()
+    {
+        byte[] original = [.. Encoding.ASCII.GetBytes(new string('a', 70_000)), 0xFF, .. "tail"u8];
+        var (providers, fs) = Setup(original);
+        var editor = await OpenAsync(providers);
+
+        Assert.Equal("utf-8", editor.Encoding.Id);
+        Assert.Equal("This file contains bytes that cannot be saved unchanged in utf-8.", editor.Notice);
+        var asked = Answer(editor, false, true);
+        editor.Document.Insert(0, "b");
+
+        Assert.False(await editor.SaveAsync());
+        Assert.Equal(original, Bytes(fs, Path));
+        Assert.True(editor.IsModified);
+
+        Assert.True(await editor.SaveAsync());
+        Assert.Equal([EditorSaveQuestion.ReplaceUnsavableBytes, EditorSaveQuestion.ReplaceUnsavableBytes], asked);
+        Assert.Equal([.. "b"u8, .. Encoding.ASCII.GetBytes(new string('a', 70_000)), 0xEF, 0xBF, 0xBD, .. "tail"u8],
+            Bytes(fs, Path));
+        Assert.Null(editor.Notice);
+    }
+
+    [AvaloniaFact]
+    public async Task Unmodified_save_of_a_file_that_does_not_round_trip_asks_too()
+    {
+        byte[] original = [0xFF, 0xFE, (byte)'o', 0, (byte)'k', 0, 0x00, 0xD8]; // UTF-16LE, a lone surrogate
+        var (providers, fs) = Setup(original);
+        var editor = await OpenAsync(providers);
+        var asked = Answer(editor);
+
+        Assert.NotNull(editor.Notice);
+        Assert.False(await editor.SaveAsync());
+
+        Assert.Equal([EditorSaveQuestion.ReplaceUnsavableBytes], asked);
+        Assert.Equal(original, Bytes(fs, Path));
+    }
+
+    [AvaloniaFact]
+    public async Task Questions_without_an_answerer_save_nothing()
+    {
+        var (providers, fs) = Setup(Cp1251.GetBytes("текст"));
+        var editor = await OpenAsync(providers);
+        editor.Document.Insert(0, "😀");
+
+        Assert.False(await editor.SaveAsync());
+
+        Assert.Equal(Cp1251.GetBytes("текст"), Bytes(fs, Path));
+    }
+
+    [AvaloniaFact]
+    public async Task File_changed_on_disk_asks_before_overwriting()
+    {
+        var (providers, fs) = Setup(Encoding.ASCII.GetBytes("mine"));
+        var editor = await OpenAsync(providers);
+        var asked = Answer(editor, false, true);
+        fs.AddFile(Path, "someone else's", DateTimeOffset.UtcNow.AddMinutes(1));
+        editor.Document.Insert(0, "edited ");
+
+        Assert.False(await editor.SaveAsync());
+        Assert.Equal("someone else's", fs.ReadAllText(Path));
+
+        Assert.True(await editor.SaveAsync());
+        Assert.Equal([EditorSaveQuestion.OverwriteChangedFile, EditorSaveQuestion.OverwriteChangedFile], asked);
+        Assert.Equal("edited mine", fs.ReadAllText(Path));
+
+        // Its own save is not a change on disk.
+        editor.Document.Insert(0, "again ");
+        Assert.True(await editor.SaveAsync());
+        Assert.Equal(2, asked.Count);
+    }
+
+    [AvaloniaFact]
+    public async Task Edits_through_a_symlink_reach_its_target_and_the_link_stays_a_link()
+    {
+        var (providers, fs) = Setup(Encoding.ASCII.GetBytes("target text"));
+        fs.AddDirectory("/links");
+        var link = new VfsPath("mem", "/links/a.txt");
+        await fs.CreateSymlinkAsync(link, "../dir/a.txt", CancellationToken.None);
+        var second = new VfsPath("mem", "/links/b.txt");
+        await fs.CreateSymlinkAsync(second, "/links/a.txt", CancellationToken.None);
+
+        var editor = await OpenAsync(providers, second);
+        editor.Document.Insert(0, "edited ");
+        Assert.True(await editor.SaveAsync());
+
+        Assert.Equal("edited target text", fs.ReadAllText(Path));
+        Assert.Equal(second, editor.File);
+        Assert.Equal("/links/b.txt", editor.Title);
+        foreach (var (path, target) in new[] { (link, "../dir/a.txt"), (second, "/links/a.txt") })
+        {
+            var entry = (await fs.GetEntryAsync(path, CancellationToken.None))!;
+            Assert.Equal(EntryKind.Symlink, entry.Kind);
+            Assert.Equal(target, entry.LinkTarget);
+        }
+        Assert.Equal(["/dir", "/dir/a.txt", "/links", "/links/a.txt", "/links/b.txt"], fs.AllPaths);
+    }
+
+    [AvaloniaFact]
+    public async Task Dangling_symlink_fails_to_open()
+    {
+        var (providers, fs) = Setup([]);
+        var link = new VfsPath("mem", "/dir/dangling");
+        await fs.CreateSymlinkAsync(link, "missing.txt", CancellationToken.None);
+
+        await Assert.ThrowsAsync<VfsNotFoundException>(() => OpenAsync(providers, link));
+    }
+
+    [AvaloniaFact]
+    public async Task Local_save_gives_the_part_file_the_originals_metadata_before_it_replaces_it()
+    {
+        var fs = new InMemoryFileSystem(VfsPath.LocalProviderId);
+        fs.AddFile(Path, "text");
+        var providers = new ProviderRegistry();
+        providers.Register(fs);
+        var native = new RecordingMetadataCopy(fs);
+        var editor = await EditorViewModel.OpenAsync(providers, VfsPath.Local(Path), CancellationToken.None, native);
+
+        editor.Document.Insert(0, "more ");
+        Assert.True(await editor.SaveAsync());
+
+        Assert.Equal([(Path, Part, true)], native.Calls);
+        Assert.Equal("more text", fs.ReadAllText(Path));
+    }
+
+    [AvaloniaFact]
+    public async Task Save_to_another_provider_copies_no_platform_metadata()
+    {
+        var (providers, fs) = Setup(Encoding.ASCII.GetBytes("text"));
+        var native = new RecordingMetadataCopy(fs);
+        var editor = await EditorViewModel.OpenAsync(providers, File, CancellationToken.None, native);
+
+        editor.Document.Insert(0, "more ");
+        Assert.True(await editor.SaveAsync());
+
+        Assert.Empty(native.Calls);
+    }
+
+    /// <summary>Records the file metadata copies asked for, with whether the part file existed then (and the
+    /// original was still in place); the other copies are not used.</summary>
+    private sealed class RecordingMetadataCopy(InMemoryFileSystem fs) : INativeCopy
+    {
+        public List<(string Source, string Destination, bool BothExist)> Calls { get; } = [];
+
+        public Task CopyFileMetadataAsync(string sourcePath, string destinationPath, CancellationToken ct)
+        {
+            lock (Calls) Calls.Add((sourcePath, destinationPath, fs.Exists(sourcePath) && fs.Exists(destinationPath)));
+            return Task.CompletedTask;
+        }
+
+        public Task CopyFileAsync(string sourcePath, string destinationPath, IProgress<long> bytesCopied,
+            Func<CancellationToken, ValueTask> pauseCheckpoint, CancellationToken ct) =>
+            throw new NotSupportedException();
+        public Task CopyFlagsAsync(string sourcePath, string destinationPath, CancellationToken ct) =>
+            throw new NotSupportedException();
+        public Task CopyDirectoryMetadataAsync(string sourcePath, string destinationPath, CancellationToken ct) =>
+            throw new NotSupportedException();
     }
 
     /// <summary>A provider that takes batches over an in-memory file system and journals the batch's steps and the

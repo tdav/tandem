@@ -55,19 +55,25 @@ public sealed class DialogService : IDialogService
     public async Task<bool> ConfirmQuitAsync(int operationCount) =>
         await ShowAsync<object>(new ConfirmQuitDialog(operationCount)) is true;
 
-    public async Task<SaveChangesAnswer> AskSaveChangesAsync(string fileName) =>
-        await ShowAsync<object>(new SaveChangesDialog(fileName)) is SaveChangesAnswer answer
+    public async Task<SaveChangesAnswer> AskSaveChangesAsync(string fileName, Window? owner = null) =>
+        await ShowAsync<object>(new SaveChangesDialog(fileName), owner: owner) is SaveChangesAnswer answer
             ? answer
             : SaveChangesAnswer.Cancel;
+
+    public async Task<bool> ConfirmEditorSaveAsync(EditorSaveQuestion question, string fileName, string encoding,
+        Window? owner = null) =>
+        await ShowAsync<object>(new EditorSaveDialog(question, fileName, encoding), owner: owner) is true;
 
     public Task ShowMessageAsync(string text, string? detail = null) =>
         MessageDialog.ShowAsync(Owner, "Tandem", string.IsNullOrWhiteSpace(detail) ? text : text + "\n\n" + detail);
 
-    /// <summary>The dialog's result, or default when there is no owner or <paramref name="ct"/> closes it.</summary>
-    private async Task<T?> ShowAsync<T>(Window dialog, CancellationToken ct = default) where T : class
+    /// <summary>The dialog's result, modal to <paramref name="owner"/> or else <see cref="Owner"/>; default when that
+    /// window is not shown or <paramref name="ct"/> closes the dialog.</summary>
+    private async Task<T?> ShowAsync<T>(Window dialog, CancellationToken ct = default, Window? owner = null)
+        where T : class
     {
-        if (Owner is not { IsVisible: true } owner || ct.IsCancellationRequested) return null;
+        if ((owner ?? Owner) is not { IsVisible: true } shownOwner || ct.IsCancellationRequested) return null;
         await using var registration = ct.Register(() => Dispatcher.UIThread.Post(() => dialog.Close()));
-        return await dialog.ShowDialog<T?>(owner);
+        return await dialog.ShowDialog<T?>(shownOwner);
     }
 }

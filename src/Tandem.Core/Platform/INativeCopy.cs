@@ -26,4 +26,11 @@ public interface INativeCopy
     /// <paramref name="sourcePath"/> — extended attributes (Finder tags among them), ACL, mode, times and flags —
     /// without copying anything inside it. Links are not followed.</summary>
     Task CopyDirectoryMetadataAsync(string sourcePath, string destinationPath, CancellationToken ct);
+
+    /// <summary>Gives the file <paramref name="destinationPath"/> — new content about to replace
+    /// <paramref name="sourcePath"/>, such as a <c>.tandem-part</c> file — the file's identity besides its content:
+    /// extended attributes (Finder tags among them), ACL and the user flags such as "hidden". Not its data, times or
+    /// mode, and not the flags that would stop the caller from putting it in place (the Finder lock, append-only).
+    /// Links are not followed.</summary>
+    Task CopyFileMetadataAsync(string sourcePath, string destinationPath, CancellationToken ct);
 }

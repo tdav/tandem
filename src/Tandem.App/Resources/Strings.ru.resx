@@ -959,4 +959,28 @@
   <data name="Button_DontSave" xml:space="preserve">
     <value>Не сохранять</value>
   </data>
+  <data name="Editor_LossyNotice" xml:space="preserve">
+    <value>Файл содержит байты, которые нельзя сохранить без изменений в кодировке {0}.</value>
+  </data>
+  <data name="EditorSave_Title" xml:space="preserve">
+    <value>Сохранение «{0}»</value>
+  </data>
+  <data name="EditorSaveQuestion_OverwriteChangedFile" xml:space="preserve">
+    <value>Файл «{0}» изменён на диске. Перезаписать?</value>
+  </data>
+  <data name="EditorSaveQuestion_ReplaceUnsavableBytes" xml:space="preserve">
+    <value>Файл «{0}» содержит байты, которые нельзя сохранить без изменений в кодировке {1}. Сохранить с заменой?</value>
+  </data>
+  <data name="EditorSaveQuestion_SaveAsUtf8" xml:space="preserve">
+    <value>Часть символов нельзя сохранить в кодировке {1}. Сохранить «{0}» в UTF-8?</value>
+  </data>
+  <data name="Button_OverwriteFile" xml:space="preserve">
+    <value>Перезаписать</value>
+  </data>
+  <data name="Button_SaveWithReplacement" xml:space="preserve">
+    <value>Сохранить с заменой</value>
+  </data>
+  <data name="Button_SaveInUtf8" xml:space="preserve">
+    <value>Сохранить в UTF-8</value>
+  </data>
 </root>

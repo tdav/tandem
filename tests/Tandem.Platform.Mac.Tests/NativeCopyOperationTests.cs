@@ -307,6 +307,9 @@ public sealed class NativeCopyOperationTests : IDisposable
         public Task CopyDirectoryMetadataAsync(string sourcePath, string destinationPath, CancellationToken ct) =>
             inner.CopyDirectoryMetadataAsync(sourcePath, destinationPath, ct);
 
+        public Task CopyFileMetadataAsync(string sourcePath, string destinationPath, CancellationToken ct) =>
+            inner.CopyFileMetadataAsync(sourcePath, destinationPath, ct);
+
         private sealed class Hook(IProgress<long> inner, Action onFirstBytes) : IProgress<long>
         {
             private int _fired;

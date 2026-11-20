@@ -45,6 +45,7 @@ public sealed class ShellCommands : IDisposable
     private readonly IQuickLook _quickLook;
     private readonly IDialogService _dialogs;
     private readonly IWindowService _windows;
+    private readonly INativeCopy? _nativeCopy;
     private readonly CommandRegistry _commands;
     private readonly ProviderRegistry _providers;
     private readonly IFileMetadataService? _metadata;
@@ -61,11 +62,14 @@ public sealed class ShellCommands : IDisposable
 
     /// <param name="quickLookDelay">Waits <see cref="QuickLookFollowDelay"/> before an open preview follows the
     /// cursor; <see cref="Task.Delay(TimeSpan, CancellationToken)"/> when null.</param>
+    /// <param name="nativeCopy">Gives a local file saved by the editor the original's metadata (tags, extended
+    /// attributes); none is copied when null.</param>
     public ShellCommands(WorkspaceViewModel workspace, IShellIntegration shell, IQuickLook quickLook,
         IDialogService dialogs, IWindowService windows, CommandRegistry commands, ProviderRegistry providers, IFileMetadataService? metadata,
         TempFileStore temp, Action<Exception> reportFailure,
-        Func<TimeSpan, CancellationToken, Task>? quickLookDelay = null)
+        Func<TimeSpan, CancellationToken, Task>? quickLookDelay = null, INativeCopy? nativeCopy = null)
     {
+        _nativeCopy = nativeCopy;
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
         _shell = shell ?? throw new ArgumentNullException(nameof(shell));
         _quickLook = quickLook ?? throw new ArgumentNullException(nameof(quickLook));
@@ -314,7 +318,7 @@ public sealed class ShellCommands : IDisposable
         EditorViewModel editor;
         try
         {
-            editor = await EditorViewModel.OpenAsync(_providers, entry.Path, CancellationToken.None);
+            editor = await EditorViewModel.OpenAsync(_providers, entry.Path, CancellationToken.None, _nativeCopy);
         }
         catch (EditorRefusedException e)
         {

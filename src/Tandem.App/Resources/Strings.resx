@@ -968,4 +968,28 @@ Details were written to {1}.</value>
   <data name="Button_DontSave" xml:space="preserve">
     <value>Don’t Save</value>
   </data>
+  <data name="Editor_LossyNotice" xml:space="preserve">
+    <value>This file contains bytes that cannot be saved unchanged in {0}.</value>
+  </data>
+  <data name="EditorSave_Title" xml:space="preserve">
+    <value>Saving “{0}”</value>
+  </data>
+  <data name="EditorSaveQuestion_OverwriteChangedFile" xml:space="preserve">
+    <value>“{0}” was changed on disk after it was opened here. Overwrite it?</value>
+  </data>
+  <data name="EditorSaveQuestion_ReplaceUnsavableBytes" xml:space="preserve">
+    <value>“{0}” contains bytes that cannot be saved unchanged in {1}. Save it with them replaced?</value>
+  </data>
+  <data name="EditorSaveQuestion_SaveAsUtf8" xml:space="preserve">
+    <value>Some characters cannot be saved in {1}. Save “{0}” in UTF-8 instead?</value>
+  </data>
+  <data name="Button_OverwriteFile" xml:space="preserve">
+    <value>Overwrite</value>
+  </data>
+  <data name="Button_SaveWithReplacement" xml:space="preserve">
+    <value>Save with Replacement</value>
+  </data>
+  <data name="Button_SaveInUtf8" xml:space="preserve">
+    <value>Save in UTF-8</value>
+  </data>
 </root>

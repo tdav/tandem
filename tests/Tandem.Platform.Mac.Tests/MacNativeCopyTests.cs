@@ -320,6 +320,42 @@ public sealed class MacNativeCopyTests : IDisposable
     }
 
     [Fact]
+    public async Task File_metadata_is_copied_without_the_data_times_or_lock()
+    {
+        var source = _temp.Combine("tagged.txt");
+        File.WriteAllText(source, "original");
+        File.SetLastWriteTimeUtc(source, new DateTime(2020, 5, 17, 10, 30, 0, DateTimeKind.Utc));
+        XAttr.Set(source, "user.tandem.test", "file attribute");
+        var metadata = new MacFileMetadataService(new UnrestrictedAccessBroker());
+        metadata.SetTags(source, ["Red", "Работа"]);
+        FileFlags.Add(source, 0x8000); // UF_HIDDEN
+        var destination = _temp.Combine(".tagged.txt.tandem-part");
+        File.WriteAllText(destination, "new text");
+        var written = File.GetLastWriteTimeUtc(destination);
+        FileFlags.Add(source, FileFlags.Locked);
+
+        await _copy.CopyFileMetadataAsync(source, destination, TestContext.Current.CancellationToken);
+
+        FileFlags.Unlock(source);
+        Assert.Equal("new text", File.ReadAllText(destination));
+        Assert.Equal("file attribute", XAttr.Get(destination, "user.tandem.test"));
+        Assert.Equal(["Red", "Работа"], metadata.GetTags(destination).Order(StringComparer.Ordinal));
+        Assert.Equal(0x8000u, FileFlags.Get(destination) & 0x8000u);
+        Assert.Equal(0u, FileFlags.Get(destination) & FileFlags.Locked);
+        Assert.Equal(written, File.GetLastWriteTimeUtc(destination));
+    }
+
+    [Fact]
+    public async Task File_metadata_onto_a_missing_file_throws_IOException()
+    {
+        var source = _temp.Combine("a.txt");
+        File.WriteAllText(source, "x");
+
+        await Assert.ThrowsAnyAsync<IOException>(() => _copy.CopyFileMetadataAsync(source,
+            _temp.Combine("missing/inner"), TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task Directory_metadata_onto_a_missing_directory_throws_IOException()
     {
         var source = Directory.CreateDirectory(_temp.Combine("folder")).FullName;

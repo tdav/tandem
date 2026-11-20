@@ -54,6 +54,27 @@ public sealed class SaveChangesDialog : DialogWindow
     }
 }
 
+/// <summary>An editor's question before saving (<see cref="EditorSaveQuestion"/>): true to go on. "Cancel" is the
+/// default button, so Enter does not change the file; Esc and closing the dialog cancel too.</summary>
+public sealed class EditorSaveDialog : DialogWindow
+{
+    public EditorSaveDialog(EditorSaveQuestion question, string fileName, string encoding)
+        : base(Loc.Format("EditorSave_Title", fileName))
+    {
+        var go = MakeButton(Loc.Get(question switch
+        {
+            EditorSaveQuestion.OverwriteChangedFile => "Button_OverwriteFile",
+            EditorSaveQuestion.ReplaceUnsavableBytes => "Button_SaveWithReplacement",
+            _ => "Button_SaveInUtf8",
+        }), name: "Confirm");
+        go.Click += (_, _) => Close(true);
+        var cancel = CancelButton(isDefault: true);
+        cancel.Click += (_, _) => Close(false);
+        var message = Loc.Format("EditorSaveQuestion_" + question, fileName, encoding);
+        SetContent(cancel, [Text(message, name: "Message")], go, cancel);
+    }
+}
+
 /// <summary>The destination exists: both files' size and date, the choices and "apply to all". Closing the window
 /// any other way cancels the operation.</summary>
 public sealed class ConflictDialog : DialogWindow

@@ -1,3 +1,4 @@
+using Avalonia.Controls;
 using Tandem.App.Services;
 using Tandem.App.ViewModels;
 using Tandem.Core.Operations;
@@ -45,9 +46,17 @@ internal class ScriptedDialogs : IDialogService
     public Queue<SaveChangesAnswer> SaveChangesAnswers { get; } = new();
     /// <summary>The file name of each "save changes?" question.</summary>
     public List<string> SaveChangesRequests { get; } = [];
+    /// <summary>The window each "save changes?" question was modal to (null: the main window).</summary>
+    public List<object?> SaveChangesOwners { get; } = [];
+    public Queue<bool> EditorSaveAnswers { get; } = new();
+    /// <summary>Each save question of an editor: which, the file name, the encoding and the window it was modal to.</summary>
+    public List<(EditorSaveQuestion Question, string FileName, string Encoding, object? Owner)> EditorSaveRequests
+    {
+        get;
+    } = [];
 
     /// <summary>Every dialog asked for, in order, by kind ("copyMove", "name", "delete", "mask", "conflict", "error",
-    /// "summary", "message", "properties", "quit", "saveChanges").</summary>
+    /// "summary", "message", "properties", "quit", "saveChanges", "editorSave").</summary>
     public List<string> Log { get; } = [];
 
     /// <summary>As a scripted destination: accept the text the dialog proposed.</summary>
@@ -148,12 +157,24 @@ internal class ScriptedDialogs : IDialogService
     }
 
     /// <summary>Unscripted, it cancels (as closing the dialog does).</summary>
-    public virtual Task<SaveChangesAnswer> AskSaveChangesAsync(string fileName)
+    public virtual Task<SaveChangesAnswer> AskSaveChangesAsync(string fileName, Window? owner = null)
     {
-        Record("saveChanges", () => SaveChangesRequests.Add(fileName));
+        Record("saveChanges", () =>
+        {
+            SaveChangesRequests.Add(fileName);
+            SaveChangesOwners.Add(owner);
+        });
         return Task.FromResult(TryTake(SaveChangesAnswers, "saveChanges", out var answer)
             ? answer
             : SaveChangesAnswer.Cancel);
+    }
+
+    /// <summary>Unscripted, it answers no (the dialog's default).</summary>
+    public virtual Task<bool> ConfirmEditorSaveAsync(EditorSaveQuestion question, string fileName,
+        string encoding, Window? owner = null)
+    {
+        Record("editorSave", () => EditorSaveRequests.Add((question, fileName, encoding, owner)));
+        return Task.FromResult(TryTake(EditorSaveAnswers, "editorSave", out var answer) && answer);
     }
 
     public virtual Task ShowMessageAsync(string text, string? detail = null)

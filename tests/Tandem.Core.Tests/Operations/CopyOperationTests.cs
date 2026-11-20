@@ -525,6 +525,9 @@ public sealed class CopyOperationTests
 
             public Task CopyFlagsAsync(string sourcePath, string destinationPath, CancellationToken ct) => Task.CompletedTask;
 
+        public Task CopyFileMetadataAsync(string sourcePath, string destinationPath, CancellationToken ct) =>
+            Task.CompletedTask;
+
         public Task CopyDirectoryMetadataAsync(string sourcePath, string destinationPath, CancellationToken ct) =>
             Task.CompletedTask;
     }
