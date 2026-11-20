@@ -29,6 +29,9 @@ public sealed class BatchScope : IAsyncDisposable
     /// <summary>The owning scope whose call into a provider batch is running in this flow.</summary>
     private static readonly AsyncLocal<BatchScope?> Calling = new();
 
+    /// <summary>The scope most recently begun in this flow (see <see cref="Holds"/>).</summary>
+    private static readonly AsyncLocal<Claim?> Active = new();
+
     private readonly BatchScope? _owner; // null: this scope owns its batches
     private readonly HashSet<string> _requested; // provider ids of this scope's own paths that take batches
 
@@ -51,8 +54,17 @@ public sealed class BatchScope : IAsyncDisposable
     /// <exception cref="InvalidOperationException">The hosts form a cycle, or a provider is not an
     /// <see cref="IFileSystemProvider"/>; or, joining, a batch is needed that the calling scope does not hold, has
     /// committed or is beginning.</exception>
-    public static async Task<BatchScope> BeginAsync(ProviderRegistry providers, IEnumerable<VfsPath> paths,
+    public static Task<BatchScope> BeginAsync(ProviderRegistry providers, IEnumerable<VfsPath> paths,
         CancellationToken ct)
+    {
+        // Set here, not in an async method, so that it stays in the caller's flow after this returns.
+        var claim = new Claim();
+        Active.Value = claim;
+        return BeginCoreAsync(providers, paths, claim, ct);
+    }
+
+    private static async Task<BatchScope> BeginCoreAsync(ProviderRegistry providers, IEnumerable<VfsPath> paths,
+        Claim claim, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(providers);
         ArgumentNullException.ThrowIfNull(paths);
@@ -69,6 +81,7 @@ public sealed class BatchScope : IAsyncDisposable
         if (owner is not null)
         {
             foreach (var (id, _) in plan) owner.Reuse(id);
+            claim.Scope = scope;
             return scope;
         }
         try
@@ -81,7 +94,27 @@ public sealed class BatchScope : IAsyncDisposable
             await scope.DisposeKeepingAsync(e).ConfigureAwait(false);
             throw;
         }
+        claim.Scope = scope;
         return scope;
+    }
+
+    /// <summary>True when the calling flow holds the batch of <paramref name="provider"/>: a scope begun in this
+    /// flow (by this async method or one that called it), or the scope it joined, holds that batch and has neither
+    /// committed it nor been disposed. Work the flow starts (a task, an awaited call) is the same flow; a flow that
+    /// was running before, or that does not carry the execution context, is not. A provider tells by this whether a
+    /// change comes from the operation its batch belongs to.
+    /// <para>A flow has a single active slot: the scope most recently begun by <see cref="BeginAsync"/> in it (a
+    /// scope begun inside an async method the flow awaited ends with that method's flow). Work forked from an
+    /// operation's flow (a task it starts) inherits the slot and so the ownership, even if the fork outlives the call
+    /// that started it. A scope a provider begins for a change of its own and keeps open across calls (an out-of-batch
+    /// write stream) is not in the caller's slot: a second change to that provider from the same flow, while the
+    /// stream is open, waits for that scope to end — on itself.</para></summary>
+    public static bool Holds(IBatchProvider provider)
+    {
+        ArgumentNullException.ThrowIfNull(provider);
+        if (Active.Value?.Scope is not { } scope || provider is not IFileSystemProvider { Id: var id }) return false;
+        var owner = scope._owner ?? scope;
+        return !owner._disposed && owner._held.TryGetValue(id, out var held) && !held.Committed;
     }
 
     /// <summary>True when the provider of <paramref name="path"/> takes part in the batch: its changes are applied
@@ -235,6 +268,12 @@ public sealed class BatchScope : IAsyncDisposable
     });
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_disposed, this);
+
+    /// <summary>The scope a <see cref="BeginAsync"/> made, once it has begun.</summary>
+    private sealed class Claim
+    {
+        public volatile BatchScope? Scope;
+    }
 
     private sealed class Held(IProviderBatch batch)
     {

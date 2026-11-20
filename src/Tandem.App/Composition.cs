@@ -3,6 +3,7 @@ using Tandem.App.Commands;
 using Tandem.App.Resources;
 using Tandem.App.Services;
 using Tandem.App.ViewModels;
+using Tandem.Archives;
 using Tandem.Core.Operations;
 using Tandem.Core.Platform;
 using Tandem.Core.Search;
@@ -85,7 +86,28 @@ public static class Composition
             services.Providers.Register(new SearchResultsProvider(services.Providers));
         var workspace = new WorkspaceViewModel(services.Providers, store, homeDirectory, autosaveDelay,
             e => services.Log.Write(e, "settings"));
-        return new MainViewModel(workspace, services, settings, progressWindowDelay, quickLookDelay);
+        var mounts = CreateArchiveMounts(services);
+        try
+        {
+            return new MainViewModel(workspace, services, settings, progressWindowDelay, quickLookDelay, mounts);
+        }
+        catch
+        {
+            mounts.Dispose(); // no view model owns them
+            throw;
+        }
+    }
+
+    /// <summary>The archive mounts over <paramref name="services"/>, asking passwords through its dialogs, added to
+    /// its providers as a mounter (after any added before). The main view model owns and disposes them; the app's
+    /// exit disposes the main view model.</summary>
+    public static ArchiveMounts CreateArchiveMounts(AppServices services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        var mounts = new ArchiveMounts(services.Providers, services.Temp,
+            new DialogArchivePasswordPrompt(services.Dialogs));
+        services.Providers.AddMounter(mounts);
+        return mounts;
     }
 
     /// <summary>

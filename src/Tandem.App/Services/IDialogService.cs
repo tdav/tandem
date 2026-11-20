@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Tandem.App.ViewModels;
+using Tandem.Archives;
 using Tandem.Core.Operations;
 using Tandem.Core.Vfs;
 
@@ -19,6 +20,24 @@ public sealed record CopyMoveRequest(bool IsMove, int ItemCount, string? SingleN
 /// <summary>What the user accepted: the typed text, "verify content after copying", "start now, do not wait in
 /// the queue", and the action chosen (<paramref name="IsMove"/>; always the request's own for F5/F6).</summary>
 public sealed record CopyMoveAnswer(string Destination, bool VerifyContent, bool RunImmediately, bool IsMove = false);
+
+/// <summary>The pack dialog's question: what is packed (<paramref name="SingleName"/> names the one item), the proposed
+/// archive file (<paramref name="Destination"/>, its extension that of the first of <paramref name="Formats"/>), the
+/// formats to choose from, and a check of the typed text before the dialog closes.</summary>
+public sealed record PackRequest(int ItemCount, string? SingleName, string Destination,
+    IReadOnlyList<ArchiveFormat> Formats, TextValidator? Validate = null);
+
+/// <summary>What the user accepted in the pack dialog: the archive file's text, its format, "start now".</summary>
+public sealed record PackAnswer(string Destination, ArchiveFormat Format, bool RunImmediately);
+
+/// <summary>The unpack dialog's question: how many archives (<paramref name="SingleName"/> names the one), the
+/// proposed destination folder, whether "each archive into a folder of its own" starts checked, and a check of the
+/// typed text.</summary>
+public sealed record UnpackRequest(int ArchiveCount, string? SingleName, string Destination, bool SeparateFolders,
+    TextValidator? Validate = null);
+
+/// <summary>What the user accepted in the unpack dialog.</summary>
+public sealed record UnpackAnswer(string Destination, bool SeparateFolders, bool RunImmediately);
 
 /// <summary>The answer to "save the changes?" when an editor with unsaved changes closes.</summary>
 public enum SaveChangesAnswer { Save, Discard, Cancel }
@@ -94,4 +113,15 @@ public interface IDialogService
 
     /// <summary>A message; <paramref name="detail"/>, when given, is secondary (e.g. the system's own words).</summary>
     Task ShowMessageAsync(string text, string? detail = null);
+
+    /// <summary>Alt+F5: where to pack the items and in which format.</summary>
+    Task<PackAnswer?> AskPackAsync(PackRequest request);
+
+    /// <summary>Alt+F9: where to unpack the archives.</summary>
+    Task<UnpackAnswer?> AskUnpackAsync(UnpackRequest request);
+
+    /// <summary>The password of the archive <paramref name="archiveName"/>, typed in a field that hides it; null when
+    /// the user declines. <paramref name="previousWasWrong"/>: the dialog says the last one did not fit.
+    /// <paramref name="ct"/> closes the dialog (declined).</summary>
+    Task<string?> AskPasswordAsync(string archiveName, bool previousWasWrong, CancellationToken ct);
 }

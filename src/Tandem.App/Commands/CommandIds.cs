@@ -61,6 +61,10 @@ public static class CommandIds
     // Search track: the file search window (Alt+F7, Cmd+F).
     public const string SearchFiles = "search.files";
 
+    // Archives.
+    public const string ArchivePack = "archive.pack";
+    public const string ArchiveUnpack = "archive.unpack";
+
     // Invoked from menus only; no default key binding.
     public const string ShellReveal = "shell.reveal";
     public const string ShellOpenTerminal = "shell.openTerminal";

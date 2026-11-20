@@ -208,6 +208,7 @@ public class MainWindowTests : LanguageTestBase
 
         app.Left.CursorIndex = IndexOf(app.Left, "notes.txt");
         app.Press(Key.Enter, physical: PhysicalKey.Enter);
+        await TestApp.WaitUntil(() => activated is not null); // once the archive mounter has declined it
         Assert.Equal("notes.txt", activated?.Name);
 
         app.Left.CursorIndex = IndexOf(app.Left, "docs");

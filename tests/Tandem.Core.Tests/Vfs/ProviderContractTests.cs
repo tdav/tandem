@@ -5,12 +5,20 @@ namespace Tandem.Core.Tests.Vfs;
 
 /// <summary>
 /// Behaviour every <see cref="IFileSystemProvider"/> must share. Derived classes supply a provider and an
-/// empty, writable directory inside it; the tests arrange and assert only through the interface.
+/// empty, writable directory inside it; the tests arrange and assert only through the interface. The facts about
+/// links and permissions are skipped for a provider that lacks <see cref="ProviderCapabilities.Symlinks"/> or
+/// <see cref="ProviderCapabilities.UnixPermissions"/>, and only then.
 /// </summary>
 public abstract class ProviderContractTests
 {
     /// <summary>Returns a provider and an existing, empty directory in it that the test may modify.</summary>
     protected abstract Task<(IFileSystemProvider fs, VfsPath root)> CreateAsync();
+
+    /// <summary>The step in which the provider stores times (a zip: two seconds); zero means exactly.</summary>
+    protected virtual TimeSpan TimeResolution => TimeSpan.Zero;
+
+    private static void SkipUnless(IFileSystemProvider fs, ProviderCapabilities needed) =>
+        Assert.SkipUnless(fs.Capabilities.HasFlag(needed), $"The provider does not offer {needed}.");
 
     protected static CancellationToken Ct => TestContext.Current.CancellationToken;
 
@@ -145,6 +153,7 @@ public abstract class ProviderContractTests
     public async Task Symlink_is_reported_as_symlink_and_not_traversed()
     {
         var (fs, root) = await CreateAsync();
+        SkipUnless(fs, ProviderCapabilities.Symlinks);
         await fs.CreateDirectoryAsync(root.Combine("dir"), Ct);
         await WriteAsync(fs, root.Combine("dir").Combine("inside.txt"), "x");
 
@@ -172,13 +181,14 @@ public abstract class ProviderContractTests
 
         await fs.SetModifiedAsync(path, stamp, Ct);
 
-        Assert.Equal(stamp, (await fs.GetEntryAsync(path, Ct))!.Modified);
+        Assert.Equal(stamp, (await fs.GetEntryAsync(path, Ct))!.Modified, TimeResolution);
     }
 
     [Fact]
     public async Task SetMode_is_visible_in_GetEntry()
     {
         var (fs, root) = await CreateAsync();
+        SkipUnless(fs, ProviderCapabilities.UnixPermissions);
         var path = root.Combine("f.txt");
         await WriteAsync(fs, path, "x");
         const UnixFileMode ownerReadWrite = UnixFileMode.UserRead | UnixFileMode.UserWrite;
@@ -273,6 +283,7 @@ public abstract class ProviderContractTests
     public async Task IsSameEntry_does_not_follow_a_link()
     {
         var (fs, root) = await CreateAsync();
+        SkipUnless(fs, ProviderCapabilities.Symlinks);
         await WriteAsync(fs, root.Combine("a.txt"), "a");
         await fs.CreateSymlinkAsync(root.Combine("link"), "a.txt", Ct);
 

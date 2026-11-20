@@ -60,7 +60,7 @@ public sealed class ContextMenuItem
 public static class ContextMenuModel
 {
     /// <summary>Open, (Show Package Contents, for an application bundle,) Open With ▸, Reveal in Finder, Quick Look,
-    /// Copy, Move, Rename, Delete, Properties. A file of a provider that is not the local disk opens through a
+    /// Copy, Move, Rename, Delete, Pack, Unpack, Properties. A file of a provider that is not the local disk opens through a
     /// temporary copy, so Open is always available.</summary>
     public static IReadOnlyList<ContextMenuItem> ForRow(MainViewModel main)
     {
@@ -87,6 +87,8 @@ public static class ContextMenuModel
             Command(main, CommandIds.FileMove, "Context_Move"),
             Command(main, CommandIds.FileRename, "Context_Rename"),
             Command(main, CommandIds.FileDelete, "Context_Delete"),
+            Command(main, CommandIds.ArchivePack, "Menu_archive_pack"),
+            Command(main, CommandIds.ArchiveUnpack, "Menu_archive_unpack"),
             Command(main, CommandIds.FileProperties, "Context_Properties"),
         ];
     }

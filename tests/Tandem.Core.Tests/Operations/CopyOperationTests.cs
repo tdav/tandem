@@ -31,6 +31,21 @@ public sealed class CopyOperationTests
         Copy([Mem(source)], Mem(destination), options);
 
     [Fact]
+    public void Copy_operation_accepts_Unpack_kind_and_rejects_others()
+    {
+        Assert.Equal(OperationKind.Copy, Copy("/src", "/dst").Kind);
+        Assert.Equal(OperationKind.Unpack,
+            new CopyOperation(_providers, [Mem("/src")], Mem("/dst"), new CopyOptions(), _interaction,
+                kind: OperationKind.Unpack).Kind);
+        foreach (var kind in new[] { OperationKind.Move, OperationKind.Delete, OperationKind.Pack, (OperationKind)99 })
+        {
+            var error = Assert.Throws<ArgumentException>(() =>
+                new CopyOperation(_providers, [Mem("/src")], Mem("/dst"), new CopyOptions(), _interaction, kind: kind));
+            Assert.Equal("kind", error.ParamName);
+        }
+    }
+
+    [Fact]
     public async Task Copies_file_with_content_and_mtime()
     {
         _mem.AddFile("/src/a.txt", "hello", OldTime);

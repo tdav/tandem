@@ -52,6 +52,11 @@ public class ShellWindowTests : LanguageTestBase
         app.Left.CursorIndex = IndexOf(app.Left, "notes.txt");
 
         app.Press(Key.Enter, physical: PhysicalKey.Enter);
+        await TestApp.WaitUntil(() =>
+        {
+            app.Pump();
+            return app.Shell.Calls.Count > 0; // once the archive mounter has declined it
+        });
 
         Assert.Equal([("open", "/home/notes.txt")], app.Shell.Calls);
         Assert.Empty(app.Failures);
@@ -120,7 +125,8 @@ public class ShellWindowTests : LanguageTestBase
         Assert.NotNull(menu);
         Assert.Equal(
         [
-            "Open", "Open With", "Show in Finder", "Quick Look", "Copy…", "Move…", "Rename", "Delete", "Properties",
+            "Open", "Open With", "Show in Finder", "Quick Look", "Copy…", "Move…", "Rename", "Delete", "Pack…",
+            "Unpack…", "Properties",
         ], Headers(menu));
         var copy = menu.Items.OfType<MenuItem>().Single(i => i.Tag as string == CommandIds.FileCopy);
         Assert.Equal(new KeyGesture(Key.F5), copy.InputGesture);

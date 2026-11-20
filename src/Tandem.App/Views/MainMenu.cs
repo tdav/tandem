@@ -23,7 +23,8 @@ public static class MainMenu
         CommandIds.FileRename, CommandIds.FileDelete, CommandIds.FileDeletePermanent, "-",
         CommandIds.FileQuickLook, CommandIds.FileProperties, "-",
         CommandIds.ShellReveal, CommandIds.ShellOpenTerminal, CommandIds.ShellOpenWith, "-",
-        CommandIds.SearchFiles,
+        CommandIds.SearchFiles, "-",
+        CommandIds.ArchivePack, CommandIds.ArchiveUnpack,
     ];
 
     private static readonly string[] SelectionCommands =

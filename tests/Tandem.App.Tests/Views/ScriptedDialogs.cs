@@ -1,6 +1,8 @@
 using Avalonia.Controls;
 using Tandem.App.Services;
 using Tandem.App.ViewModels;
+using Tandem.App.ViewModels.Dialogs;
+using Tandem.Archives;
 using Tandem.Core.Operations;
 using Tandem.Core.Vfs;
 
@@ -59,9 +61,23 @@ internal class ScriptedDialogs : IDialogService
     /// <summary>Each "this shortcut is taken: reassign?" question: the chord, the label of the command that has it,
     /// and the window it was modal to.</summary>
     public List<(string Chord, string Owner, object? Window)> ReassignRequests { get; } = [];
+    /// <summary>Pack answers: the text (or <see cref="Proposed"/>) after choosing the format (null keeps the
+    /// first), run through the real <see cref="PackDialogViewModel"/>; null cancels.</summary>
+    public Queue<(string Destination, ArchiveFormat? Format, bool RunImmediately)?> PackAnswers { get; } = new();
+    public List<PackRequest> PackRequests { get; } = [];
+    /// <summary>The text the pack dialog showed after each scripted format choice, before the text was typed.</summary>
+    public List<string> PackTextsAfterFormat { get; } = [];
+    public Queue<UnpackAnswer?> UnpackAnswers { get; } = new();
+    public List<UnpackRequest> UnpackRequests { get; } = [];
+    /// <summary>Passwords to type; null declines. Unscripted, the dialog is declined.</summary>
+    public Queue<string?> PasswordAnswers { get; } = new();
+    public List<(string Archive, bool PreviousWasWrong)> PasswordRequests { get; } = [];
+    /// <summary>For each password question, whether it was asked on the UI thread.</summary>
+    public List<bool> PasswordsOnUiThread { get; } = [];
 
     /// <summary>Every dialog asked for, in order, by kind ("copyMove", "name", "delete", "mask", "conflict", "error",
-    /// "summary", "message", "properties", "quit", "saveChanges", "editorSave", "reassign").</summary>
+    /// "summary", "message", "properties", "quit", "saveChanges", "editorSave", "reassign", "pack", "unpack",
+    /// "password").</summary>
     public List<string> Log { get; } = [];
 
     /// <summary>As a scripted destination: accept the text the dialog proposed.</summary>
@@ -203,6 +219,68 @@ internal class ScriptedDialogs : IDialogService
     {
         Record("properties", () => PropertiesRequests.Add(properties));
         return OnProperties?.Invoke(properties) ?? Task.FromResult(false);
+    }
+
+    public ScriptedDialogs AnswerPack(string destination = Proposed, ArchiveFormat? format = null,
+        bool runImmediately = true)
+    {
+        lock (_lock) PackAnswers.Enqueue((destination, format, runImmediately));
+        return this;
+    }
+
+    public ScriptedDialogs AnswerUnpack(string destination = Proposed, bool? separateFolders = null,
+        bool runImmediately = true)
+    {
+        lock (_lock) UnpackAnswers.Enqueue(new UnpackAnswer(destination, separateFolders ?? false, runImmediately));
+        _unpackKeepsSeparate.Enqueue(separateFolders is null);
+        return this;
+    }
+
+    private readonly Queue<bool> _unpackKeepsSeparate = new();
+
+    public virtual async Task<PackAnswer?> AskPackAsync(PackRequest request)
+    {
+        Record("pack", () => PackRequests.Add(request));
+        var vm = new PackDialogViewModel(request);
+        while (true)
+        {
+            if (!TryTake(PackAnswers, "pack", out var scripted) || scripted is not { } answer) return null;
+            if (answer.Format is { } format) vm.Format = format;
+            lock (_lock) PackTextsAfterFormat.Add(vm.DestinationText);
+            if (answer.Destination != Proposed) vm.DestinationText = answer.Destination;
+            vm.RunImmediately = answer.RunImmediately;
+            if (await vm.AcceptAsync() is { } accepted) return accepted;
+            lock (_lock) ValidationErrors.Add(vm.Error!);
+        }
+    }
+
+    public virtual async Task<UnpackAnswer?> AskUnpackAsync(UnpackRequest request)
+    {
+        Record("unpack", () => UnpackRequests.Add(request));
+        while (true)
+        {
+            if (!TryTake(UnpackAnswers, "unpack", out var answer) || answer is null) return null;
+            bool keep;
+            lock (_lock) keep = _unpackKeepsSeparate.Dequeue();
+            if (answer.Destination == Proposed) answer = answer with { Destination = request.Destination };
+            if (keep) answer = answer with { SeparateFolders = request.SeparateFolders };
+            if (request.Validate is { } validate && await validate(answer.Destination) is { } error)
+            {
+                lock (_lock) ValidationErrors.Add(error);
+                continue;
+            }
+            return answer;
+        }
+    }
+
+    public virtual Task<string?> AskPasswordAsync(string archiveName, bool previousWasWrong, CancellationToken ct)
+    {
+        Record("password", () =>
+        {
+            PasswordRequests.Add((archiveName, previousWasWrong));
+            PasswordsOnUiThread.Add(Avalonia.Threading.Dispatcher.UIThread.CheckAccess());
+        });
+        return Task.FromResult(TryTake(PasswordAnswers, "password", out var answer) ? answer : null);
     }
 
     private void Record(string kind, Action add)

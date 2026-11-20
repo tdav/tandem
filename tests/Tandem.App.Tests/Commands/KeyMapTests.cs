@@ -62,6 +62,7 @@ public class KeyMapTests
             "sort.byMode=Ctrl+Cmd+5", "sort.reverse=Ctrl+Cmd+R", "tab.togglePin=Ctrl+Cmd+P",
             "app.settings=Cmd+OemComma",
             "search.files=Alt+F7", "search.files=Cmd+F",
+            "archive.pack=Alt+F5", "archive.pack=Cmd+Alt+5", "archive.unpack=Alt+F9", "archive.unpack=Cmd+Alt+9",
         ];
 
         var expectedBindings = expected.Select(e => e.Split('=')).Select(p => (p[0], KeyChord.Parse(p[1])));

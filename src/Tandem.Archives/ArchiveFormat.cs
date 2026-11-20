@@ -34,6 +34,17 @@ public static class ArchiveFormats
         return null;
     }
 
+    /// <summary>The name without the archive ending <see cref="FromName"/> recognises ("site.tar.gz" → "site"); a
+    /// name with no such ending as it is.</summary>
+    public static string NameWithoutSuffix(string fileName)
+    {
+        ArgumentNullException.ThrowIfNull(fileName);
+        foreach (var (suffix, _) in Suffixes)
+            if (fileName.Length > suffix.Length && fileName.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                return fileName[..^suffix.Length];
+        return fileName;
+    }
+
     /// <summary>The format the content of <paramref name="seekable"/> has, by its signature; null when it is none
     /// of them. A gzip, bzip2 or xz stream counts only if a tar is inside. The stream is left at its start.</summary>
     public static async Task<ArchiveFormat?> DetectAsync(Stream seekable, CancellationToken ct)

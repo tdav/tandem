@@ -438,6 +438,16 @@ public sealed class FileCommands : IDisposable
 
     // ---- Running and finishing ---------------------------------------------------------------------------
 
+    /// <summary>Hands <paramref name="operation"/> to the queue with the aftermath of the file commands' own
+    /// operations: the panels showing what it changed are read again, then a refusal, a failure or skipped items are
+    /// told. For operations other commands build (packing, unpacking).</summary>
+    /// <param name="alsoChanged">Folders changed before the operation (a destination folder made for it).</param>
+    public void StartOperation(FileOperation operation, bool runImmediately, IReadOnlyList<VfsPath>? alsoChanged = null)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+        Start(operation, runImmediately, alsoChanged: alsoChanged);
+    }
+
     /// <param name="alsoChanged">Folders changed before the operation (a destination folder made for it).</param>
     private void Start(FileOperation operation, bool runImmediately, Action<OperationResult?>? afterRefresh = null,
         IReadOnlyList<VfsPath>? alsoChanged = null)

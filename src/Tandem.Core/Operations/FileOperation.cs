@@ -4,10 +4,12 @@ using Tandem.Core.Vfs;
 
 namespace Tandem.Core.Operations;
 
-public enum OperationKind { Copy, Move, Delete }
+/// <summary>What an operation does. <see cref="Unpack"/> is a copy out of an archive (<c>CopyOperation</c> under
+/// that name); <see cref="Pack"/> writes a new archive of the sources.</summary>
+public enum OperationKind { Copy, Move, Delete, Pack, Unpack }
 
 /// <summary>
-/// A long-running file operation (copy, move, delete). It runs once, on the thread pool; state and progress may
+/// A long-running file operation (copy, move, delete, pack, unpack). It runs once, on the thread pool; state and progress may
 /// be read from any thread, and <see cref="Changed"/> is raised on the operation's background thread — on every
 /// state change and, for progress, at most <see cref="MaxProgressEventsPerSecond"/> times a second.
 /// Outcomes: <see cref="OperationState.Completed"/> and <see cref="OperationState.Cancelled"/> complete
@@ -155,7 +157,7 @@ public abstract class FileOperation
     /// <see cref="BatchScope.DisposeErrorKey"/>. <paramref name="afterCommit"/> runs only once the commit and the
     /// disposal succeeded and the body did not fail (it may have been cancelled); a failed disposal skips it also when
     /// its error was only attached to a cancellation.</summary>
-    private protected static async Task RunInBatchAsync(ProviderRegistry providers, IEnumerable<VfsPath> paths,
+    protected static async Task RunInBatchAsync(ProviderRegistry providers, IEnumerable<VfsPath> paths,
         Func<BatchScope, Task> body, Func<Task>? afterCommit, CancellationToken ct)
     {
         var scope = await BatchScope.BeginAsync(providers, paths, ct).ConfigureAwait(false);

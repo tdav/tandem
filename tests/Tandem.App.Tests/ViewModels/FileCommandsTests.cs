@@ -690,16 +690,20 @@ public class FileCommandsTests : LanguageTestBase
         app.Main.Commands.CanExecuteChanged += (_, _) => raised++;
 
         Cursor(app.Left, "report.pdf"); // still a file: nothing changes
-        app.Left.SelectAll(); // one bulk change
-        app.Left.ClearSelection();
         Assert.Equal(0, raised);
+        // One bulk change each way: only Unpack follows it (no archive among the marked rows; the file under the
+        // cursor again).
+        app.Left.SelectAll();
+        app.Left.ClearSelection();
+        Assert.Equal(2, raised);
+        raised = 0;
 
         Cursor(app.Left, ".."); // nothing to operate on any more
-        Assert.InRange(raised, 1, 2); // once for the file commands, once for the shell commands
+        Assert.InRange(raised, 1, 3); // once each for the file, shell and archive commands
         Assert.False(app.Main.Commands.CanExecute(CommandIds.FileDelete));
         Assert.True(app.Main.Commands.CanExecute(CommandIds.FileMkdir));
 
         app.Main.Workspace.SwitchPanel(); // the right panel's cursor is on its ".." too: copy stays off
-        Assert.True(raised <= 4);
+        Assert.True(raised <= 6);
     }
 }

@@ -612,7 +612,7 @@ public class ShellCommandsTests : LanguageTestBase
     private static readonly string[] RowMenuKeys =
     [
         "Context_Open", "Context_OpenWith", "Context_Reveal", "Context_QuickLook", "Context_Copy", "Context_Move",
-        "Context_Rename", "Context_Delete", "Context_Properties",
+        "Context_Rename", "Context_Delete", "Menu_archive_pack", "Menu_archive_unpack", "Context_Properties",
     ];
 
     [AvaloniaFact]
@@ -626,11 +626,13 @@ public class ShellCommandsTests : LanguageTestBase
         Assert.All(menu, i => Assert.Equal(Loc.Get(i.LabelKey), i.Label));
         Assert.Equal(
             [null, CommandIds.ShellOpenWith, CommandIds.ShellReveal, CommandIds.FileQuickLook, CommandIds.FileCopy,
-                CommandIds.FileMove, CommandIds.FileRename, CommandIds.FileDelete, CommandIds.FileProperties],
+                CommandIds.FileMove, CommandIds.FileRename, CommandIds.FileDelete, CommandIds.ArchivePack,
+                CommandIds.ArchiveUnpack, CommandIds.FileProperties],
             menu.Select(i => i.CommandId));
         Assert.Equal(KeyChord.Parse("F5"), menu.Single(i => i.CommandId == CommandIds.FileCopy).Chord);
         Assert.Equal(KeyChord.Parse("Cmd+I"), menu.Single(i => i.CommandId == CommandIds.FileProperties).Chord);
         Assert.Null(menu.Single(i => i.CommandId == CommandIds.ShellReveal).Chord);
+        // Unpack too: a single file under the cursor may be an archive by its content.
         Assert.All(menu, i => Assert.True(i.IsEnabled, i.LabelKey));
         Assert.True(menu.Single(i => i.LabelKey == "Context_OpenWith").HasChildren);
     }
