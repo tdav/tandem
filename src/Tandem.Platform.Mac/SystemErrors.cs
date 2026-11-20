@@ -13,7 +13,9 @@ internal static class SystemErrors
     public const int ENOENT = 2;
     public const int EACCES = 13;
     public const int EEXIST = 17;
+    public const int EINVAL = 22;
     public const int ENOSPC = 28;
+    public const int ENOTSUP = 45;
 
     public static Exception FromErrno(int errno)
     {

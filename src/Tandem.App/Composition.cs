@@ -45,7 +45,7 @@ public static class Composition
     {
         var broker = new UnrestrictedAccessBroker();
         var providers = new ProviderRegistry();
-        providers.Register(new LocalFileSystemProvider(broker));
+        providers.Register(new LocalFileSystemProvider(broker, new MacExclusiveRename()));
         var processes = new ProcessRunner();
         return new AppServices(providers, new MacVolumeService(), new MacShellIntegration(processes),
             new MacQuickLook(processes), new MacFileMetadataService(broker), new MacTrash(broker),

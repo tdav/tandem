@@ -1,4 +1,7 @@
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using System.Text;
+using Tandem.Core.Platform;
 using Tandem.Core.Vfs;
 using Tandem.Core.Vfs.Local;
 
@@ -264,6 +267,88 @@ public sealed class LocalProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task Move_goes_through_exclusive_rename_when_given()
+    {
+        var rename = new RecordingRename();
+        var fs = new LocalFileSystemProvider(new UnrestrictedAccessBroker(), rename);
+        File.WriteAllText(_temp.Combine("a.txt"), "x");
+
+        await fs.MoveAsync(_temp.Root.Combine("a.txt"), _temp.Root.Combine("b.txt"), Ct);
+
+        Assert.Equal([(_temp.Combine("a.txt"), _temp.Combine("b.txt"))], rename.Exclusive);
+        Assert.Empty(rename.SameEntry);
+        Assert.Equal(["b.txt"], Directory.GetFileSystemEntries(_temp.Path).Select(Path.GetFileName));
+    }
+
+    [Fact]
+    public async Task Case_only_rename_does_not_use_exclusive_rename_and_succeeds()
+    {
+        var rename = new RecordingRename();
+        var fs = new LocalFileSystemProvider(new UnrestrictedAccessBroker(), rename);
+        File.WriteAllText(_temp.Combine("name.txt"), "x");
+        Assert.SkipUnless(File.Exists(_temp.Combine("NAME.TXT")), "The temp volume is case-sensitive.");
+
+        await fs.MoveAsync(_temp.Root.Combine("name.txt"), _temp.Root.Combine("Name.txt"), Ct);
+
+        Assert.Empty(rename.Exclusive);
+        Assert.Equal([(_temp.Combine("name.txt"), _temp.Combine("Name.txt"))], rename.SameEntry);
+        Assert.Equal(["Name.txt"], Directory.GetFileSystemEntries(_temp.Path).Select(Path.GetFileName));
+    }
+
+    [Fact]
+    public async Task Normalization_only_rename_succeeds()
+    {
+        var composed = "\u0439.txt".Normalize(NormalizationForm.FormC);   // "й" as one code point
+        var decomposed = "\u0439.txt".Normalize(NormalizationForm.FormD); // "и" + combining breve
+        Assert.NotEqual(composed, decomposed);
+        var rename = new RecordingRename();
+        var fs = new LocalFileSystemProvider(new UnrestrictedAccessBroker(), rename);
+        File.WriteAllText(_temp.Combine(composed), "x");
+        Assert.SkipUnless(File.Exists(_temp.Combine(decomposed)), "The temp volume is normalization-sensitive.");
+
+        await fs.MoveAsync(_temp.Root.Combine(composed), _temp.Root.Combine(decomposed), Ct);
+
+        Assert.Empty(rename.Exclusive);
+        Assert.Equal([decomposed], Directory.GetFileSystemEntries(_temp.Path).Select(Path.GetFileName));
+        Assert.Equal("x", File.ReadAllText(_temp.Combine(decomposed)));
+    }
+
+    [Fact]
+    public async Task Move_onto_a_distinct_entry_with_an_equivalent_name_still_uses_exclusive_rename()
+    {
+        var rename = new RecordingRename();
+        var fs = new LocalFileSystemProvider(new UnrestrictedAccessBroker(), rename);
+        File.WriteAllText(_temp.Combine("a.txt"), "a");
+        File.WriteAllText(_temp.Combine("A.txt"), "b");
+        Assert.SkipWhen(Directory.GetFileSystemEntries(_temp.Path).Length == 1, "The temp volume is case-insensitive.");
+
+        await Assert.ThrowsAsync<VfsAlreadyExistsException>(
+            () => fs.MoveAsync(_temp.Root.Combine("a.txt"), _temp.Root.Combine("A.txt"), Ct));
+
+        Assert.Single(rename.Exclusive);
+        Assert.Equal("a", File.ReadAllText(_temp.Combine("a.txt")));
+        Assert.Equal("b", File.ReadAllText(_temp.Combine("A.txt")));
+    }
+
+    [Fact]
+    public async Task Move_falls_back_to_check_and_rename_when_the_volume_has_no_exclusive_rename()
+    {
+        var rename = new RecordingRename { Unsupported = true };
+        var fs = new LocalFileSystemProvider(new UnrestrictedAccessBroker(), rename);
+        File.WriteAllText(_temp.Combine("a.txt"), "a");
+        File.WriteAllText(_temp.Combine("b.txt"), "b");
+
+        await fs.MoveAsync(_temp.Root.Combine("a.txt"), _temp.Root.Combine("c.txt"), Ct);
+        await Assert.ThrowsAsync<VfsAlreadyExistsException>(
+            () => fs.MoveAsync(_temp.Root.Combine("c.txt"), _temp.Root.Combine("b.txt"), Ct));
+
+        Assert.Equal(2, rename.Exclusive.Count);
+        Assert.Equal("a", File.ReadAllText(_temp.Combine("c.txt")));
+        Assert.Equal("b", File.ReadAllText(_temp.Combine("b.txt")));
+        Assert.False(File.Exists(_temp.Combine("a.txt")));
+    }
+
+    [Fact]
     public async Task Delete_missing_throws_NotFound()
     {
         await Assert.ThrowsAsync<VfsNotFoundException>(
@@ -305,6 +390,37 @@ public sealed class LocalProviderTests : IDisposable
         await foreach (var entry in fs.EnumerateAsync(directory, Ct))
             list.Add(entry);
         return list;
+    }
+
+    /// <summary>Records the calls; the exclusive rename checks and then moves (or refuses as unsupported), the
+    /// same-entry rename is a plain <c>rename(2)</c>.</summary>
+    private sealed class RecordingRename : IExclusiveRename
+    {
+        public bool Unsupported { get; init; }
+
+        public List<(string, string)> Exclusive { get; } = [];
+
+        public List<(string, string)> SameEntry { get; } = [];
+
+        public void Rename(string sourcePath, string destinationPath)
+        {
+            Exclusive.Add((sourcePath, destinationPath));
+            if (Unsupported) throw new NotSupportedException("No exclusive rename on this volume.");
+            if ((int)new FileInfo(destinationPath).Attributes != -1)
+                throw new VfsAlreadyExistsException($"'{destinationPath}' already exists.");
+            Directory.Move(sourcePath, destinationPath);
+        }
+
+        public void RenameSameEntry(string sourcePath, string destinationPath)
+        {
+            SameEntry.Add((sourcePath, destinationPath));
+            if (rename(sourcePath, destinationPath) != 0)
+                throw new IOException($"rename failed (errno {Marshal.GetLastPInvokeError()}).");
+        }
+
+        [DllImport("libc", SetLastError = true)]
+        private static extern int rename([MarshalAs(UnmanagedType.LPUTF8Str)] string from,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string to);
     }
 
     private sealed class CountingBroker : IFileAccessBroker

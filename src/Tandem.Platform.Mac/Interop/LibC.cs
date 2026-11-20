@@ -75,6 +75,17 @@ internal static unsafe partial class LibC
     [LibraryImport(LibSystem, StringMarshalling = StringMarshalling.Utf8, SetLastError = true)]
     public static partial int lchflags(string path, uint flags);
 
+    // sys/stdio.h: renamex_np flags
+    public const uint RENAME_EXCL = 0x00000004;
+
+    /// <summary><c>int rename(const char *old, const char *new)</c> (_stdio.h)</summary>
+    [LibraryImport(LibSystem, StringMarshalling = StringMarshalling.Utf8, SetLastError = true)]
+    public static partial int rename(string from, string to);
+
+    /// <summary><c>int renamex_np(const char *, const char *, unsigned int)</c> (sys/stdio.h)</summary>
+    [LibraryImport(LibSystem, StringMarshalling = StringMarshalling.Utf8, SetLastError = true)]
+    public static partial int renamex_np(string from, string to, uint flags);
+
     /// <summary><c>int strerror_r(int errnum, char *strerrbuf, size_t buflen)</c> (string.h)</summary>
     [LibraryImport(LibSystem)]
     private static partial int strerror_r(int errnum, byte* buffer, nuint length);

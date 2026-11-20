@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
+using Tandem.Core.Platform;
 
 namespace Tandem.Core.Vfs.Local;
 
@@ -10,8 +11,12 @@ namespace Tandem.Core.Vfs.Local;
 /// access/not-found errors are reported as <see cref="VfsAccessDeniedException"/>/<see cref="VfsNotFoundException"/>.
 /// Symlinks are followed only by <see cref="EnumerateAsync"/> and <see cref="OpenReadAsync"/> (the OS resolves
 /// links anywhere in a path, unlike the in-memory provider).
+/// <para>Renames go through <see cref="IExclusiveRename"/> when one is given, so an existing destination is refused
+/// by the system in the same call that renames; without one (or on a volume that has no exclusive rename) the
+/// destination is checked first and then renamed, which leaves a moment for another process to create it.</para>
 /// </summary>
-public sealed class LocalFileSystemProvider(IFileAccessBroker broker) : IFileSystemProvider
+public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusiveRename? exclusiveRename = null)
+    : IFileSystemProvider
 {
     private const int EnumerationBatchSize = 256;
     private const int StreamBufferSize = 81920;
@@ -26,6 +31,7 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker) : IFileSys
     };
 
     private readonly IFileAccessBroker _broker = broker ?? throw new ArgumentNullException(nameof(broker));
+    private readonly IExclusiveRename? _exclusiveRename = exclusiveRename;
 
     public string Id => VfsPath.LocalProviderId;
 
@@ -92,14 +98,36 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker) : IFileSys
             File.Delete(p); // a file or a link (the link itself, never its target)
     });
 
+    /// <summary>A destination that is the source itself under another spelling of its name (letter case or Unicode
+    /// normalization, on a volume that ignores the difference) is a plain rename; any other existing destination is
+    /// refused with <see cref="VfsAlreadyExistsException"/>.</summary>
     public Task MoveAsync(VfsPath source, VfsPath destination, CancellationToken ct) => RunAsync(source, ct, src =>
     {
         var dst = ToOsPath(destination);
         Translate(dst, () =>
         {
             using var access = _broker.Access(dst);
-            if (Exists(new FileInfo(dst)) && !IsCaseOnlyRename(src, dst))
-                throw new VfsAlreadyExistsException($"'{dst}' already exists.");
+            if (IsRespelling(src, dst))
+            {
+                if (_exclusiveRename is null)
+                    Directory.Move(src, dst); // accepts a change of letter case only
+                else
+                    _exclusiveRename.RenameSameEntry(src, dst);
+                return true;
+            }
+            if (_exclusiveRename is not null)
+            {
+                try
+                {
+                    _exclusiveRename.Rename(src, dst);
+                    return true;
+                }
+                catch (NotSupportedException)
+                {
+                    // The volume has no exclusive rename (nothing has changed): check, then rename.
+                }
+            }
+            if (Exists(new FileInfo(dst))) throw new VfsAlreadyExistsException($"'{dst}' already exists.");
             Directory.Move(src, dst); // rename(2): works for files, directories and links
             return true;
         });
@@ -237,19 +265,18 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker) : IFileSys
     private static bool IsRealDirectory(FileAttributes attributes) =>
         attributes.HasFlag(FileAttributes.Directory) && !attributes.HasFlag(FileAttributes.ReparsePoint);
 
-    /// <summary>A rename that changes only letter case: on a case-insensitive volume the destination "exists"
-    /// because it is the source itself. A distinct entry spelled exactly like the destination still blocks it.</summary>
-    private static bool IsCaseOnlyRename(string source, string destination)
+    /// <summary>True when <paramref name="destination"/> names the entry <paramref name="source"/> itself (same device
+    /// and inode, <c>lstat</c>) by a name that differs from its own, but only in letter case or Unicode
+    /// normalization. The name test keeps a hard link of the source under another name from counting as the source,
+    /// and a move onto the very same name is still refused as existing.</summary>
+    private static bool IsRespelling(string source, string destination)
     {
-        var parent = Path.GetDirectoryName(source);
-        if (parent is null || !string.Equals(parent, Path.GetDirectoryName(destination), StringComparison.Ordinal))
-            return false;
         var sourceName = Path.GetFileName(source);
         var destinationName = Path.GetFileName(destination);
-        if (sourceName == destinationName || !sourceName.Equals(destinationName, StringComparison.OrdinalIgnoreCase))
-            return false;
-        return !Directory.EnumerateFileSystemEntries(parent, "*", ListingOptions)
-            .Any(entry => string.Equals(Path.GetFileName(entry), destinationName, StringComparison.Ordinal));
+        return !string.Equals(sourceName, destinationName, StringComparison.Ordinal) &&
+               string.Equals(sourceName.Normalize(NormalizationForm.FormC),
+                   destinationName.Normalize(NormalizationForm.FormC), StringComparison.OrdinalIgnoreCase) &&
+               Identity(destination) is { } target && Identity(source) == target;
     }
 
     private static FileEntry ToEntry(VfsPath path, FileSystemInfo info)

@@ -15,6 +15,8 @@ public static class SafeReplace
     public const string BackupSuffix = ".tandem-old";
 
     /// <summary><c>.{name}.tandem-part</c> next to <paramref name="destination"/>.</summary>
+    /// <exception cref="ArgumentException"><paramref name="destination"/> is a root, which has no name or
+    /// parent.</exception>
     public static VfsPath PartPathFor(VfsPath destination) => SiblingPath(destination, PartSuffix);
 
     /// <summary>Has <paramref name="write"/> produce the item under its part name next to
@@ -23,6 +25,7 @@ public static class SafeReplace
     /// deleted only once the new item is in place; if moving the part into place fails, the backup is put back, so
     /// the destination is never left empty. If anything fails, the part file is removed and the original error
     /// propagates.</summary>
+    /// <exception cref="ArgumentException"><paramref name="destination"/> is a root.</exception>
     public static async Task WriteAsync(IFileSystemProvider target, VfsPath destination, bool replace,
         Func<VfsPath, Task> write)
     {
@@ -45,10 +48,12 @@ public static class SafeReplace
     /// the existing destination is first set aside as <c>.{name}.tandem-old</c> and deleted only once
     /// <paramref name="from"/> is in place; if that rename fails, the backup is put back. <paramref name="from"/>
     /// itself is never removed here. Not cancellable.</summary>
+    /// <exception cref="ArgumentException"><paramref name="destination"/> is a root.</exception>
     public static async Task MoveIntoPlaceAsync(IFileSystemProvider target, VfsPath from, VfsPath destination,
         bool replace)
     {
         ArgumentNullException.ThrowIfNull(target);
+        RequireNotRoot(destination);
         var ct = CancellationToken.None;
         if (!replace)
         {
@@ -77,8 +82,18 @@ public static class SafeReplace
     }
 
     /// <summary><c>.{name}{suffix}</c> next to <paramref name="destination"/>.</summary>
-    private static VfsPath SiblingPath(VfsPath destination, string suffix) =>
-        destination.Parent!.Value.Combine("." + destination.Name + suffix);
+    private static VfsPath SiblingPath(VfsPath destination, string suffix)
+    {
+        RequireNotRoot(destination);
+        return destination.Parent!.Value.Combine("." + destination.Name + suffix);
+    }
+
+    private static void RequireNotRoot(VfsPath destination)
+    {
+        if (destination.IsRoot)
+            throw new ArgumentException($"The destination '{destination}' is a root, not an item to put in place.",
+                nameof(destination));
+    }
 
     /// <summary>Best-effort return of the set-aside original; a failure here must not hide the error being handled
     /// (the original then survives under its backup name).</summary>

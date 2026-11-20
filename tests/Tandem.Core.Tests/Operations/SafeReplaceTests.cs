@@ -117,6 +117,60 @@ public sealed class SafeReplaceTests
     }
 
     [Fact]
+    public async Task Move_into_place_without_replace_takes_a_free_name()
+    {
+        _mem.AddFile("/a/new.txt", "new");
+
+        await SafeReplace.MoveIntoPlaceAsync(_mem, Mem("/a/new.txt"), Mem("/a/b.txt"), replace: false);
+
+        Assert.Equal("new", _mem.ReadAllText("/a/b.txt"));
+        Assert.Equal(["/a", "/a/b.txt"], PathsUnder("/a"));
+    }
+
+    [Fact]
+    public async Task Move_into_place_without_replace_refuses_a_taken_name_and_keeps_both()
+    {
+        _mem.AddFile("/a/b.txt", "old");
+        _mem.AddFile("/a/new.txt", "new");
+
+        await Assert.ThrowsAsync<VfsAlreadyExistsException>(
+            () => SafeReplace.MoveIntoPlaceAsync(_mem, Mem("/a/new.txt"), Mem("/a/b.txt"), replace: false));
+
+        Assert.Equal("old", _mem.ReadAllText("/a/b.txt"));
+        Assert.Equal("new", _mem.ReadAllText("/a/new.txt"));
+        Assert.Equal(["/a", "/a/b.txt", "/a/new.txt"], PathsUnder("/a"));
+    }
+
+    [Fact]
+    public async Task Failure_to_set_the_old_file_aside_keeps_it_and_leaves_no_part_or_backup()
+    {
+        _mem.AddFile("/a/b.txt", "old");
+        _mem.FailOn((op, p) => op == "Move" && p.Path == "/a/b.txt", () => new IOException("cannot set aside"));
+
+        var error = await Assert.ThrowsAsync<IOException>(() =>
+            SafeReplace.WriteAsync(_mem, Mem("/a/b.txt"), replace: true, WriteText("new")));
+
+        Assert.Equal("cannot set aside", error.Message);
+        Assert.Equal("old", _mem.ReadAllText("/a/b.txt"));
+        Assert.Equal(["/a", "/a/b.txt"], PathsUnder("/a"));
+    }
+
+    [Fact]
+    public async Task Root_destination_is_an_argument_error()
+    {
+        _mem.AddFile("/new.txt", "new");
+
+        Assert.Throws<ArgumentException>(() => SafeReplace.PartPathFor(Mem("/")));
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => SafeReplace.WriteAsync(_mem, Mem("/"), replace: false, WriteText("new")));
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => SafeReplace.MoveIntoPlaceAsync(_mem, Mem("/new.txt"), Mem("/"), replace: true));
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => SafeReplace.MoveIntoPlaceAsync(_mem, Mem("/new.txt"), Mem("/"), replace: false));
+        Assert.Equal("new", _mem.ReadAllText("/new.txt"));
+    }
+
+    [Fact]
     public void Part_path_is_hidden_sibling()
     {
         Assert.Equal(Mem("/a/.b.txt.tandem-part"), SafeReplace.PartPathFor(Mem("/a/b.txt")));
