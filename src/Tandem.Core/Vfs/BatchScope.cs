@@ -102,7 +102,13 @@ public sealed class BatchScope : IAsyncDisposable
     /// flow (by this async method or one that called it), or the scope it joined, holds that batch and has neither
     /// committed it nor been disposed. Work the flow starts (a task, an awaited call) is the same flow; a flow that
     /// was running before, or that does not carry the execution context, is not. A provider tells by this whether a
-    /// change comes from the operation its batch belongs to.</summary>
+    /// change comes from the operation its batch belongs to.
+    /// <para>A flow has a single active slot: the scope most recently begun by <see cref="BeginAsync"/> in it (a
+    /// scope begun inside an async method the flow awaited ends with that method's flow). Work forked from an
+    /// operation's flow (a task it starts) inherits the slot and so the ownership, even if the fork outlives the call
+    /// that started it. A scope a provider begins for a change of its own and keeps open across calls (an out-of-batch
+    /// write stream) is not in the caller's slot: a second change to that provider from the same flow, while the
+    /// stream is open, waits for that scope to end — on itself.</para></summary>
     public static bool Holds(IBatchProvider provider)
     {
         ArgumentNullException.ThrowIfNull(provider);

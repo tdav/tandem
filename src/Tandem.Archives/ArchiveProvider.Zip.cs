@@ -63,7 +63,12 @@ public sealed partial class ArchiveProvider
     // ---- The changing calls --------------------------------------------------------------------------------
 
     /// <summary>Creates the file, or empties it; the content is the archive's once the stream is closed (outside a
-    /// batch: closing it rewrites the archive, and fails if that fails).</summary>
+    /// batch: closing it rewrites the archive, and fails if that fails).
+    /// <para>Outside a batch the stream holds a <see cref="BatchScope"/> of its own until it is closed. A flow has a
+    /// single active scope (<see cref="BatchScope.Holds"/>), and work forked from an operation's flow inherits it; so
+    /// a second change to this archive from the same flow while such a stream is open is not part of any batch it
+    /// holds and waits for the stream's batch to end — that is, on itself. Close the stream before changing the
+    /// archive again from the same flow.</para></summary>
     public async Task<Stream> OpenWriteAsync(VfsPath path, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
@@ -436,8 +441,9 @@ public sealed partial class ArchiveProvider
     }
 
     /// <summary>Closes the host's stream of a write that failed, so that nothing of it is applied (a zip host outside
-    /// a batch would otherwise take the half-written part) and the failure stays the one reported.</summary>
-    private static async Task AbortAsync(Stream output)
+    /// a batch would otherwise take the half-written part) and the failure stays the one reported: it never throws.
+    /// Internal for tests.</summary>
+    internal static async Task AbortAsync(Stream output)
     {
         if (output is EditStream edit)
         {
@@ -734,7 +740,15 @@ public sealed partial class ArchiveProvider
                 // the write has failed already
             }
             lock (owner._editLock) edits.OpenStreams--;
-            if (commitOnClose is not null) await commitOnClose.DisposeAsync().ConfigureAwait(false);
+            if (commitOnClose is null) return;
+            try
+            {
+                await commitOnClose.DisposeAsync().ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+                // the write has failed already; disposing the scope still released every batch it held
+            }
         }
 
         private async Task CloseAsync()

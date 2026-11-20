@@ -878,11 +878,12 @@ public sealed class ZipEditingTests : IDisposable
         var (outer, inner) = await NestedAsync(outerPath);
         var ct = Ct;
         var operationBegins = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        outer.BeginningBatch = () => operationBegins.TrySetResult();
 
         // An out-of-batch write is open on the inner archive...
         var stream = await inner.OpenWriteAsync(new VfsPath("inner", "/streamed.txt"), Ct);
         await stream.WriteAsync("streamed"u8.ToArray(), Ct);
+        // (set only now: opening the write above begins the outer archive's batch too, in a scope of its own)
+        outer.BeginningBatch = () => operationBegins.TrySetResult();
         // ...when an operation over the inner archive (and so its host) begins on another flow.
         Task operation;
         using (ExecutionContext.SuppressFlow())
@@ -904,6 +905,28 @@ public sealed class ZipEditingTests : IDisposable
         Assert.Equal("streamed", await TextAsync(reopenedInner, "/streamed.txt"));
         Assert.Equal("operation", await TextAsync(reopenedInner, "/operation.txt"));
         AssertNoLeftovers();
+    }
+
+    [Fact]
+    public async Task Aborting_a_write_outside_a_batch_keeps_quiet_when_its_batch_fails_to_dispose()
+    {
+        var journal = new BatchJournal();
+        var batchingHost = new BatchingProvider("bp", journal);
+        batchingHost.Files.AddFile(ArchivePath, Fixture.Bytes("sample.zip"), HostTime);
+        _providers.Register(batchingHost);
+        var archive = await OpenOverAsync("arc", new VfsPath("bp", ArchivePath), register: true);
+        var stream = await archive.OpenWriteAsync(Arc("/new.txt"), Ct);
+        await stream.WriteAsync("half"u8.ToArray(), Ct);
+        batchingHost.FailDispose = () => new InvalidOperationException("The batch could not be disposed.");
+
+        // A caller whose write failed aborts the stream and then rethrows its own error: aborting must not throw.
+        await ArchiveProvider.AbortAsync(stream);
+
+        Assert.Equal(0, journal.Count("bp:Commit"));
+        batchingHost.FailDispose = null;
+        Assert.Null(await archive.GetEntryAsync(Arc("/new.txt"), Ct));
+        var reopened = await OpenOverAsync("fresh", new VfsPath("bp", ArchivePath), register: false);
+        Assert.Null(await reopened.GetEntryAsync(new VfsPath("fresh", "/new.txt"), Ct));
     }
 
     // ---- Zip64 ----------------------------------------------------------------------------------------

@@ -25,6 +25,7 @@
     <Compile Include="..\Tandem.Core.Tests\Vfs\TempDir.cs" Link="Vfs\TempDir.cs" />
     <Compile Include="..\Tandem.Core.Tests\Vfs\ProviderContractTests.cs" Link="Vfs\ProviderContractTests.cs" />
     <Compile Include="..\Tandem.Core.Tests\Vfs\HostedFileSystem.cs" Link="Vfs\HostedFileSystem.cs" />
+    <Compile Include="..\Tandem.Core.Tests\Vfs\BatchingProvider.cs" Link="Vfs\BatchingProvider.cs" />
   </ItemGroup>
 
   <ItemGroup>
