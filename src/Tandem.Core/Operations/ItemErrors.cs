@@ -4,8 +4,9 @@ using Tandem.Core.Vfs;
 namespace Tandem.Core.Operations;
 
 /// <summary>Puts per-item errors to the user and remembers a "skip all" answer for the rest of the operation.
-/// Shared by copy, move and delete so they answer errors the same way.</summary>
-internal sealed class ItemErrors(FileOperation operation, IOperationInteraction interaction)
+/// Shared by copy, move and delete (and anything else that works item by item) so they answer errors the same
+/// way.</summary>
+public sealed class ItemErrors(FileOperation operation, IOperationInteraction interaction)
 {
     // Used from the operation's single worker thread only.
     private bool _skipAll;

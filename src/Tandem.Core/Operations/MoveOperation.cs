@@ -49,15 +49,15 @@ public sealed class MoveOperation(ProviderRegistry providers, IReadOnlyList<VfsP
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
-        var engine = new CopyEngine(_providers, this, _interaction, _nativeCopy, _options.VerifyContent,
-            checkSize: true);
-        var destination = await engine.ResolveDestinationDirectoryAsync(_destinationDirectory, ct).ConfigureAwait(false);
-        var targets = CopyEngine.ResolveTargets(_sources, destination, _options.NewName);
+        var planner = new CopyPlanner(_providers, this, new ItemErrors(this, _interaction), _options.VerifyContent);
+        var engine = new CopyEngine(planner, _providers, this, _interaction, _nativeCopy, checkSize: true);
+        var destination = await planner.ResolveDestinationDirectoryAsync(_destinationDirectory, ct).ConfigureAwait(false);
+        var targets = CopyPlanner.ResolveTargets(_sources, destination, _options.NewName);
 
-        var (renames, copies) = await SplitAsync(engine, targets, destination, ct).ConfigureAwait(false);
+        var (renames, copies) = await SplitAsync(planner, targets, destination, ct).ConfigureAwait(false);
 
         SetState(OperationState.Scanning);
-        var items = await engine.ScanAsync(copies, ct, extraFiles: renames.Count).ConfigureAwait(false);
+        var items = await planner.ScanAsync(copies, ct, extraFiles: renames.Count).ConfigureAwait(false);
 
         SetState(OperationState.Running);
         foreach (var (source, target) in renames)
@@ -66,7 +66,7 @@ public sealed class MoveOperation(ProviderRegistry providers, IReadOnlyList<VfsP
         var directories = new List<CopyItem>(); // created or merged into, in plan order
         var outcomes = await engine.CopyAllAsync(items, ct, (item, outcome, writtenTo) => outcome switch
         {
-            CopyOutcome.Copied => DeleteSourceAsync(engine, item.Source.Path, writtenTo, ct),
+            CopyOutcome.Copied => DeleteSourceAsync(planner, item.Source.Path, writtenTo, ct),
             CopyOutcome.DirectoryCreated or CopyOutcome.DirectoryMerged => Remember(directories, item),
             _ => Task.CompletedTask,
         }).ConfigureAwait(false);
@@ -80,7 +80,7 @@ public sealed class MoveOperation(ProviderRegistry providers, IReadOnlyList<VfsP
                 metadataSkipped.Add(items[i].Source.Path);
         for (var i = directories.Count - 1; i >= 0; i--)
             if (!metadataSkipped.Contains(directories[i].Source.Path))
-                await RemoveIfEmptyAsync(engine, directories[i].Source.Path, ct).ConfigureAwait(false);
+                await RemoveIfEmptyAsync(planner, directories[i].Source.Path, ct).ConfigureAwait(false);
     }
 
     /// <summary>Splits the targets into single renames (same volume as the destination) and copies, before
@@ -90,7 +90,7 @@ public sealed class MoveOperation(ProviderRegistry providers, IReadOnlyList<VfsP
     /// and is refused when it does not: copying or merging it onto itself would destroy it.</summary>
     /// <exception cref="OperationRejectedException">An item would be moved onto itself.</exception>
     private async Task<(List<(VfsPath, VfsPath)> Renames, List<(VfsPath, VfsPath)> Copies)> SplitAsync(
-        CopyEngine engine, IReadOnlyList<(VfsPath Source, VfsPath Destination)> targets, VfsPath destinationDirectory,
+        CopyPlanner planner, IReadOnlyList<(VfsPath Source, VfsPath Destination)> targets, VfsPath destinationDirectory,
         CancellationToken ct)
     {
         var destinationVolume = await VolumeOfAsync(destinationDirectory, ct).ConfigureAwait(false);
@@ -98,10 +98,10 @@ public sealed class MoveOperation(ProviderRegistry providers, IReadOnlyList<VfsP
         var copies = new List<(VfsPath, VfsPath)>();
         foreach (var target in targets)
         {
-            if (await engine.IsSameEntryAsync(target.Source, target.Destination, ct).ConfigureAwait(false))
+            if (await planner.IsSameEntryAsync(target.Source, target.Destination, ct).ConfigureAwait(false))
             {
                 if (string.Equals(target.Source.Name, target.Destination.Name, StringComparison.Ordinal))
-                    throw CopyEngine.OntoItself(target.Source, target.Destination);
+                    throw CopyPlanner.OntoItself(target.Source, target.Destination);
                 renames.Add(target);
             }
             else if (await VolumeOfAsync(target.Source, ct).ConfigureAwait(false) != destinationVolume ||
@@ -135,24 +135,24 @@ public sealed class MoveOperation(ProviderRegistry providers, IReadOnlyList<VfsP
     /// this is not interrupted by a cancel; a failure is asked about, and skipping it leaves the item in both
     /// places. A source that is the very object just written (<paramref name="writtenTo"/>) is never deleted:
     /// that would delete the only copy.</summary>
-    private async Task DeleteSourceAsync(CopyEngine engine, VfsPath source, VfsPath writtenTo, CancellationToken ct)
+    private async Task DeleteSourceAsync(CopyPlanner planner, VfsPath source, VfsPath writtenTo, CancellationToken ct)
     {
-        if (await engine.IsSameEntryAsync(source, writtenTo, CancellationToken.None).ConfigureAwait(false))
+        if (await planner.IsSameEntryAsync(source, writtenTo, CancellationToken.None).ConfigureAwait(false))
         {
             AddSkipped(new SkippedItem(source, SkipReason.SourceIsDestination));
             return;
         }
-        await engine.Errors.RunAsync(source,
+        await planner.Errors.RunAsync(source,
             () => _providers.For(source).DeleteAsync(source, recursive: false, CancellationToken.None), ct)
             .ConfigureAwait(false);
     }
 
     /// <summary>Removes a source directory whose contents were all moved; one with anything left in it (a skipped
     /// or failed item, or something added meanwhile) stays.</summary>
-    private async Task RemoveIfEmptyAsync(CopyEngine engine, VfsPath directory, CancellationToken ct)
+    private async Task RemoveIfEmptyAsync(CopyPlanner planner, VfsPath directory, CancellationToken ct)
     {
         var provider = _providers.For(directory);
-        await engine.Errors.RunAsync(directory, async () =>
+        await planner.Errors.RunAsync(directory, async () =>
         {
             await foreach (var _ in provider.EnumerateAsync(directory, CancellationToken.None).ConfigureAwait(false))
                 return; // not empty

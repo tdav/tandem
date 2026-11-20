@@ -47,13 +47,14 @@ public sealed class CopyOperation(ProviderRegistry providers, IReadOnlyList<VfsP
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
-        var engine = new CopyEngine(_providers, this, _interaction, _nativeCopy, _options.VerifyContent);
-        var destination = await engine.ResolveDestinationDirectoryAsync(_destinationDirectory, ct).ConfigureAwait(false);
-        var targets = CopyEngine.ResolveTargets(_sources, destination, _options.NewName);
-        await engine.RejectTargetsOntoThemselvesAsync(targets, ct).ConfigureAwait(false);
+        var planner = new CopyPlanner(_providers, this, new ItemErrors(this, _interaction), _options.VerifyContent);
+        var engine = new CopyEngine(planner, _providers, this, _interaction, _nativeCopy);
+        var destination = await planner.ResolveDestinationDirectoryAsync(_destinationDirectory, ct).ConfigureAwait(false);
+        var targets = CopyPlanner.ResolveTargets(_sources, destination, _options.NewName);
+        await planner.RejectTargetsOntoThemselvesAsync(targets, ct).ConfigureAwait(false);
 
         SetState(OperationState.Scanning);
-        var items = await engine.ScanAsync(targets, ct).ConfigureAwait(false);
+        var items = await planner.ScanAsync(targets, ct).ConfigureAwait(false);
 
         SetState(OperationState.Running);
         var outcomes = await engine.CopyAllAsync(items, ct).ConfigureAwait(false);
