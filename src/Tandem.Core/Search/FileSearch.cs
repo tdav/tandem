@@ -20,13 +20,18 @@ public sealed class FileSearch(ProviderRegistry providers)
     /// <exception cref="SearchQueryException">The name regular expression is invalid (<see cref="SearchField.Name"/>);
     /// or the content query is (see <see cref="ContentMatcher(ContentQuery)"/>).</exception>
     /// <exception cref="ArgumentOutOfRangeException"><see cref="SearchQuery.MaxDepth"/> is negative.</exception>
-    public static void Validate(SearchQuery query)
+    public static void Validate(SearchQuery query) => Prepare(query);
+
+    /// <summary>Checks <paramref name="query"/> as <see cref="Validate"/> does and gives what the check built: the name
+    /// regular expression and the content matcher, when the query has them.</summary>
+    private static (Regex? Name, ContentMatcher? Content) Prepare(SearchQuery query)
     {
         ArgumentNullException.ThrowIfNull(query);
         if (query.MaxDepth is < 0)
             throw new ArgumentOutOfRangeException(nameof(query), query.MaxDepth, "MaxDepth must not be negative.");
-        if (query.NameIsRegex) NameRegex(query.NameMasks);
-        if (query.Content is not null) _ = new ContentMatcher(query.Content);
+        var name = query.NameIsRegex ? NameRegex(query.NameMasks) : null;
+        var content = query.Content is null ? null : new ContentMatcher(query.Content);
+        return (name, content);
     }
 
     /// <summary>Runs <paramref name="query"/>. Contents are read only for plain files (<see cref="EntryKind.File"/>)
@@ -39,9 +44,8 @@ public sealed class FileSearch(ProviderRegistry providers)
     public async IAsyncEnumerable<FileEntry> RunAsync(SearchQuery query, IProgress<SearchProgress>? progress,
         [EnumeratorCancellation] CancellationToken ct)
     {
-        Validate(query);
-        var filter = new Filter(query);
-        var content = query.Content is null ? null : new ContentMatcher(query.Content);
+        var (nameRegex, content) = Prepare(query);
+        var filter = new Filter(query, nameRegex);
         var excluded = HasParts(query.ExcludedFolders) ? new FileMask(query.ExcludedFolders) : null;
         var foldersAreResults = query.Content is null && query.MinSize is null && query.MaxSize is null;
         var provider = providers.For(query.Root);
@@ -171,11 +175,12 @@ public sealed class FileSearch(ProviderRegistry providers)
         }
     }
 
-    /// <summary>The name, size and date parts of a query.</summary>
-    private sealed class Filter(SearchQuery query)
+    /// <summary>The name, size and date parts of a query; <paramref name="regex"/> is the name regular expression
+    /// when <see cref="SearchQuery.NameIsRegex"/>.</summary>
+    private sealed class Filter(SearchQuery query, Regex? regex)
     {
         private readonly FileMask? _mask = query.NameIsRegex ? null : new FileMask(query.NameMasks);
-        private readonly Regex? _regex = query.NameIsRegex ? NameRegex(query.NameMasks) : null;
+        private readonly Regex? _regex = regex;
 
         public bool Matches(FileEntry entry, bool isFile) =>
             (!isFile || (entry.Size >= (query.MinSize ?? long.MinValue) && entry.Size <= (query.MaxSize ?? long.MaxValue))) &&

@@ -160,6 +160,49 @@ public class ContentMatcherTests
     }
 
     [Fact]
+    public async Task Line_break_after_a_full_piece_does_not_make_an_empty_line()
+    {
+        var empty = new ContentQuery("^$", IsRegex: true);
+        var fullPiece = Filler(ContentMatcher.MaxLineChars, (byte)'a');
+
+        Assert.False(await Match(empty, fullPiece.Concat(Utf8("\nb\n")).ToArray()));
+        Assert.False(await Match(empty, fullPiece.Concat(Utf8("\r\nb\r\n")).ToArray()));
+        Assert.False(await Match(empty, fullPiece.Concat(fullPiece).Concat(Utf8("\nb")).ToArray()));
+
+        // A real empty line after such a line still counts.
+        Assert.True(await Match(empty, fullPiece.Concat(Utf8("\n\nb")).ToArray()));
+        Assert.True(await Match(empty, fullPiece.Concat(Utf8("\r\n\r\nb")).ToArray()));
+    }
+
+    [Fact]
+    public async Task Regex_checks_cancellation_between_lines()
+    {
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        // One block of many lines; the token is cancelled while the block is read, so only a check between lines
+        // can see it. The stream itself ignores the token.
+        var content = Utf8(string.Concat(Enumerable.Repeat("line\n", 1000)) + "needle\n");
+        var stream = new CancelOnReadStream(content, cts);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            new ContentMatcher(new ContentQuery("needle", IsRegex: true)).IsMatchAsync(stream, cts.Token));
+    }
+
+    /// <summary>Reads <paramref name="content"/>, cancelling <paramref name="cts"/> on the first read; ignores the
+    /// token it is given.</summary>
+    private sealed class CancelOnReadStream(byte[] content, CancellationTokenSource cts) : MemoryStream(content, writable: false)
+    {
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            var read = Read(buffer.Span);
+            cts.Cancel();
+            return ValueTask.FromResult(read);
+        }
+
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+    }
+
+    [Fact]
     public async Task Stops_reading_after_the_first_match()
     {
         var needle = Utf8("needle");

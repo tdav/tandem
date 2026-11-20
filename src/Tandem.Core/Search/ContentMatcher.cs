@@ -65,7 +65,8 @@ public sealed class ContentMatcher
     }
 
     /// <summary>Reads <paramref name="content"/> from its current position until the first match or its end. The
-    /// stream is not disposed. Cancellation is checked before every block.</summary>
+    /// stream is not disposed. Cancellation is checked before every block, and for a regular expression also before
+    /// every line (or piece of one) is matched.</summary>
     /// <exception cref="IOException">The stream cannot be read.</exception>
     public async Task<bool> IsMatchAsync(Stream content, CancellationToken ct)
     {
@@ -80,7 +81,7 @@ public sealed class ContentMatcher
             var (encoding, skip) = ChooseEncoding(bytes.AsSpan(0, read), sampleIsWholeFile: read < BlockSize);
             var decoder = encoding.Encoding.GetDecoder();
             chars = ArrayPool<char>.Shared.Rent(encoding.Encoding.GetMaxCharCount(BlockSize));
-            sink = _regex is null ? new TextSink(_text, _comparison, chars.Length) : new LineSink(_regex);
+            sink = _regex is null ? new TextSink(_text, _comparison, chars.Length) : new LineSink(_regex, ct);
 
             var start = skip;
             while (true)
@@ -170,11 +171,14 @@ public sealed class ContentMatcher
         public override bool End() => false;
     }
 
-    /// <summary>A regular expression, line by line.</summary>
-    private sealed class LineSink(Regex regex) : Sink
+    /// <summary>A regular expression, line by line. After a line has been matched in pieces, the empty rest that its
+    /// line break leaves (when its length is a multiple of <see cref="MaxLineChars"/>) is not a line of its
+    /// own.</summary>
+    private sealed class LineSink(Regex regex, CancellationToken ct) : Sink
     {
         private char[] _line = new char[256];
         private int _length;
+        private bool _inPieces;
 
         public override bool Add(ReadOnlySpan<char> chars)
         {
@@ -187,8 +191,10 @@ public sealed class ContentMatcher
                 {
                     Append(take[..lineEnd]);
                     var line = WithoutReturn(_line.AsSpan(0, _length));
+                    var restOfPieces = _inPieces && line.IsEmpty;
                     _length = 0;
-                    if (IsMatch(line)) return true;
+                    _inPieces = false;
+                    if (!restOfPieces && IsMatch(line)) return true;
                     chars = chars[(lineEnd + 1)..];
                 }
                 else
@@ -198,6 +204,7 @@ public sealed class ContentMatcher
                     if (_length == MaxLineChars)
                     {
                         _length = 0;
+                        _inPieces = true;
                         if (IsMatch(_line.AsSpan(0, MaxLineChars))) return true;
                     }
                 }
@@ -205,7 +212,12 @@ public sealed class ContentMatcher
             return false;
         }
 
-        public override bool End() => _length > 0 && IsMatch(WithoutReturn(_line.AsSpan(0, _length)));
+        public override bool End()
+        {
+            if (_length == 0) return false;
+            var line = WithoutReturn(_line.AsSpan(0, _length));
+            return !(_inPieces && line.IsEmpty) && IsMatch(line);
+        }
 
         private static ReadOnlySpan<char> WithoutReturn(ReadOnlySpan<char> line) => line.EndsWith('\r') ? line[..^1] : line;
 
@@ -219,6 +231,7 @@ public sealed class ContentMatcher
 
         private bool IsMatch(ReadOnlySpan<char> line)
         {
+            ct.ThrowIfCancellationRequested();
             try
             {
                 return regex.IsMatch(line);
