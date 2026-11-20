@@ -844,6 +844,68 @@ public sealed class ZipEditingTests : IDisposable
         Assert.Equal("", check.GetEntry("c.txt")!.Comment);
     }
 
+    private async Task<(ArchiveProvider Outer, ArchiveProvider Inner)> NestedAsync(string outerPath)
+    {
+        _host.Files.AddFile(outerPath, Zip(("inner.zip", Fixture.Bytes("sample.zip")), ("note.txt", "n"u8.ToArray())),
+            HostTime);
+        var outer = await OpenOverAsync("outer", Mem(outerPath), register: true);
+        var inner = await OpenOverAsync("inner", new VfsPath("outer", "/inner.zip"), register: true);
+        return (outer, inner);
+    }
+
+    [Fact]
+    public async Task Nested_change_outside_a_batch_rewrites_the_outer_archive_once()
+    {
+        const string outerPath = "/arc/outer.zip";
+        var (_, inner) = await NestedAsync(outerPath);
+
+        await WriteAsync(inner, "/added.txt", "added");
+        Assert.Equal(1, _host.ReplacementsOf(outerPath));
+        await inner.DeleteAsync(new VfsPath("inner", "/a.txt"), recursive: false, Ct);
+        Assert.Equal(2, _host.ReplacementsOf(outerPath));
+
+        var reopenedOuter = await OpenOverAsync("outer2", Mem(outerPath), register: true);
+        var reopenedInner = await OpenOverAsync("inner2", new VfsPath("outer2", "/inner.zip"), register: false);
+        Assert.Equal("added", await TextAsync(reopenedInner, "/added.txt"));
+        Assert.Null(await reopenedInner.GetEntryAsync(new VfsPath("inner2", "/a.txt"), Ct));
+        AssertNoLeftovers();
+    }
+
+    [Fact]
+    public async Task Nested_write_outside_a_batch_and_an_operation_over_both_archives_do_not_deadlock()
+    {
+        const string outerPath = "/arc/outer.zip";
+        var (outer, inner) = await NestedAsync(outerPath);
+        var ct = Ct;
+        var operationBegins = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        outer.BeginningBatch = () => operationBegins.TrySetResult();
+
+        // An out-of-batch write is open on the inner archive...
+        var stream = await inner.OpenWriteAsync(new VfsPath("inner", "/streamed.txt"), Ct);
+        await stream.WriteAsync("streamed"u8.ToArray(), Ct);
+        // ...when an operation over the inner archive (and so its host) begins on another flow.
+        Task operation;
+        using (ExecutionContext.SuppressFlow())
+            operation = Task.Run(async () =>
+            {
+                await using var scope = await BatchScope.BeginAsync(_providers, [new VfsPath("inner", "/")], ct);
+                await using (var write = await inner.OpenWriteAsync(new VfsPath("inner", "/operation.txt"), ct))
+                    await write.WriteAsync("operation"u8.ToArray(), ct);
+                await scope.CommitAsync(ct);
+            }, ct);
+        await operationBegins.Task.WaitAsync(Timeout, Ct);
+
+        await stream.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(10), Ct);
+        await operation.WaitAsync(TimeSpan.FromSeconds(10), Ct);
+
+        Assert.Equal(2, _host.ReplacementsOf(outerPath));
+        var reopenedOuter = await OpenOverAsync("outer2", Mem(outerPath), register: true);
+        var reopenedInner = await OpenOverAsync("inner2", new VfsPath("outer2", "/inner.zip"), register: false);
+        Assert.Equal("streamed", await TextAsync(reopenedInner, "/streamed.txt"));
+        Assert.Equal("operation", await TextAsync(reopenedInner, "/operation.txt"));
+        AssertNoLeftovers();
+    }
+
     // ---- Zip64 ----------------------------------------------------------------------------------------
 
     [Fact]

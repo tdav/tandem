@@ -23,9 +23,9 @@ namespace Tandem.Archives;
 /// need it), read back and its listing checked against what was written,
 /// and only then put in place by <see cref="SafeReplace.MoveIntoPlaceAsync"/>. If any of that fails, the part file is
 /// removed, the original archive is left as it was, the collected changes are dropped, and the error goes to the
-/// caller. The provider never begins its host's batch: when the host collects changes too (a zip inside a zip, in an
-/// operation's <see cref="BatchScope"/>), the rewrite lands in the host's batch and the host rewrites once at its own
-/// commit.</para>
+/// caller. The provider never begins its host's batch itself; a change outside a batch runs in a short
+/// <see cref="BatchScope"/> of its own, which begins the hosts first. So when the host collects changes too (a zip
+/// inside a zip), the rewrite lands in the host's batch and the host rewrites once, at the scope's commit.</para>
 /// </summary>
 public sealed partial class ArchiveProvider
 {
@@ -43,6 +43,10 @@ public sealed partial class ArchiveProvider
     /// <summary>Called just before a change that is not part of the open batch begins a batch of its own (and
     /// waits for the open one to end). A seam for tests.</summary>
     internal Action? BeforeOwnBatch { get; set; }
+
+    /// <summary>Called when <see cref="BeginBatchAsync"/> is entered, before it waits for the gate. A seam for
+    /// tests.</summary>
+    internal Action? BeginningBatch { get; set; }
     private Batch? _openBatch; // guarded by _editLock
 
     public ProviderCapabilities Capabilities =>
@@ -66,15 +70,14 @@ public sealed partial class ArchiveProvider
         RequireEditable(path);
         if (JoinableBatch() is { } open)
             return CreateFile(await open.EditsAsync(ct).ConfigureAwait(false), path, commitOnClose: null);
-        BeforeOwnBatch?.Invoke();
-        var batch = (Batch)await BeginBatchAsync(ct).ConfigureAwait(false);
+        var own = await BeginOwnAsync(ct).ConfigureAwait(false);
         try
         {
-            return CreateFile(await batch.EditsAsync(ct).ConfigureAwait(false), path, commitOnClose: batch);
+            return CreateFile(await own.Batch.EditsAsync(ct).ConfigureAwait(false), path, commitOnClose: own);
         }
         catch
         {
-            await batch.DisposeAsync().ConfigureAwait(false);
+            await own.DisposeAsync().ConfigureAwait(false);
             throw;
         }
     }
@@ -146,10 +149,29 @@ public sealed partial class ArchiveProvider
             Apply(await open.EditsAsync(ct).ConfigureAwait(false), change);
             return;
         }
+        await using var own = await BeginOwnAsync(ct).ConfigureAwait(false);
+        Apply(await own.Batch.EditsAsync(ct).ConfigureAwait(false), change);
+        await own.CommitAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>The batch for a change from a caller that holds none: a <see cref="BatchScope"/> of its own on this
+    /// provider, which batches the hosts too and takes their gates first (the global order, so it never waits on a
+    /// host while holding this provider's gate), and through which the change commits — a zip inside a zip then
+    /// rewrites the outer one once. Called inside a host's commit, the scope joins it. A provider that is not
+    /// registered (no operation can reach it) takes its own batch directly.</summary>
+    private async Task<OwnBatch> BeginOwnAsync(CancellationToken ct)
+    {
         BeforeOwnBatch?.Invoke();
-        await using var batch = (Batch)await BeginBatchAsync(ct).ConfigureAwait(false);
-        Apply(await batch.EditsAsync(ct).ConfigureAwait(false), change);
-        await batch.CommitAsync(ct).ConfigureAwait(false);
+        if (!_providers.TryGet(Id, out var registered) || !ReferenceEquals(registered, this))
+            return new OwnBatch((Batch)await BeginBatchAsync(ct).ConfigureAwait(false), scope: null);
+        var scope = await BatchScope.BeginAsync(_providers, [new VfsPath(Id, "/")], ct).ConfigureAwait(false);
+        var batch = OpenBatch();
+        if (batch is null)
+        {
+            await scope.DisposeAsync().ConfigureAwait(false);
+            throw new InvalidOperationException($"The batch scope on '{Id}' holds no batch of it.");
+        }
+        return new OwnBatch(batch, scope);
     }
 
     private void Apply(Edits edits, Func<Edits, bool> change)
@@ -161,7 +183,7 @@ public sealed partial class ArchiveProvider
 
     // ---- The tree of changes (callers hold _editLock) ------------------------------------------------------
 
-    private Stream CreateFile(Edits edits, VfsPath path, Batch? commitOnClose)
+    private Stream CreateFile(Edits edits, VfsPath path, OwnBatch? commitOnClose)
     {
         lock (_editLock)
         {
@@ -586,6 +608,18 @@ public sealed partial class ArchiveProvider
 
     // ---- Parts ---------------------------------------------------------------------------------------------
 
+    /// <summary>The batch of a change from a caller that holds none: through its own scope (committing and disposing
+    /// that scope), or directly (an unregistered provider).</summary>
+    private sealed class OwnBatch(Batch batch, BatchScope? scope) : IAsyncDisposable
+    {
+        public Batch Batch { get; } = batch;
+
+        public Task CommitAsync(CancellationToken ct) =>
+            scope is null ? Batch.CommitAsync(ct) : scope.CommitAsync(ct);
+
+        public ValueTask DisposeAsync() => scope is null ? Batch.DisposeAsync() : scope.DisposeAsync();
+    }
+
     /// <summary>The changes of one batch: the tree as it will be, over the listing it was made from.</summary>
     private sealed class Edits(Snapshot @base, EditNode root)
     {
@@ -639,7 +673,7 @@ public sealed partial class ArchiveProvider
     /// <summary>Writes a file of the changes. Closing it sets the file's time and, for a write outside a batch,
     /// rewrites the archive (an error of that is thrown from closing).</summary>
     private sealed class EditStream(ArchiveProvider owner, FileStream file, Edits edits, EditNode node,
-        Batch? commitOnClose) : Stream
+        OwnBatch? commitOnClose) : Stream
     {
         private bool _closed;
 

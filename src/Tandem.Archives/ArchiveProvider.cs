@@ -230,6 +230,7 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
     /// files of a sequential archive in one pass. A second batch waits until the first one is disposed.</summary>
     public async Task<IProviderBatch> BeginBatchAsync(CancellationToken ct)
     {
+        BeginningBatch?.Invoke();
         await _batchGate.WaitAsync(ct).ConfigureAwait(false);
         var batch = new Batch(this);
         lock (_editLock) _openBatch = batch;
