@@ -19,7 +19,10 @@ public interface IBatchProvider
     /// provider may write into the host (through <see cref="BatchScope.BeginAsync"/>, which then joins the scope that
     /// holds both). The chain of hosts must not form a cycle.
     /// <para>It is fixed for the provider's life, and a non-null value is the instance registered in the
-    /// <see cref="ProviderRegistry"/> under that host's id (not a wrapper or a copy).</para></summary>
+    /// <see cref="ProviderRegistry"/> under that host's id (not a wrapper or a copy).</para>
+    /// <para>For an <see cref="IHostedProvider"/> it is the provider of its root's host location when that provider
+    /// takes batches, and null otherwise; <see cref="ProviderRegistry.Register"/> refuses anything else.</para>
+    /// </summary>
     IBatchProvider? BatchHost { get; }
 }
 

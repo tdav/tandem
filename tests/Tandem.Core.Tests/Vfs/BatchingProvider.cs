@@ -40,9 +40,12 @@ public sealed class BatchJournal
 /// first batch to be disposed.
 /// <para>With <see cref="HostedIn"/> it behaves like a provider that lives in a file of another provider (an archive
 /// inside an archive): <see cref="BatchHost"/> names the host, and its commit writes the container file into the
-/// host — through a batch scope on the host begun inside the commit, which joins the scope that holds both.</para>
+/// host — through a batch scope on the host begun inside the commit, which joins the scope that holds both. As an
+/// <see cref="IHostedProvider"/> its root then leads up to the container's folder; standing alone it has no host
+/// location.</para>
 /// </summary>
-public sealed class BatchingProvider(string id, BatchJournal journal) : IFileSystemProvider, IBatchProvider
+public sealed class BatchingProvider(string id, BatchJournal journal) : IFileSystemProvider, IBatchProvider,
+    IHostedProvider
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private (ProviderRegistry Providers, VfsPath Container)? _host;
@@ -70,13 +73,19 @@ public sealed class BatchingProvider(string id, BatchJournal journal) : IFileSys
     /// <summary>When set, a commit waits for this task first.</summary>
     public Task? CommitGate { get; set; }
 
-    /// <summary>Makes this provider live in <paramref name="container"/>, a file of another (batching)
-    /// provider.</summary>
+    /// <summary>Makes this provider live in <paramref name="container"/>, a file of another provider; its
+    /// <see cref="BatchHost"/> is that provider when it takes batches.</summary>
     public void HostedIn(ProviderRegistry providers, VfsPath container)
     {
         _host = (providers, container);
-        BatchHost = (IBatchProvider)providers.For(container);
+        BatchHost = providers.For(container) as IBatchProvider;
     }
+
+    public HostLocation? GetHostLocation(VfsPath path) =>
+        path.IsRoot && _host is { } host ? new HostLocation(host.Container.Parent!.Value, host.Container.Name) : null;
+
+    public string GetDisplayPath(VfsPath path) =>
+        _host is { } host ? host.Providers.DisplayPath(host.Container) + (path.IsRoot ? "" : path.Path) : path.Path;
 
     public async Task<IProviderBatch> BeginBatchAsync(CancellationToken ct)
     {
