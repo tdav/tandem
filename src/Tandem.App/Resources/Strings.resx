@@ -1029,4 +1029,116 @@ Folder</value>
   <data name="QuickView_OpenFailed" xml:space="preserve">
     <value>Could not open “{0}”: {1}</value>
   </data>
+  <!-- File search window (search.files) -->
+  <data name="Menu_search_files" xml:space="preserve">
+    <value>Find Files…</value>
+  </data>
+  <data name="Search_WindowTitle" xml:space="preserve">
+    <value>Find Files</value>
+  </data>
+  <data name="Search_Root" xml:space="preserve">
+    <value>Search in:</value>
+  </data>
+  <data name="Search_Names" xml:space="preserve">
+    <value>File names:</value>
+  </data>
+  <data name="Search_Regex" xml:space="preserve">
+    <value>Regular expression</value>
+  </data>
+  <data name="Search_Content" xml:space="preserve">
+    <value>Containing text:</value>
+  </data>
+  <data name="Search_CaseSensitive" xml:space="preserve">
+    <value>Match case</value>
+  </data>
+  <data name="Search_Encoding" xml:space="preserve">
+    <value>Encoding:</value>
+  </data>
+  <data name="Search_EncodingAuto" xml:space="preserve">
+    <value>Auto</value>
+  </data>
+  <data name="Search_SizeFrom" xml:space="preserve">
+    <value>Size from:</value>
+  </data>
+  <data name="Search_To" xml:space="preserve">
+    <value>to:</value>
+  </data>
+  <data name="Search_ModifiedFrom" xml:space="preserve">
+    <value>Modified from:</value>
+  </data>
+  <data name="Search_MaxDepth" xml:space="preserve">
+    <value>Folder depth:</value>
+  </data>
+  <data name="Search_Excluded" xml:space="preserve">
+    <value>Skip folders:</value>
+  </data>
+  <data name="Search_IncludeHidden" xml:space="preserve">
+    <value>Include hidden files</value>
+  </data>
+  <data name="Search_Start" xml:space="preserve">
+    <value>Find</value>
+  </data>
+  <data name="Search_Stop" xml:space="preserve">
+    <value>Stop</value>
+  </data>
+  <data name="Search_ShowInPanel" xml:space="preserve">
+    <value>Show in Panel</value>
+  </data>
+  <data name="Search_ColumnName" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="Search_ColumnFolder" xml:space="preserve">
+    <value>Folder</value>
+  </data>
+  <data name="Search_ColumnSize" xml:space="preserve">
+    <value>Size</value>
+  </data>
+  <data name="Search_ColumnDate" xml:space="preserve">
+    <value>Modified</value>
+  </data>
+  <data name="Search_AnyName" xml:space="preserve">
+    <value>*</value>
+  </data>
+  <data name="Search_ResultsTitle" xml:space="preserve">
+    <value>Search: {0} in {1}</value>
+  </data>
+  <data name="Search_BadSize" xml:space="preserve">
+    <value>The size must be a number of zero or more.</value>
+  </data>
+  <data name="Search_BadDepth" xml:space="preserve">
+    <value>The folder depth must be a whole number of zero or more.</value>
+  </data>
+  <data name="Search_BadSizeRange" xml:space="preserve">
+    <value>The smallest size is larger than the largest.</value>
+  </data>
+  <data name="Search_BadDateRange" xml:space="preserve">
+    <value>The first date is later than the last.</value>
+  </data>
+  <data name="Search_BadNameRegex" xml:space="preserve">
+    <value>The file name pattern is not a valid regular expression: {0}</value>
+  </data>
+  <data name="Search_EmptyContent" xml:space="preserve">
+    <value>Enter the text to find.</value>
+  </data>
+  <data name="Search_BadContent" xml:space="preserve">
+    <value>The text to find is not a valid regular expression: {0}</value>
+  </data>
+  <data name="Search_BadEncoding" xml:space="preserve">
+    <value>This encoding cannot be used: {0}</value>
+  </data>
+  <data name="Search_RootFailed" xml:space="preserve">
+    <value>Could not read “{0}”: {1}</value>
+  </data>
+  <data name="Search_StatusRunning" xml:space="preserve">
+    <value>Searching… Found: {0}. Folders: {1}. Skipped: {2} folders, {3} files.</value>
+  </data>
+  <data name="Search_StatusDone" xml:space="preserve">
+    <value>Done. Found: {0}. Folders: {1}. Skipped: {2} folders, {3} files.</value>
+  </data>
+  <data name="Search_StatusStopped" xml:space="preserve">
+    <value>Stopped. Found: {0}. Folders: {1}. Skipped: {2} folders, {3} files.</value>
+  </data>
+  <data name="Search_StatusLimit" xml:space="preserve">
+    <value>Stopped at {0} results, the most that are shown. Folders: {1}. Skipped: {2} folders, {3} files.</value>
+  </data>
 </root>

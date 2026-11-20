@@ -65,6 +65,7 @@ public sealed class KeyMap
             (CommandIds.SortByMode, "Ctrl+Cmd+5"),
             (CommandIds.SortReverse, "Ctrl+Cmd+R"),
             (CommandIds.TabTogglePin, "Ctrl+Cmd+P"),
+            (CommandIds.SearchFiles, "Alt+F7"), (CommandIds.SearchFiles, "Cmd+F"),
         }.Select(b => (b.Item1, KeyChord.Parse(b.Item2))));
 
     /// <summary>All bindings in order; for a key map editor and for showing shortcuts in menus.</summary>

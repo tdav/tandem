@@ -55,6 +55,8 @@ public static class CommandIds
     public const string ViewToggleHidden = "view.toggleHidden";
     public const string ViewQuickView = "view.quickView";
 
+    public const string SearchFiles = "search.files";
+
     // Invoked from menus only; no default key binding.
     public const string ShellReveal = "shell.reveal";
     public const string ShellOpenTerminal = "shell.openTerminal";

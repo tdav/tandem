@@ -57,6 +57,7 @@ public class KeyMapTests
             "favorites.show=Cmd+D", "view.toggleHidden=Cmd+Shift+OemPeriod", "view.quickView=Ctrl+Q",
             "sort.byName=Ctrl+Cmd+1", "sort.byExtension=Ctrl+Cmd+2", "sort.bySize=Ctrl+Cmd+3", "sort.byDate=Ctrl+Cmd+4",
             "sort.byMode=Ctrl+Cmd+5", "sort.reverse=Ctrl+Cmd+R", "tab.togglePin=Ctrl+Cmd+P",
+            "search.files=Alt+F7", "search.files=Cmd+F",
         ];
 
         var expectedBindings = expected.Select(e => e.Split('=')).Select(p => (p[0], KeyChord.Parse(p[1])));

@@ -34,7 +34,7 @@ public sealed partial class TabViewModel : ObservableObject, IDisposable
 
     /// <summary>The last segment of the panel's <see cref="PanelViewModel.DisplayPath"/> (the name of the folder
     /// shown, or of the file a hosted provider lives in at its root), "/" for the root, "" before the first folder is
-    /// shown.</summary>
+    /// shown; a display path that does not start with '/' (a search result set's title) is the title as a whole.</summary>
     [ObservableProperty]
     public partial string Title { get; private set; }
 
@@ -103,6 +103,7 @@ public sealed partial class TabViewModel : ObservableObject, IDisposable
 
     private static string TitleOf(string displayPath)
     {
+        if (!displayPath.StartsWith('/')) return displayPath; // a free text, e.g. a search result set's title
         var trimmed = displayPath.TrimEnd('/');
         if (trimmed.Length == 0) return displayPath.Length == 0 ? "" : "/";
         return trimmed[(trimmed.LastIndexOf('/') + 1)..];

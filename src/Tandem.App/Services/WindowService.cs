@@ -1,16 +1,18 @@
 using Avalonia;
 using Avalonia.Controls;
 using Tandem.App.ViewModels.Editing;
+using Tandem.App.ViewModels.Search;
 using Tandem.App.ViewModels.Viewing;
 using Tandem.App.Views.Editing;
+using Tandem.App.Views.Search;
 using Tandem.App.Views.Viewing;
 using Tandem.Core.Vfs;
 
 namespace Tandem.App.Services;
 
 /// <summary>
-/// Shows the editor and viewer windows as independent windows (not owned, so each comes forward on its own), placed over
-/// <see cref="Owner"/> (the main window) when it is shown. Their "save changes?" question goes through
+/// Shows the editor, viewer and search windows as independent windows (not owned, so each comes forward on its own),
+/// placed over <see cref="Owner"/> (the main window) when it is shown. Their "save changes?" question goes through
 /// <paramref name="dialogs"/>; the files of <paramref name="providers"/> are told apart by what they really are, with
 /// links followed. UI thread only.
 /// </summary>
@@ -41,6 +43,19 @@ public sealed class WindowService(IDialogService dialogs, ProviderRegistry provi
     {
         ArgumentNullException.ThrowIfNull(viewer);
         Show(new ViewerWindow(viewer));
+    }
+
+    public void ShowSearch(SearchViewModel search)
+    {
+        ArgumentNullException.ThrowIfNull(search);
+        if (_open.OfType<SearchWindow>().FirstOrDefault() is not { } window)
+        {
+            Show(new SearchWindow(search));
+            return;
+        }
+        window.Attach(search);
+        if (window.WindowState == WindowState.Minimized) window.WindowState = WindowState.Normal;
+        window.Activate();
     }
 
     private void Show(Window window)
