@@ -9,8 +9,9 @@ namespace Tandem.App.ViewModels;
 public enum PanelErrorKind { AccessDenied, NotFound, Other }
 
 /// <summary>
-/// One file panel: the listing of a folder, sorted, with a cursor, moving in and out of folders and refreshing itself
-/// when the folder changes on disk.
+/// One file panel: the listing of a folder, sorted, with a cursor, moving in and out of folders (and of files that open
+/// as folders, through <see cref="ProviderRegistry.TryMountAsync"/>) and refreshing itself when the folder changes on
+/// disk. Where "up" goes, and whether there is a ".." row, is <see cref="ProviderRegistry.UpOf"/>'s answer.
 /// </summary>
 /// <remarks>
 /// Created and called on the UI thread; every observable change happens there. Reading, sorting and watching run in
@@ -38,6 +39,7 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
     private List<FileEntry> _entries = []; // every entry of CurrentPath, hidden ones included, unsorted
     private CancellationTokenSource? _loadCts;
     private int _loadVersion;
+    private int _navigationVersion; // counts the navigations started, so a slow mount can tell the panel moved on
     private LoadKind? _activeLoad;
     private bool _showingPreview;
     private int _previewVersion; // the load whose preview may still be shown; 0 once it has committed or failed
@@ -60,8 +62,14 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     public partial VfsPath CurrentPath { get; private set; }
 
-    /// <summary>The rows: ".." first (except at the root), then the entries in <see cref="Sort"/> order. Raises one
-    /// collection Reset per change of the listing.</summary>
+    /// <summary><see cref="CurrentPath"/> as the user reads it (<see cref="ProviderRegistry.DisplayPath"/>), e.g.
+    /// "/a/b.zip/docs"; "" until the first successful navigation. Changes together with <see cref="CurrentPath"/>, just
+    /// before it.</summary>
+    [ObservableProperty]
+    public partial string DisplayPath { get; private set; } = "";
+
+    /// <summary>The rows: ".." first (when <see cref="ProviderRegistry.UpOf"/> has somewhere to go), then the entries
+    /// in <see cref="Sort"/> order. Raises one collection Reset per change of the listing.</summary>
     public IReadOnlyList<EntryRowViewModel> Rows => _rows;
 
     /// <summary>The row under the cursor; -1 when there are no rows. Values outside the rows are clamped. Moving it
@@ -110,8 +118,16 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
     /// <summary>Raised after the panel has moved to a folder.</summary>
     public event EventHandler<VfsPath>? Navigated;
 
-    /// <summary>Raised when a file (not a folder) is opened with <see cref="ActivateAsync"/>.</summary>
+    /// <summary>Raised when <see cref="ActivateAsync"/> opens something with its application rather than entering
+    /// it: a file that does not open as a folder, or an application bundle.</summary>
     public event EventHandler<FileEntry>? FileActivated;
+
+    /// <summary>Raised when <see cref="EnterAsync"/> is used on a file that does not open as a folder.</summary>
+    public event EventHandler<FileEntry>? NotAFolder;
+
+    /// <summary>Raised when a file that opens as a folder could not be opened (<see cref="IOException"/>); the panel
+    /// stays where it is and <see cref="Error"/> is not set.</summary>
+    public event EventHandler<Exception>? OpenFailed;
 
     /// <summary>Shows <paramref name="path"/> with the cursor on <paramref name="focusName"/> (or the first row).
     /// On failure the previous folder stays and <see cref="Error"/> says why. Never throws for file-system errors.</summary>
@@ -120,21 +136,48 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
         if (await LoadAsync(LoadKind.Navigate, path, focusName)) Navigated?.Invoke(this, path);
     }
 
-    /// <summary>Enter: opens the folder (or link to a folder) under the cursor, goes up on "..", and raises
-    /// <see cref="FileActivated"/> for a file.</summary>
+    /// <summary>Enter: opens the folder (or link to a folder) under the cursor, goes up on "..", enters a file that
+    /// opens as a folder by its name, and raises <see cref="FileActivated"/> for any other file and for an application
+    /// bundle (<see cref="IsPackage"/>), which is launched rather than entered.</summary>
     public Task ActivateAsync()
     {
         var row = CursorRow;
         if (row is null) return Task.CompletedTask;
         if (row.IsParentLink) return GoUpAsync();
-        if (row.Entry!.IsDirectoryLike) return NavigateToAsync(row.Entry.Path);
-        FileActivated?.Invoke(this, row.Entry);
-        return Task.CompletedTask;
+        var entry = row.Entry!;
+        if (IsPackage(entry))
+        {
+            FileActivated?.Invoke(this, entry);
+            return Task.CompletedTask;
+        }
+        if (entry.IsDirectoryLike) return NavigateToAsync(entry.Path);
+        return OpenAsFolderAsync(entry, byContent: false);
     }
 
-    /// <summary>Moves to the parent folder with the cursor on the folder just left. Does nothing at the root.</summary>
+    /// <summary>Cmd+Down: goes into the folder, link to a folder or application bundle under the cursor (up on ".."),
+    /// or into a file that opens as a folder, its content read to decide; raises <see cref="NotAFolder"/> for a file
+    /// that does not.</summary>
+    public Task EnterAsync()
+    {
+        var row = CursorRow;
+        if (row is null) return Task.CompletedTask;
+        if (row.IsParentLink) return GoUpAsync();
+        var entry = row.Entry!;
+        return entry.IsDirectoryLike ? NavigateToAsync(entry.Path) : OpenAsFolderAsync(entry, byContent: true);
+    }
+
+    /// <summary>An application bundle: a folder (or link to one) on the local disk whose name ends in ".app".</summary>
+    public static bool IsPackage(FileEntry entry)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        return entry.IsDirectoryLike && entry.Path.ProviderId == VfsPath.LocalProviderId &&
+               entry.Name.EndsWith(".app", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Moves to where <see cref="ProviderRegistry.UpOf"/> leads (the parent, or the folder a hosted
+    /// provider lives in) with the cursor on the name it gives. Does nothing where there is no up.</summary>
     public Task GoUpAsync() =>
-        _hasPath && CurrentPath.Parent is { } parent ? NavigateToAsync(parent, CurrentPath.Name) : Task.CompletedTask;
+        _hasPath && UpOf(CurrentPath) is { } up ? NavigateToAsync(up.Directory, up.FocusName) : Task.CompletedTask;
 
     /// <summary>Reads the folder again, keeping the cursor and the selection on the same names. If the folder no
     /// longer exists, moves to its nearest existing ancestor.</summary>
@@ -153,6 +196,48 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
         var watch = _watch;
         _watch = null;
         DisposeInBackground(watch);
+    }
+
+    /// <summary>Asks the mounters (off the UI thread) what <paramref name="file"/> opens as and goes there; a file
+    /// that opens as nothing is activated (<paramref name="byContent"/> false) or reported as not a folder. A mount the
+    /// user cancelled does nothing; one that fails raises <see cref="OpenFailed"/>. Nothing happens either when the
+    /// panel has moved on meanwhile.</summary>
+    private async Task OpenAsFolderAsync(FileEntry file, bool byContent)
+    {
+        var navigation = _navigationVersion;
+        bool StillHere() => !_disposed && navigation == _navigationVersion;
+        var providers = _providers;
+        VfsPath? folder;
+        try
+        {
+            folder = await Task.Run(() => providers.TryMountAsync(file, byContent, CancellationToken.None));
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (IOException e)
+        {
+            if (StillHere()) OpenFailed?.Invoke(this, e);
+            return;
+        }
+        if (!StillHere()) return;
+        if (folder is { } target) await NavigateToAsync(target);
+        else if (byContent) NotAFolder?.Invoke(this, file);
+        else FileActivated?.Invoke(this, file);
+    }
+
+    /// <summary><see cref="ProviderRegistry.UpOf"/>; null when the path's provider is no longer registered.</summary>
+    private HostLocation? UpOf(VfsPath path)
+    {
+        try
+        {
+            return _providers.UpOf(path);
+        }
+        catch (KeyNotFoundException)
+        {
+            return null;
+        }
     }
 
     // ---- Loading -----------------------------------------------------------------------------------------
@@ -183,6 +268,7 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
         _loadCts = cts;
         var ct = cts.Token;
         var version = ++_loadVersion;
+        if (kind == LoadKind.Navigate) _navigationVersion++;
         _activeLoad = kind;
         IsLoading = true;
         _previewVersion = kind == LoadKind.Navigate ? version : 0;
@@ -192,17 +278,19 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
         try
         {
             var view = CurrentView;
+            var parentLink = _providers.UpOf(path) is not null;
             if (kind == LoadKind.Reorder)
             {
                 var entries = _entries;
-                var rows = await Task.Run(() => BuildRows(entries, path.IsRoot, view, sort: true));
+                var rows = await Task.Run(() => BuildRows(entries, parentLink, view, sort: true));
                 listing = new Listing(entries, rows, view, null);
             }
             else
             {
                 var provider = _providers.For(path);
                 var preview = kind == LoadKind.Navigate ? version : (int?)null;
-                listing = await Task.Run(() => ReadAsync(provider, path, kind == LoadKind.Navigate, preview, view, ct));
+                listing = await Task.Run(() =>
+                    ReadAsync(provider, path, parentLink, kind == LoadKind.Navigate, preview, view, ct));
             }
 
             // The options changed while the folder was being read or sorted: sort again before showing it.
@@ -210,7 +298,7 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
             {
                 var newView = CurrentView;
                 var entries = listing.Entries;
-                var rows = await Task.Run(() => BuildRows(entries, path.IsRoot, newView, sort: true));
+                var rows = await Task.Run(() => BuildRows(entries, parentLink, newView, sort: true));
                 listing = listing with { Rows = rows, View = newView };
             }
 
@@ -258,8 +346,8 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
 
     /// <summary>Background: subscribes to changes (before reading, so no change is missed), reads the folder and
     /// builds the sorted rows. Posts the first entries to the UI as a preview when the folder is large.</summary>
-    private async Task<Listing> ReadAsync(IFileSystemProvider provider, VfsPath path, bool watch, int? previewVersion,
-        ViewOptions view, CancellationToken ct)
+    private async Task<Listing> ReadAsync(IFileSystemProvider provider, VfsPath path, bool parentLink, bool watch,
+        int? previewVersion, ViewOptions view, CancellationToken ct)
     {
         var subscription = watch ? Subscribe(provider, path) : null;
         try
@@ -269,10 +357,10 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
             {
                 entries.Add(entry);
                 if (previewVersion is { } version && entries.Count == PreviewCount + 1)
-                    PostPreview(version, BuildRows(entries.GetRange(0, PreviewCount), path.IsRoot, view, sort: false));
+                    PostPreview(version, BuildRows(entries.GetRange(0, PreviewCount), parentLink, view, sort: false));
             }
             ct.ThrowIfCancellationRequested();
-            return new Listing(entries, BuildRows(entries, path.IsRoot, view, sort: true), view, subscription);
+            return new Listing(entries, BuildRows(entries, parentLink, view, sort: true), view, subscription);
         }
         catch
         {
@@ -281,8 +369,8 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
         }
     }
 
-    private static List<EntryRowViewModel> BuildRows(IReadOnlyList<FileEntry> entries, bool isRoot, ViewOptions view,
-        bool sort)
+    private static List<EntryRowViewModel> BuildRows(IReadOnlyList<FileEntry> entries, bool parentLink,
+        ViewOptions view, bool sort)
     {
         var visible = new List<FileEntry>(entries.Count);
         foreach (var entry in entries)
@@ -291,7 +379,7 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
         if (sort) visible.Sort(EntrySorter.Create(view.Sort));
 
         var rows = new List<EntryRowViewModel>(visible.Count + 1);
-        if (!isRoot) rows.Add(EntryRowViewModel.CreateParentLink());
+        if (parentLink) rows.Add(EntryRowViewModel.CreateParentLink());
         foreach (var entry in visible) rows.Add(new EntryRowViewModel(entry));
         return rows;
     }
@@ -326,6 +414,7 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
             // A change reported while the folder was being read may be missing from this listing.
             _watchRefreshAfterLoad = _watch?.ChangedBeforeCommit == true;
             DisposeInBackground(oldWatch);
+            DisplayPath = DisplayPathOf(path);
             CurrentPath = path;
             _hasPath = true;
             EndQuickSearch();
@@ -385,14 +474,15 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>The folder shown has disappeared: shows its nearest existing ancestor instead.</summary>
+    /// <summary>The folder shown has disappeared: shows the nearest existing folder up from it instead, going on
+    /// past the root of a hosted provider into its host (<see cref="ProviderRegistry.UpOf"/>).</summary>
     private async Task<bool> FallBackToAncestorAsync(VfsPath path, int version, CancellationToken ct)
     {
-        VfsPath? ancestor = null;
+        HostLocation? ancestor = null;
         try
         {
-            var provider = _providers.For(path);
-            ancestor = await Task.Run(() => FindNearestExistingAncestorAsync(provider, path, ct));
+            var providers = _providers;
+            ancestor = await Task.Run(() => FindNearestExistingAncestorAsync(providers, path, ct));
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -408,19 +498,22 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
             SetError(PanelErrorKind.NotFound, path);
             return false;
         }
-        await NavigateToAsync(target);
+        await NavigateToAsync(target.Directory, target.FocusName);
         return false; // the navigation reported its own result
     }
 
-    private static async Task<VfsPath?> FindNearestExistingAncestorAsync(IFileSystemProvider provider, VfsPath path,
-        CancellationToken ct)
+    private static async Task<HostLocation?> FindNearestExistingAncestorAsync(ProviderRegistry providers,
+        VfsPath path, CancellationToken ct)
     {
-        for (var candidate = path.Parent; candidate is { } directory; candidate = directory.Parent)
+        var seen = new HashSet<VfsPath> { path };
+        for (var up = providers.UpOf(path); up is { } location; up = providers.UpOf(location.Directory))
         {
+            var directory = location.Directory;
+            if (!seen.Add(directory)) return null; // host locations that lead around in a cycle
             try
             {
-                var entry = await provider.GetEntryAsync(directory, ct).ConfigureAwait(false);
-                if (entry?.IsDirectoryLike == true) return directory;
+                var entry = await providers.For(directory).GetEntryAsync(directory, ct).ConfigureAwait(false);
+                if (entry?.IsDirectoryLike == true) return location;
             }
             catch (Exception e) when (e is not OperationCanceledException)
             {
@@ -440,7 +533,21 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
     private void SetError(PanelErrorKind kind, VfsPath path)
     {
         ErrorKind = kind;
-        Error = Loc.Format($"Panel_Error_{kind}", path.Path);
+        Error = Loc.Format($"Panel_Error_{kind}", DisplayPathOf(path));
+    }
+
+    /// <summary><see cref="ProviderRegistry.DisplayPath"/>; the path itself when its provider is not
+    /// registered.</summary>
+    internal string DisplayPathOf(VfsPath path)
+    {
+        try
+        {
+            return _providers.DisplayPath(path);
+        }
+        catch (KeyNotFoundException)
+        {
+            return path.Path;
+        }
     }
 
     // ---- Watching ----------------------------------------------------------------------------------------

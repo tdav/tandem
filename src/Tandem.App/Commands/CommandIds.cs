@@ -25,6 +25,7 @@ public static class CommandIds
     public const string PanelMirror = "panel.mirror";
 
     public const string NavUp = "nav.up";
+    public const string NavEnter = "nav.enter";
     public const string NavBack = "nav.back";
     public const string NavForward = "nav.forward";
 

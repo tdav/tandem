@@ -52,6 +52,8 @@ public class ShellWindowTests : LanguageTestBase
         app.Left.CursorIndex = IndexOf(app.Left, "notes.txt");
 
         app.Press(Key.Enter, physical: PhysicalKey.Enter);
+        // The mounters are asked first, off the UI thread, whether the file opens as a folder.
+        await TestApp.WaitUntil(() => app.Shell.Calls.Count > 0);
 
         Assert.Equal([("open", "/home/notes.txt")], app.Shell.Calls);
         Assert.Empty(app.Failures);

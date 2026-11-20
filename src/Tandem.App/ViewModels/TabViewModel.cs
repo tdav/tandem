@@ -19,7 +19,7 @@ public sealed partial class TabViewModel : ObservableObject, IDisposable
     internal TabViewModel(PanelViewModel panel)
     {
         Panel = panel;
-        Title = TitleOf(panel.CurrentPath);
+        Title = TitleOf(panel.DisplayPath);
         panel.Navigated += OnNavigated;
         panel.PropertyChanged += OnPanelPropertyChanged;
     }
@@ -32,7 +32,9 @@ public sealed partial class TabViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     public partial bool IsPinned { get; set; }
 
-    /// <summary>The name of the folder shown, "/" for the root, "" before the first folder is shown.</summary>
+    /// <summary>The last segment of the panel's <see cref="PanelViewModel.DisplayPath"/> (the name of the folder
+    /// shown, or of the file a hosted provider lives in at its root), "/" for the root, "" before the first folder is
+    /// shown.</summary>
     [ObservableProperty]
     public partial string Title { get; private set; }
 
@@ -85,8 +87,10 @@ public sealed partial class TabViewModel : ObservableObject, IDisposable
     {
         switch (e.PropertyName)
         {
+            case nameof(PanelViewModel.DisplayPath):
+                Title = TitleOf(Panel.DisplayPath);
+                break;
             case nameof(PanelViewModel.CurrentPath):
-                Title = TitleOf(Panel.CurrentPath);
                 StateChanged?.Invoke(this, EventArgs.Empty);
                 break;
             case nameof(PanelViewModel.Sort):
@@ -97,6 +101,10 @@ public sealed partial class TabViewModel : ObservableObject, IDisposable
 
     partial void OnIsPinnedChanged(bool value) => StateChanged?.Invoke(this, EventArgs.Empty);
 
-    private static string TitleOf(VfsPath path) =>
-        path == default ? "" : path.IsRoot ? "/" : path.Name;
+    private static string TitleOf(string displayPath)
+    {
+        var trimmed = displayPath.TrimEnd('/');
+        if (trimmed.Length == 0) return displayPath.Length == 0 ? "" : "/";
+        return trimmed[(trimmed.LastIndexOf('/') + 1)..];
+    }
 }

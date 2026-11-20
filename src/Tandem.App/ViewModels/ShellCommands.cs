@@ -13,11 +13,12 @@ public sealed record OpenWithApps(FileEntry Entry, IReadOnlyList<AppInfo> Apps);
 /// <summary>
 /// The commands that hand items to macOS: Quick Look (F3, Cmd+Y), the text editor (F4), the properties dialog
 /// (Cmd+I), Reveal in Finder, a terminal in the current folder, and "Open With" (menu only); Enter on a file opens it
-/// with its default application.
+/// with its default application. Also tells the user when a panel's file cannot be opened as a folder, or is not one.
 /// </summary>
 /// <remarks>
 /// Created and used on the UI thread. Everything but the properties dialog works for the local provider only and is
-/// disabled elsewhere; Enter on a file elsewhere does nothing. A launch that fails (<see cref="IOException"/>), at once
+/// disabled elsewhere; Enter on a file elsewhere opens a copy of it made in the <see cref="TempFileStore"/> (off the UI
+/// thread): changes to the copy do not go back. A launch that fails (<see cref="IOException"/>), at once
 /// or when the launcher reports it a moment later (no application for the file, an item that is gone), is told to the
 /// user in words, once; anything unexpected goes to the failure handler. While Quick Look is open, moving the cursor
 /// shows the new item after a short pause (holding an arrow key starts one preview, not one per row); going to
@@ -42,6 +43,7 @@ public sealed class ShellCommands : IDisposable
     private readonly CommandRegistry _commands;
     private readonly ProviderRegistry _providers;
     private readonly IFileMetadataService? _metadata;
+    private readonly TempFileStore _temp;
     private readonly Action<Exception> _reportFailure;
     private readonly Func<TimeSpan, CancellationToken, Task> _delay;
     private readonly List<PanelViewModel> _watched = [];
@@ -56,7 +58,8 @@ public sealed class ShellCommands : IDisposable
     /// cursor; <see cref="Task.Delay(TimeSpan, CancellationToken)"/> when null.</param>
     public ShellCommands(WorkspaceViewModel workspace, IShellIntegration shell, IQuickLook quickLook,
         IDialogService dialogs, CommandRegistry commands, ProviderRegistry providers, IFileMetadataService? metadata,
-        Action<Exception> reportFailure, Func<TimeSpan, CancellationToken, Task>? quickLookDelay = null)
+        TempFileStore temp, Action<Exception> reportFailure,
+        Func<TimeSpan, CancellationToken, Task>? quickLookDelay = null)
     {
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
         _shell = shell ?? throw new ArgumentNullException(nameof(shell));
@@ -65,6 +68,7 @@ public sealed class ShellCommands : IDisposable
         _commands = commands ?? throw new ArgumentNullException(nameof(commands));
         _providers = providers ?? throw new ArgumentNullException(nameof(providers));
         _metadata = metadata;
+        _temp = temp ?? throw new ArgumentNullException(nameof(temp));
         _reportFailure = reportFailure ?? throw new ArgumentNullException(nameof(reportFailure));
         _delay = quickLookDelay ?? Task.Delay;
 
@@ -154,6 +158,8 @@ public sealed class ShellCommands : IDisposable
         {
             panel.PropertyChanged -= OnPanelPropertyChanged;
             panel.FileActivated -= OnFileActivated;
+            panel.NotAFolder -= OnNotAFolder;
+            panel.OpenFailed -= OnOpenFailed;
         }
         _watched.Clear();
     }
@@ -186,6 +192,8 @@ public sealed class ShellCommands : IDisposable
         {
             panel.PropertyChanged -= OnPanelPropertyChanged;
             panel.FileActivated -= OnFileActivated;
+            panel.NotAFolder -= OnNotAFolder;
+            panel.OpenFailed -= OnOpenFailed;
         }
         _watched.Clear();
         if (_workspace.IsLoaded)
@@ -194,6 +202,8 @@ public sealed class ShellCommands : IDisposable
             {
                 panel.PropertyChanged += OnPanelPropertyChanged;
                 panel.FileActivated += OnFileActivated;
+                panel.NotAFolder += OnNotAFolder;
+                panel.OpenFailed += OnOpenFailed;
                 _watched.Add(panel);
             }
             if (_activePanel is not null && _activePanel != _workspace.ActivePanel) ClosePreview();
@@ -227,12 +237,48 @@ public sealed class ShellCommands : IDisposable
 
     // ---- Opening ----------------------------------------------------------------------------------------
 
-    /// <summary>Enter on a file: its default application, for a local file only.</summary>
+    /// <summary>Enter on a file (or an application bundle): its default application; a file that is not on the local
+    /// disk is copied to the temporary files first and the copy is opened.</summary>
     private void OnFileActivated(object? sender, FileEntry entry)
     {
-        if (entry.Path.ProviderId != VfsPath.LocalProviderId) return;
-        _ = RunAsync(() => _shell.OpenDefault(entry.Path.Path), Loc.Format("Shell_OpenFailed", entry.Name));
+        var failureText = Loc.Format("Shell_OpenFailed", entry.Name);
+        if (entry.Path.ProviderId == VfsPath.LocalProviderId)
+            _ = RunAsync(() => _shell.OpenDefault(entry.Path.Path), failureText);
+        else
+            _ = OpenCopyAsync(entry, failureText);
     }
+
+    /// <summary>Copies <paramref name="entry"/> into the temporary files off the UI thread and opens the copy. A copy
+    /// that fails (<see cref="IOException"/>) is told as <paramref name="failureText"/>. Never throws.</summary>
+    private async Task OpenCopyAsync(FileEntry entry, string failureText)
+    {
+        string copy;
+        try
+        {
+            var (temp, provider) = (_temp, _providers.For(entry.Path));
+            copy = await Task.Run(() => temp.MaterializeAsync(provider, entry.Path, null, CancellationToken.None));
+        }
+        catch (IOException e)
+        {
+            if (!_disposed) await TellAsync(failureText, e);
+            return;
+        }
+        catch (Exception e)
+        {
+            _reportFailure(e);
+            return;
+        }
+        if (_disposed) return;
+        await RunAsync(() => _shell.OpenDefault(copy), failureText);
+    }
+
+    /// <summary>Cmd+Down on a file that does not open as a folder.</summary>
+    private void OnNotAFolder(object? sender, FileEntry entry) =>
+        _ = TellAsync(Loc.Format("Panel_NotAFolder", entry.Name), detail: null);
+
+    /// <summary>A file that opens as a folder could not be opened: told in words, the system's as detail.</summary>
+    private void OnOpenFailed(object? sender, Exception error) =>
+        _ = TellAsync(OperationTexts.ForFailure(error), error.Message);
 
     private Task EditAsync() =>
         LocalCursorEntry() is { IsDirectoryLike: false } entry
@@ -298,11 +344,13 @@ public sealed class ShellCommands : IDisposable
         }
     }
 
-    private async Task TellAsync(string text, Exception e)
+    private Task TellAsync(string text, Exception e) => TellAsync(text, e.Message);
+
+    private async Task TellAsync(string text, string? detail)
     {
         try
         {
-            await _dialogs.ShowMessageAsync(text, e.Message);
+            await _dialogs.ShowMessageAsync(text, detail);
         }
         catch (Exception failure)
         {

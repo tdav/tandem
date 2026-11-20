@@ -56,6 +56,9 @@ internal sealed class TestApp : IAsyncDisposable
     public MainWindow Window { get; private set; } = null!;
     public List<Exception> Failures { get; } = [];
 
+    /// <summary>The app's temporary files, in this app's temporary state folder.</summary>
+    public TempFileStore Temp => Main.Services.Temp;
+
     public PanelViewModel Left => Main.Workspace.Left.Active.Panel;
     public PanelViewModel Right => Main.Workspace.Right.Active.Panel;
 
@@ -76,12 +79,15 @@ internal sealed class TestApp : IAsyncDisposable
     public string LogFile => Path.Combine(StateDirectory, "logs", "tandem.log");
 
     /// <param name="trashCapable">Whether the in-memory "local disk" says it has a Trash (the real one does).</param>
+    /// <param name="tempDirectory">The folder of the app's temporary files.</param>
     /// <param name="extraProviders">Providers besides the "local disk", e.g. a non-local one.</param>
+    /// <param name="mounters">Mounters that open files as folders, added in order.</param>
     public static AppServices Services(InMemoryFileSystem fs, FakeVolumeService volumes, string logFile,
-        IDialogService? dialogs = null, ITrash? trash = null, bool trashCapable = false,
+        string tempDirectory, IDialogService? dialogs = null, ITrash? trash = null, bool trashCapable = false,
         ProviderCapabilities removedCapabilities = ProviderCapabilities.None, IShellIntegration? shell = null,
         IQuickLook? quickLook = null, IFileMetadataService? metadata = null,
-        IReadOnlyList<IFileSystemProvider>? extraProviders = null, IProcessRunner? processes = null)
+        IReadOnlyList<IFileSystemProvider>? extraProviders = null, IProcessRunner? processes = null,
+        IReadOnlyList<IFileMounter>? mounters = null)
     {
         var providers = new ProviderRegistry();
         var added = trashCapable ? ProviderCapabilities.Trash : ProviderCapabilities.None;
@@ -89,11 +95,12 @@ internal sealed class TestApp : IAsyncDisposable
             ? fs
             : new CapabilityProvider(fs, added, removedCapabilities));
         foreach (var provider in extraProviders ?? []) providers.Register(provider);
+        foreach (var mounter in mounters ?? []) providers.AddMounter(mounter);
         var platform = new FakePlatform();
         return new AppServices(providers, volumes, shell ?? platform, quickLook ?? platform, metadata,
             trash ?? platform,
             new InMemoryNativeCopy(fs), processes ?? platform, new OperationQueue(), new UnrestrictedAccessBroker(),
-            new ErrorLog(logFile), dialogs ?? new ScriptedDialogs());
+            new ErrorLog(logFile), dialogs ?? new ScriptedDialogs(), new TempFileStore(tempDirectory));
     }
 
     /// <param name="progressWindowDelay">How long before the progress window appears; never, when null.</param>
@@ -103,7 +110,7 @@ internal sealed class TestApp : IAsyncDisposable
         ProviderCapabilities removedCapabilities = ProviderCapabilities.None,
         Func<TimeSpan, CancellationToken, Task>? quickLookDelay = null,
         IReadOnlyList<IFileSystemProvider>? extraProviders = null, bool withMetadata = true,
-        IProcessRunner? processes = null)
+        IProcessRunner? processes = null, IReadOnlyList<IFileMounter>? mounters = null)
     {
         fs ??= DefaultFileSystem();
         var stateDirectory = Path.Combine(Path.GetTempPath(), "tandem-window-tests-" + Guid.NewGuid().ToString("N"));
@@ -111,8 +118,9 @@ internal sealed class TestApp : IAsyncDisposable
 
         var app = new TestApp(fs, new FakeVolumeService(), stateDirectory);
         app.Main = await Composition.StartAsync(
-            Services(fs, app.Volumes, app.LogFile, app.Dialogs, app.Trash, trashCapable, removedCapabilities,
-                app.Shell, app.QuickLook, withMetadata ? app.Metadata : null, extraProviders, processes),
+            Services(fs, app.Volumes, app.LogFile, Path.Combine(stateDirectory, "tmp"), app.Dialogs, app.Trash,
+                trashCapable, removedCapabilities, app.Shell, app.QuickLook, withMetadata ? app.Metadata : null,
+                extraProviders, processes, mounters),
             stateDirectory, Home,
             autosaveDelay: (_, ct) => Task.Delay(Timeout.Infinite, ct),
             progressWindowDelay: progressWindowDelay ?? ((_, ct) => Task.Delay(Timeout.Infinite, ct)),
@@ -133,6 +141,7 @@ internal sealed class TestApp : IAsyncDisposable
     {
         if (Window is { } window) window.Close();
         Main.Dispose();
+        Main.Services.Dispose();
         await Task.Yield();
         try
         {

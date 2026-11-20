@@ -78,6 +78,10 @@
     <value>Cannot open the folder {0}</value>
     <comment>{0} folder path</comment>
   </data>
+  <data name="Panel_NotAFolder" xml:space="preserve">
+    <value>“{0}” is not a folder and does not open as one.</value>
+    <comment>{0} file name</comment>
+  </data>
 
   <!-- Common buttons (verbs) -->
   <data name="Button_OK" xml:space="preserve">
@@ -318,6 +322,9 @@
   </data>
   <data name="Menu_nav_up" xml:space="preserve">
     <value>Enclosing Folder</value>
+  </data>
+  <data name="Menu_nav_enter" xml:space="preserve">
+    <value>Go Inside</value>
   </data>
   <data name="Menu_nav_back" xml:space="preserve">
     <value>Back</value>
@@ -719,6 +726,9 @@ Details were written to {1}.</value>
   <!-- Context menus of the panels (ContextMenuModel) -->
   <data name="Context_Open" xml:space="preserve">
     <value>Open</value>
+  </data>
+  <data name="Context_ShowPackageContents" xml:space="preserve">
+    <value>Show Package Contents</value>
   </data>
   <data name="Context_OpenWith" xml:space="preserve">
     <value>Open With</value>

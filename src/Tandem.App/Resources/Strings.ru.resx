@@ -73,6 +73,9 @@
   <data name="Panel_Error_Other" xml:space="preserve">
     <value>Не удалось открыть папку {0}</value>
   </data>
+  <data name="Panel_NotAFolder" xml:space="preserve">
+    <value>«{0}» — не папка и не открывается как папка.</value>
+  </data>
 
   <!-- Common buttons (verbs) -->
   <data name="Button_OK" xml:space="preserve">
@@ -310,6 +313,9 @@
   </data>
   <data name="Menu_nav_up" xml:space="preserve">
     <value>Наверх</value>
+  </data>
+  <data name="Menu_nav_enter" xml:space="preserve">
+    <value>Войти внутрь</value>
   </data>
   <data name="Menu_nav_back" xml:space="preserve">
     <value>Назад</value>
@@ -711,6 +717,9 @@
   <!-- Context menus of the panels (ContextMenuModel) -->
   <data name="Context_Open" xml:space="preserve">
     <value>Открыть</value>
+  </data>
+  <data name="Context_ShowPackageContents" xml:space="preserve">
+    <value>Показать содержимое пакета</value>
   </data>
   <data name="Context_OpenWith" xml:space="preserve">
     <value>Открыть в</value>

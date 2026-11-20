@@ -72,16 +72,20 @@ public class ShellCommandsTests : LanguageTestBase
     }
 
     [AvaloniaFact]
-    public async Task Enter_on_a_file_of_a_non_local_provider_does_nothing_and_says_nothing()
+    public async Task A_file_of_a_non_local_provider_that_cannot_be_copied_out_is_told_and_not_opened()
     {
-        await using var app = await StartAsync();
+        var remote = RemoteFileSystem();
+        remote.FailOn((op, path) => op == "OpenRead" && path.Path == "/shared/a.txt", () => new IOException("gone"));
+        await using var app = await TestApp.StartAsync(show: false, extraProviders: [remote]);
         await app.Left.NavigateToAsync(new VfsPath(Remote, "/shared"));
         Cursor(app.Left, "a.txt");
 
         await app.Left.ActivateAsync();
+        await TestApp.WaitUntil(() => app.Dialogs.Messages.Count > 0);
 
         Assert.Empty(app.Shell.Calls);
-        Assert.Empty(app.Dialogs.Messages);
+        Assert.Equal([(Loc.Format("Shell_OpenFailed", "a.txt"), "gone")], app.Dialogs.MessagesWithDetail);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(app.Temp.Directory));
         Assert.Empty(app.Failures);
     }
 
@@ -416,7 +420,7 @@ public class ShellCommandsTests : LanguageTestBase
         foreach (var item in menu.Where(i => i.CommandId is not null))
             Assert.Equal(app.Main.Commands.CanExecute(item.CommandId!), item.IsEnabled);
         Assert.False(menu.Single(i => i.LabelKey == "Context_Reveal").IsEnabled);
-        Assert.False(menu.Single(i => i.LabelKey == "Context_Open").IsEnabled); // a non-local file cannot be opened
+        Assert.True(menu.Single(i => i.LabelKey == "Context_Open").IsEnabled); // opened through a temporary copy
         Assert.True(menu.Single(i => i.LabelKey == "Context_Properties").IsEnabled);
     }
 

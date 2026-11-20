@@ -112,17 +112,23 @@ public sealed partial class SideViewModel : ObservableObject
 
     public void Activate() => _main.Workspace.ActiveSide = Side;
 
-    /// <summary>Turns the path row into an editor holding the current path.</summary>
+    /// <summary>How <paramref name="path"/> reads to the user (a history entry): see
+    /// <see cref="PanelViewModel.DisplayPath"/>.</summary>
+    public string DisplayPathOf(VfsPath path) => _panel?.DisplayPathOf(path) ?? path.Path;
+
+    /// <summary>Turns the path row into an editor holding the current path as the user reads it
+    /// (<see cref="PanelViewModel.DisplayPath"/>).</summary>
     public void BeginPathEdit()
     {
         if (_panel is null) return;
         Activate();
-        PathText = _panel.CurrentPath == default ? "" : _panel.CurrentPath.Path;
+        PathText = _panel.DisplayPath;
         Message = null;
         IsEditingPath = true;
     }
 
-    /// <summary>Enter in the path editor: goes to the typed folder ("~" is the home folder) and closes the editor.
+    /// <summary>Enter in the path editor: goes to the typed folder ("~" is the home folder) and closes the editor. The
+    /// path is in the panel's provider, except inside a hosted one (an archive), where it is on the local disk.
     /// If the folder cannot be shown, the reason is in the status row and the editor stays open. True on success.
     /// An unexpected failure is reported, not thrown, and leaves the editor open.</summary>
     public async Task<bool> CommitPathEditAsync()
@@ -142,7 +148,8 @@ public sealed partial class SideViewModel : ObservableObject
     {
         if (_panel is not { } panel) return false;
         var text = PathText.Trim();
-        var providerId = panel.CurrentPath == default ? VfsPath.LocalProviderId : panel.CurrentPath.ProviderId;
+        var current = panel.CurrentPath;
+        var providerId = current == default || IsNested(current) ? VfsPath.LocalProviderId : current.ProviderId;
         if (ParsePath(text, providerId, _main.Workspace.HomeDirectory) is not { } target)
         {
             Message = Loc.Format("Path_Invalid", text);
@@ -153,6 +160,20 @@ public sealed partial class SideViewModel : ObservableObject
         if (panel != _panel || panel.CurrentPath != target || panel.Error is not null) return false;
         IsEditingPath = false;
         return true;
+    }
+
+    /// <summary>Whether <paramref name="path"/> is inside a provider that lives in another (it has a host location),
+    /// or in one no longer registered.</summary>
+    private bool IsNested(VfsPath path)
+    {
+        try
+        {
+            return _main.Services.Providers.HostLocationOf(path) is not null;
+        }
+        catch (KeyNotFoundException)
+        {
+            return true;
+        }
     }
 
     /// <summary>Esc in the path editor: closes it without moving.</summary>

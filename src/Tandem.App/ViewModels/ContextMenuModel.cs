@@ -59,7 +59,9 @@ public sealed class ContextMenuItem
 /// space below the rows (acting on the folder).</summary>
 public static class ContextMenuModel
 {
-    /// <summary>Open, Open With ▸, Reveal in Finder, Quick Look, Copy, Move, Rename, Delete, Properties.</summary>
+    /// <summary>Open, (Show Package Contents, for an application bundle,) Open With ▸, Reveal in Finder, Quick Look,
+    /// Copy, Move, Rename, Delete, Properties. A file of a provider that is not the local disk opens through a
+    /// temporary copy, so Open is always available.</summary>
     public static IReadOnlyList<ContextMenuItem> ForRow(MainViewModel main)
     {
         ArgumentNullException.ThrowIfNull(main);
@@ -67,11 +69,15 @@ public static class ContextMenuModel
         var panel = main.Workspace.ActivePanel;
         var row = panel.CursorRow;
         var index = panel.CursorIndex;
-        var canOpen = row is not null && (row.IsDirectoryLike || ShellCommands.IsLocal(panel));
+        var open = new ContextMenuItem(null, "Context_Open", Loc.Get("Context_Open"), null, row is not null,
+            () => side.OpenRowAsync(index));
+        ContextMenuItem[] package = row?.Entry is { } entry && PanelViewModel.IsPackage(entry)
+            ? [Command(main, CommandIds.NavEnter, "Context_ShowPackageContents")]
+            : [];
         return
         [
-            new ContextMenuItem(null, "Context_Open", Loc.Get("Context_Open"), null, canOpen,
-                () => side.OpenRowAsync(index)),
+            open,
+            .. package,
             new ContextMenuItem(CommandIds.ShellOpenWith, "Context_OpenWith", Loc.Get("Context_OpenWith"),
                 ChordOf(main, CommandIds.ShellOpenWith), main.Commands.CanExecute(CommandIds.ShellOpenWith), null,
                 async () => await OpenWithItemsAsync(main) ?? NoApps()),

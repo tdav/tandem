@@ -111,7 +111,7 @@
             </Button>
             <Border x:Name="PathRow" Grid.Column="2" Classes.active="{Binding IsActive}" Padding="6,2">
                 <Panel>
-                    <TextBlock x:Name="PathLabel" Text="{Binding Panel.CurrentPath.Path}" VerticalAlignment="Center"
+                    <TextBlock x:Name="PathLabel" Text="{Binding Panel.DisplayPath}" VerticalAlignment="Center"
                                TextTrimming="CharacterEllipsis" IsVisible="{Binding !IsEditingPath}" />
                     <TextBox x:Name="PathEditor" Text="{Binding PathText}" IsVisible="{Binding IsEditingPath}"
                              MinHeight="0" Padding="4,1" />

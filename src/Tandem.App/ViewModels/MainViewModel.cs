@@ -70,7 +70,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             services.NativeCopy, Commands, Operations, Interaction, ReportFailure);
         Drops = new DropHandler(workspace, Files);
         Shell = new ShellCommands(workspace, services.Shell, services.QuickLook, services.Dialogs, Commands,
-            services.Providers, services.Metadata, ReportFailure, quickLookDelay);
+            services.Providers, services.Metadata, services.Temp, ReportFailure, quickLookDelay);
         CommandLine = new CommandLineViewModel(workspace, services.Processes, workspace.HomeDirectory);
         Commands.RaiseCanExecuteChanged();
         workspace.PropertyChanged += OnWorkspacePropertyChanged;
@@ -369,6 +369,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Commands.Register(CommandIds.PanelSwap, Workspace.SwapPanelsAsync);
         Commands.Register(CommandIds.PanelMirror, Workspace.MirrorToOtherAsync);
         Commands.Register(CommandIds.NavUp, () => Panel().GoUpAsync());
+        Commands.Register(CommandIds.NavEnter, () => Panel().EnterAsync());
         Commands.Register(CommandIds.NavBack, () => ActiveTabs().GoBackAsync());
         Commands.Register(CommandIds.NavForward, () => ActiveTabs().GoForwardAsync());
         On(CommandIds.PathEdit, () => ActiveSide.BeginPathEdit());

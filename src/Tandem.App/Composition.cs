@@ -14,7 +14,9 @@ namespace Tandem.App;
 
 /// <summary>Everything the view models use from outside the app: file systems, platform services, the operation
 /// queue, the error log. The app gets the real ones from <see cref="Composition.CreatePlatformServices"/>; tests pass in-memory and
-/// fake ones. Without <see cref="Metadata"/> the properties dialog shows tags and owner as unavailable.</summary>
+/// fake ones. Without <see cref="Metadata"/> the properties dialog shows tags and owner as unavailable.
+/// <see cref="Temp"/> holds the copies of files opened from providers that are not the local disk; it is emptied when
+/// it is created (at start) and when the services are disposed (at exit).</summary>
 public sealed record AppServices(
     ProviderRegistry Providers,
     IVolumeService Volumes,
@@ -27,21 +29,25 @@ public sealed record AppServices(
     OperationQueue Operations,
     IFileAccessBroker AccessBroker,
     ErrorLog Log,
-    IDialogService Dialogs) : IDisposable
+    IDialogService Dialogs,
+    TempFileStore Temp) : IDisposable
 {
-    /// <summary>Disposes the services that hold resources (the volume watch).</summary>
+    /// <summary>Disposes the services that hold resources (the volume watch) and empties <see cref="Temp"/>.</summary>
     public void Dispose()
     {
         if (Volumes is IDisposable volumes) volumes.Dispose();
+        Temp.Dispose();
     }
 }
 
 /// <summary>The composition root: builds the services and view models and starts them in the right order.</summary>
 public static class Composition
 {
-    /// <summary>The real services: the local disk with unrestricted access, and the macOS implementations.</summary>
+    /// <summary>The real services: the local disk with unrestricted access, the macOS implementations, and the
+    /// temporary files in <see cref="TempFileStore.DefaultDirectory"/> of <paramref name="homeDirectory"/> (emptied
+    /// now).</summary>
     [SupportedOSPlatform("macos")]
-    public static AppServices CreatePlatformServices(ErrorLog log)
+    public static AppServices CreatePlatformServices(ErrorLog log, string homeDirectory)
     {
         var broker = new UnrestrictedAccessBroker();
         var providers = new ProviderRegistry();
@@ -49,7 +55,8 @@ public static class Composition
         var processes = new ProcessRunner();
         return new AppServices(providers, new MacVolumeService(), new MacShellIntegration(processes),
             new MacQuickLook(processes), new MacFileMetadataService(broker), new MacTrash(broker),
-            new MacNativeCopy(broker), processes, new OperationQueue(), broker, log, new DialogService());
+            new MacNativeCopy(broker), processes, new OperationQueue(), broker, log, new DialogService(),
+            new TempFileStore(TempFileStore.DefaultDirectory(homeDirectory)));
     }
 
     /// <summary>Where the app writes unexpected errors: <c>~/Library/Logs/Tandem/tandem.log</c>.</summary>

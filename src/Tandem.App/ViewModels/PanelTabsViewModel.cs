@@ -124,13 +124,15 @@ public sealed partial class PanelTabsViewModel : ObservableObject, IDisposable
 
     public Task GoForwardAsync() => Active.GoForwardAsync();
 
-    /// <summary>The tabs as saved; a tab that shows no folder is saved on the fallback folder of the last restore.</summary>
+    /// <summary>The tabs as saved, each at <see cref="ProviderRegistry.PersistentLocationOf"/> its folder (inside an
+    /// archive: the archive's folder). A tab that shows no folder, or whose way out of a hosted provider is lost, is
+    /// saved on the fallback folder of the last restore.</summary>
     public PanelState ToState()
     {
         var active = Active;
         var tabs = _tabs.Select(tab =>
         {
-            var path = tab.Panel.CurrentPath == default ? _fallback : tab.Panel.CurrentPath;
+            var path = tab.Panel.CurrentPath == default ? _fallback : PersistentLocationOf(tab.Panel.CurrentPath);
             var sort = tab.Panel.Sort;
             return new TabState(path.ProviderId, path.Path, sort.Column, sort.Descending, tab.IsPinned);
         }).ToList();
@@ -220,6 +222,18 @@ public sealed partial class PanelTabsViewModel : ObservableObject, IDisposable
         catch (Exception e) when (e is KeyNotFoundException or ArgumentException)
         {
             return null;
+        }
+    }
+
+    private VfsPath PersistentLocationOf(VfsPath path)
+    {
+        try
+        {
+            return _providers.PersistentLocationOf(path);
+        }
+        catch (Exception e) when (e is KeyNotFoundException or InvalidOperationException)
+        {
+            return _fallback;
         }
     }
 

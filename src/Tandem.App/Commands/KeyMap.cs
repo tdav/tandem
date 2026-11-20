@@ -40,6 +40,7 @@ public sealed class KeyMap
             (CommandIds.PanelSwap, "Cmd+U"),
             (CommandIds.PanelMirror, "Cmd+Shift+U"),
             (CommandIds.NavUp, "Back"), (CommandIds.NavUp, "Cmd+Up"),
+            (CommandIds.NavEnter, "Cmd+Down"),
             (CommandIds.NavBack, "Cmd+OemOpenBrackets"),
             (CommandIds.NavForward, "Cmd+OemCloseBrackets"),
             (CommandIds.PathEdit, "Cmd+Shift+G"),

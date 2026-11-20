@@ -32,7 +32,8 @@ public static class MainMenu
 
     private static readonly string[] GoCommands =
     [
-        CommandIds.NavUp, CommandIds.NavBack, CommandIds.NavForward, CommandIds.PathEdit, CommandIds.FavoritesShow, "-",
+        CommandIds.NavUp, CommandIds.NavEnter, CommandIds.NavBack, CommandIds.NavForward, CommandIds.PathEdit,
+        CommandIds.FavoritesShow, "-",
         CommandIds.PanelSwitch, CommandIds.PanelSwap, CommandIds.PanelMirror, CommandIds.PanelRefresh, "-",
         CommandIds.CmdlineFocus,
     ];
