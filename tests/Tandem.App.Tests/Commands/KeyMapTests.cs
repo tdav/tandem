@@ -1,5 +1,6 @@
 using System.Reflection;
 using Tandem.App.Commands;
+using Tandem.Core.Settings;
 
 namespace Tandem.App.Tests.Commands;
 
@@ -51,7 +52,8 @@ public class KeyMapTests
             "panel.switch=Tab", "panel.refresh=Cmd+R", "panel.swap=Cmd+U", "panel.mirror=Cmd+Shift+U",
             "nav.up=Back", "nav.up=Cmd+Up", "nav.enter=Cmd+Down", "nav.back=Cmd+OemOpenBrackets",
             "nav.forward=Cmd+OemCloseBrackets",
-            "path.edit=Cmd+Shift+G", "cmdline.focus=Cmd+L", "select.toggleDown=Space", "select.all=Cmd+A",
+            "path.edit=Cmd+Shift+G", "cmdline.focus=Cmd+L", "select.toggleDown=Space", "select.toggleDown=Insert",
+            "select.all=Cmd+A",
             "select.byMask=Cmd+OemPlus", "unselect.byMask=Cmd+OemMinus", "select.invert=Cmd+Shift+A",
             "tab.new=Cmd+T", "tab.close=Cmd+W", "tab.next=Ctrl+Tab", "tab.prev=Ctrl+Shift+Tab",
             "favorites.show=Cmd+D", "view.toggleHidden=Cmd+Shift+OemPeriod", "view.quickView=Ctrl+Q",
@@ -160,5 +162,119 @@ public class KeyMapTests
 
         Assert.Single(map.Bindings);
         Assert.Null(map.Find(KeyChord.Parse("F6")));
+    }
+
+    // --- Overrides from the settings ---
+
+    private static KeyChord C(string text) => KeyChord.Parse(text);
+
+    private static KeyMap Override(params KeyBindingOverride[] overrides) => KeyMap.Default.WithOverrides(overrides);
+
+    [Fact]
+    public void Default_map_binds_Insert_to_select_toggleDown()
+    {
+        Assert.Equal(CommandIds.SelectToggleDown, KeyMap.Default.Find(C("Insert")));
+        Assert.Equal([C("Space"), C("Insert")], KeyMap.Default.ChordsFor(CommandIds.SelectToggleDown));
+    }
+
+    [Fact]
+    public void Override_replaces_chords_of_that_command_only()
+    {
+        var map = Override(new KeyBindingOverride(CommandIds.FileCopy, ["Ctrl+Cmd+K", "Shift+F5"]));
+
+        Assert.Equal([C("Ctrl+Cmd+K"), C("Shift+F5")], map.ChordsFor(CommandIds.FileCopy));
+        Assert.Null(map.Find(C("F5")));
+        Assert.Null(map.Find(C("Cmd+5")));
+        // Every other command keeps its chords, and the table its order.
+        var others = KeyMap.Default.Bindings.Where(b => b.CommandId != CommandIds.FileCopy);
+        Assert.Equal(others, map.Bindings.Where(b => b.CommandId != CommandIds.FileCopy));
+        Assert.Equal(KeyMap.Default.Bindings.ToList().FindIndex(b => b.CommandId == CommandIds.FileCopy),
+            map.Bindings.ToList().FindIndex(b => b.CommandId == CommandIds.FileCopy));
+    }
+
+    [Fact]
+    public void Override_takes_a_chord_away_from_its_default_owner()
+    {
+        var map = Override(new KeyBindingOverride(CommandIds.FileCopy, ["Ctrl+Cmd+P"]));
+
+        Assert.Equal(CommandIds.FileCopy, map.Find(C("Ctrl+Cmd+P")));
+        Assert.Empty(map.ChordsFor(CommandIds.TabTogglePin));
+    }
+
+    [Fact]
+    public void Empty_chord_list_unbinds_the_command()
+    {
+        var map = Override(new KeyBindingOverride(CommandIds.ViewQuickView, []));
+
+        Assert.Empty(map.ChordsFor(CommandIds.ViewQuickView));
+        Assert.Null(map.Find(C("Ctrl+Q")));
+    }
+
+    [Fact]
+    public void Unknown_command_and_bad_chord_are_ignored()
+    {
+        var map = Override(
+            new KeyBindingOverride("no.such.command", ["F5"]),
+            new KeyBindingOverride(CommandIds.FileMove, ["Cmd+K", "Bogus+Q", "", null!, "K", "Enter", "Cmd+K"]),
+            new KeyBindingOverride(CommandIds.FileEdit, ["Cmd+Cmd+E", "Down"]),
+            new KeyBindingOverride(CommandIds.FileView, null!),
+            null!);
+
+        Assert.Equal(CommandIds.FileCopy, map.Find(C("F5")));
+        Assert.Equal([C("Cmd+K")], map.ChordsFor(CommandIds.FileMove));
+        // An override none of whose chords can be used, or without a list at all, changes nothing.
+        Assert.Equal(KeyMap.Default.ChordsFor(CommandIds.FileEdit), map.ChordsFor(CommandIds.FileEdit));
+        Assert.Equal(KeyMap.Default.ChordsFor(CommandIds.FileView), map.ChordsFor(CommandIds.FileView));
+        Assert.Null(map.Find(C("K")));
+    }
+
+    [Fact]
+    public void Later_override_wins_a_disputed_chord()
+    {
+        var map = Override(
+            new KeyBindingOverride(CommandIds.FileCopy, ["Cmd+K", "Shift+F5"]),
+            new KeyBindingOverride(CommandIds.FileMove, ["Cmd+K"]));
+
+        Assert.Equal(CommandIds.FileMove, map.Find(C("Cmd+K")));
+        Assert.Equal([C("Shift+F5")], map.ChordsFor(CommandIds.FileCopy));
+        Assert.Equal([C("Cmd+K")], map.ChordsFor(CommandIds.FileMove));
+    }
+
+    [Fact]
+    public void Override_can_bind_a_menu_only_command()
+    {
+        var map = Override(new KeyBindingOverride(CommandIds.ShellReveal, ["Cmd+Alt+R"]));
+
+        Assert.Equal(CommandIds.ShellReveal, map.Find(C("Cmd+Alt+R")));
+    }
+
+    [Fact]
+    public void OverridesAgainst_lists_only_changed_commands()
+    {
+        Assert.Empty(KeyMap.Default.OverridesAgainst(KeyMap.Default));
+
+        var map = Override(new KeyBindingOverride(CommandIds.FileCopy, ["Ctrl+Cmd+P"]));
+        var overrides = map.OverridesAgainst(KeyMap.Default);
+
+        Assert.Equal([CommandIds.FileCopy, CommandIds.TabTogglePin], overrides.Select(o => o.CommandId).Order());
+        Assert.Equal(["Ctrl+Cmd+P"], overrides.Single(o => o.CommandId == CommandIds.FileCopy).Chords);
+        Assert.Empty(overrides.Single(o => o.CommandId == CommandIds.TabTogglePin).Chords);
+    }
+
+    [Fact]
+    public void OverridesAgainst_roundtrips_through_WithOverrides()
+    {
+        var map = Override(
+            new KeyBindingOverride(CommandIds.FileCopy, ["Ctrl+Cmd+P", "Shift+F5"]),
+            new KeyBindingOverride(CommandIds.ViewQuickView, []),
+            new KeyBindingOverride(CommandIds.ShellReveal, ["Cmd+Alt+R"]),
+            new KeyBindingOverride(CommandIds.TabDuplicate, ["Cmd+Alt+T"]),
+            new KeyBindingOverride(CommandIds.FileRename, ["F2", "Shift+F6"]));
+
+        var again = KeyMap.Default.WithOverrides(map.OverridesAgainst(KeyMap.Default));
+
+        Assert.Equal(map.Bindings, again.Bindings);
+        Assert.Equal(["F2", "Shift+F6"],
+            map.OverridesAgainst(KeyMap.Default).Single(o => o.CommandId == CommandIds.FileRename).Chords);
     }
 }

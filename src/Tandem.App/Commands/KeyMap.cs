@@ -1,3 +1,5 @@
+using Tandem.Core.Settings;
+
 namespace Tandem.App.Commands;
 
 /// <summary>
@@ -45,7 +47,7 @@ public sealed class KeyMap
             (CommandIds.NavForward, "Cmd+OemCloseBrackets"),
             (CommandIds.PathEdit, "Cmd+Shift+G"),
             (CommandIds.CmdlineFocus, "Cmd+L"),
-            (CommandIds.SelectToggleDown, "Space"),
+            (CommandIds.SelectToggleDown, "Space"), (CommandIds.SelectToggleDown, "Insert"),
             (CommandIds.SelectAll, "Cmd+A"),
             (CommandIds.SelectByMask, "Cmd+OemPlus"),
             (CommandIds.UnselectByMask, "Cmd+OemMinus"),
@@ -72,6 +74,71 @@ public sealed class KeyMap
 
     /// <summary>The id of the command bound to <paramref name="chord"/>, or null.</summary>
     public string? Find(KeyChord chord) => _commandByChord.GetValueOrDefault(chord);
+
+    /// <summary>
+    /// This map with the user's overrides applied in order. Each override of a command in <see cref="CommandIds.All"/>
+    /// replaces that command's chords with its own (in their order, where the command's chords stood), keeping those
+    /// that parse and <see cref="KeyChordRules.IsAssignable"/> allows; a chord it takes is taken away from every other
+    /// command, so a later override wins a chord two of them name. An empty list leaves the command without chords.
+    /// Overrides of unknown commands, without a chord list, or whose chords are all unusable change nothing. Never
+    /// throws for the overrides' content.
+    /// </summary>
+    public KeyMap WithOverrides(IReadOnlyList<KeyBindingOverride> overrides)
+    {
+        ArgumentNullException.ThrowIfNull(overrides);
+
+        var order = new List<string>();
+        var chordsOf = new Dictionary<string, List<KeyChord>>();
+        foreach (var (commandId, chord) in Bindings)
+        {
+            if (!chordsOf.TryGetValue(commandId, out var list))
+            {
+                chordsOf[commandId] = list = [];
+                order.Add(commandId);
+            }
+            list.Add(chord);
+        }
+
+        foreach (var binding in overrides)
+        {
+            if (binding?.Chords is null || !CommandIds.All.Contains(binding.CommandId)) continue;
+            var given = binding.Chords.Select(TryParse).OfType<KeyChord>().Where(KeyChordRules.IsAssignable)
+                .Distinct().ToList();
+            if (given.Count == 0 && binding.Chords.Count > 0) continue;
+
+            foreach (var list in chordsOf.Values) list.RemoveAll(given.Contains);
+            if (!chordsOf.ContainsKey(binding.CommandId)) order.Add(binding.CommandId);
+            chordsOf[binding.CommandId] = given;
+        }
+
+        return new KeyMap(order.SelectMany(id => chordsOf[id].Select(chord => (id, chord))));
+    }
+
+    /// <summary>The overrides that turn <paramref name="defaults"/> into this map: one for each command whose chords
+    /// (or their order) differ, holding all of its chords as text; none when the maps bind alike.</summary>
+    public IReadOnlyList<KeyBindingOverride> OverridesAgainst(KeyMap defaults)
+    {
+        ArgumentNullException.ThrowIfNull(defaults);
+        return defaults.Bindings.Concat(Bindings)
+            .Select(b => b.CommandId)
+            .Distinct()
+            .Where(id => !ChordsFor(id).SequenceEqual(defaults.ChordsFor(id)))
+            .Select(id => new KeyBindingOverride(id, ChordsFor(id).Select(c => c.ToString()).ToArray()))
+            .ToArray();
+    }
+
+    private static KeyChord? TryParse(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        try
+        {
+            return KeyChord.Parse(text);
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
+    }
 
     /// <summary>The chords bound to a command, primary first; empty if it has none.</summary>
     public IReadOnlyList<KeyChord> ChordsFor(string commandId) =>

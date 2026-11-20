@@ -123,6 +123,19 @@ public class MainWindowTests : LanguageTestBase
     }
 
     [AvaloniaFact]
+    public async Task Insert_selects_and_moves_down()
+    {
+        await using var app = await TestApp.StartAsync();
+        app.Left.CursorIndex = IndexOf(app.Left, "docs");
+        app.Pump();
+
+        app.Press(Key.Insert);
+
+        Assert.True(app.Left.Rows[IndexOf(app.Left, "docs")].IsSelected);
+        Assert.Equal(IndexOf(app.Left, "docs") + 1, app.Left.CursorIndex);
+    }
+
+    [AvaloniaFact]
     public async Task Arrows_move_the_cursor_and_shift_marks()
     {
         await using var app = await TestApp.StartAsync();
@@ -437,6 +450,34 @@ public class MainWindowTests : LanguageTestBase
             buttons.Select(b => b.Tag as string));
         Assert.Equal(["F3", "F4", "F5", "F6", "F7", "F8"], app.Main.FKeys.Select(k => k.Key));
         Assert.Equal("Copy", app.Main.FKeys[2].Label);
+    }
+
+    [AvaloniaFact]
+    public async Task Main_menu_shows_the_new_shortcut()
+    {
+        await using var app = await TestApp.StartAsync();
+        NativeMenuItem Item(string id) =>
+            AllItems(NativeMenu.GetMenu(app.Window)!).Single(i => i.CommandParameter as string == id);
+        Assert.Equal(new KeyGesture(Key.F5), Item(CommandIds.FileCopy).Gesture);
+
+        app.Main.Settings.Update(app.Main.Settings.Current with
+        {
+            KeyBindings =
+            [
+                new KeyBindingOverride(CommandIds.FileCopy, ["Ctrl+Cmd+K"]),
+                new KeyBindingOverride(CommandIds.ViewQuickView, []),
+            ],
+        });
+        app.Pump();
+
+        Assert.Equal(new KeyGesture(Key.K, KeyModifiers.Control | KeyModifiers.Meta), Item(CommandIds.FileCopy).Gesture);
+        Assert.Null(Item(CommandIds.ViewQuickView).Gesture);
+        Assert.Equal(new KeyGesture(Key.F6), Item(CommandIds.FileMove).Gesture);
+
+        // The key itself, pressed in the window, runs the command.
+        app.Left.CursorIndex = IndexOf(app.Left, "notes.txt");
+        app.Press(Key.K, RawInputModifiers.Control | RawInputModifiers.Meta, PhysicalKey.K);
+        await TestApp.WaitUntil(() => app.Dialogs.CopyMoveRequests.Count == 1);
     }
 
     [AvaloniaFact]

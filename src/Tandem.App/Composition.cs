@@ -66,12 +66,14 @@ public static class Composition
     public static string DefaultLogFile(string homeDirectory) =>
         Path.Combine(homeDirectory, "Library", "Logs", "Tandem", "tandem.log");
 
-    /// <summary>The main view model on <paramref name="services"/>; not loaded yet.</summary>
+    /// <summary>The main view model on <paramref name="services"/> and <paramref name="settings"/>; not loaded
+    /// yet.</summary>
     /// <param name="progressWindowDelay">How long an operation runs before the progress window appears; see
     /// <see cref="OperationsViewModel"/>.</param>
     /// <param name="quickLookDelay">How long the cursor rests before an open Quick Look or quick-view panel follows
     /// it; see <see cref="ShellCommands"/> and <see cref="ViewModels.Viewing.QuickViewViewModel"/>.</param>
-    public static MainViewModel Build(AppServices services, JsonStateStore store, string homeDirectory,
+    public static MainViewModel Build(AppServices services, JsonStateStore store, SettingsService settings,
+        string homeDirectory,
         Func<TimeSpan, CancellationToken, Task>? autosaveDelay = null,
         Func<TimeSpan, CancellationToken, Task>? progressWindowDelay = null,
         Func<TimeSpan, CancellationToken, Task>? quickLookDelay = null)
@@ -79,13 +81,14 @@ public static class Composition
         ArgumentNullException.ThrowIfNull(services);
         var workspace = new WorkspaceViewModel(services.Providers, store, homeDirectory, autosaveDelay,
             e => services.Log.Write(e, "settings"));
-        return new MainViewModel(workspace, services, KeyMap.Default, progressWindowDelay, quickLookDelay);
+        return new MainViewModel(workspace, services, settings, progressWindowDelay, quickLookDelay);
     }
 
     /// <summary>
-    /// Starts the app's model in order: reads the saved state off the UI thread, applies its language before any
-    /// view model text exists, builds the view models and opens the saved tabs. The result is loaded and ready to be
-    /// shown. One <see cref="JsonStateStore"/> serves the whole session.
+    /// Starts the app's model in order: reads the saved state and the settings (<c>settings.json</c>, beside
+    /// <c>state.json</c>) off the UI thread, applies the language before any view model text exists, builds the view
+    /// models and opens the saved tabs. The result is loaded and ready to be shown. One <see cref="JsonStateStore"/>
+    /// and one <see cref="SettingsService"/> serve the whole session; a failed settings save is logged.
     /// </summary>
     public static async Task<MainViewModel> StartAsync(AppServices services, string stateDirectory,
         string homeDirectory, Func<TimeSpan, CancellationToken, Task>? autosaveDelay = null,
@@ -94,9 +97,15 @@ public static class Composition
     {
         ArgumentNullException.ThrowIfNull(services);
         var store = new JsonStateStore(stateDirectory);
-        var state = await Task.Run(() => store.Load(homeDirectory));
+        var settings = new SettingsService(new JsonSettingsStore(stateDirectory),
+            e => services.Log.Write(e, "settings"));
+        var state = await Task.Run(() =>
+        {
+            settings.Load();
+            return store.Load(homeDirectory);
+        });
         Loc.SetLanguage(state.Language);
-        var main = Build(services, store, homeDirectory, autosaveDelay, progressWindowDelay, quickLookDelay);
+        var main = Build(services, store, settings, homeDirectory, autosaveDelay, progressWindowDelay, quickLookDelay);
         try
         {
             await main.Workspace.LoadAsync(state);

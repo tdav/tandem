@@ -109,17 +109,20 @@ internal sealed class TestApp : IAsyncDisposable
     }
 
     /// <param name="progressWindowDelay">How long before the progress window appears; never, when null.</param>
+    /// <param name="settings">Written to the state folder's <c>settings.json</c> before start; none when null.</param>
     public static async Task<TestApp> StartAsync(InMemoryFileSystem? fs = null, AppState? state = null,
         bool show = true, bool trashCapable = false,
         Func<TimeSpan, CancellationToken, Task>? progressWindowDelay = null,
         ProviderCapabilities removedCapabilities = ProviderCapabilities.None,
         Func<TimeSpan, CancellationToken, Task>? quickLookDelay = null,
         IReadOnlyList<IFileSystemProvider>? extraProviders = null, bool withMetadata = true,
-        IProcessRunner? processes = null, IReadOnlyList<IFileMounter>? mounters = null)
+        IProcessRunner? processes = null, IReadOnlyList<IFileMounter>? mounters = null,
+        AppSettings? settings = null)
     {
         fs ??= DefaultFileSystem();
         var stateDirectory = Path.Combine(Path.GetTempPath(), "tandem-window-tests-" + Guid.NewGuid().ToString("N"));
         new JsonStateStore(stateDirectory).Save(state ?? AppState.Default(Home) with { Language = "en" });
+        if (settings is not null) new JsonSettingsStore(stateDirectory).Save(settings);
 
         var app = new TestApp(fs, new FakeVolumeService(), stateDirectory);
         app.Main = await Composition.StartAsync(

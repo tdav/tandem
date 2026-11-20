@@ -42,6 +42,48 @@ public class MainViewModelTests : LanguageTestBase
     }
 
     [AvaloniaFact]
+    public async Task Changed_binding_works_without_restart()
+    {
+        await using var app = await TestApp.StartAsync(show: false);
+        var panel = app.Main.Workspace.ActivePanel;
+        panel.CursorIndex = panel.Rows.ToList().FindIndex(r => r.Name == "notes.txt");
+        var keyMapChanges = 0;
+        app.Main.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(MainViewModel.KeyMap)) keyMapChanges++;
+        };
+
+        app.Main.Settings.Update(app.Main.Settings.Current with
+        {
+            KeyBindings = [new KeyBindingOverride(CommandIds.FileCopy, ["Ctrl+Cmd+K"])],
+        });
+
+        Assert.Equal(1, keyMapChanges);
+        Assert.Equal(CommandIds.FileCopy, app.Main.KeyMap.Find(KeyChord.Parse("Ctrl+Cmd+K")));
+        Assert.True(await app.Main.HandleKeyAsync(KeyChord.Parse("Ctrl+Cmd+K")));
+        Assert.Single(app.Dialogs.CopyMoveRequests);
+        Assert.False(await app.Main.HandleKeyAsync(KeyChord.Parse("F5")));
+        Assert.Single(app.Dialogs.CopyMoveRequests);
+
+        // A change that leaves the bindings as they are does not replace the key map.
+        app.Main.Settings.Update(app.Main.Settings.Current with { FontSize = 16 });
+        Assert.Equal(1, keyMapChanges);
+    }
+
+    [AvaloniaFact]
+    public async Task Start_reads_the_key_bindings_from_the_settings_file()
+    {
+        await using var app = await TestApp.StartAsync(show: false, settings: AppSettings.Default with
+        {
+            KeyBindings = [new KeyBindingOverride(CommandIds.ViewQuickView, ["Cmd+Alt+Q"])],
+        });
+
+        Assert.Equal(CommandIds.ViewQuickView, app.Main.KeyMap.Find(KeyChord.Parse("Cmd+Alt+Q")));
+        Assert.Null(app.Main.KeyMap.Find(KeyChord.Parse("Ctrl+Q")));
+        Assert.Equal(["Cmd+Alt+Q"], app.Main.Settings.Current.KeyBindings.Single().Chords);
+    }
+
+    [AvaloniaFact]
     public async Task Unbound_chords_are_not_handled()
     {
         await using var app = await TestApp.StartAsync(show: false);

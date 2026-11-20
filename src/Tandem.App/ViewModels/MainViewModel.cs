@@ -36,22 +36,24 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private int _pageSize = DefaultPageSize;
     private bool[] _tabAvailable = [];
     private volatile bool _disposed;
+    private KeyMap _keyMap;
 
     /// <param name="progressWindowDelay">Waits before the progress window may appear; the real delay when null.</param>
     /// <param name="quickLookDelay">Waits before an open Quick Look or quick-view panel follows the cursor; the real
     /// delay when null.</param>
-    public MainViewModel(WorkspaceViewModel workspace, AppServices services, KeyMap keyMap,
+    public MainViewModel(WorkspaceViewModel workspace, AppServices services, SettingsService settings,
         Func<TimeSpan, CancellationToken, Task>? progressWindowDelay = null,
         Func<TimeSpan, CancellationToken, Task>? quickLookDelay = null)
     {
         ArgumentNullException.ThrowIfNull(workspace);
         ArgumentNullException.ThrowIfNull(services);
-        ArgumentNullException.ThrowIfNull(keyMap);
+        ArgumentNullException.ThrowIfNull(settings);
         _ui = SynchronizationContext.Current
               ?? throw new InvalidOperationException("The main view model must be created on the UI thread.");
         Workspace = workspace;
         Services = services;
-        KeyMap = keyMap;
+        Settings = settings;
+        _keyMap = KeyMap.Default.WithOverrides(settings.Current.KeyBindings);
         QuickView = new QuickViewViewModel(workspace, services.Providers, services.Temp, quickLookDelay,
             ReportFailure);
         RunCommand = new RunCommand(Commands, ExecuteCommandAsync);
@@ -85,6 +87,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _volumeService = services.Volumes;
         _volumeService.Changed += OnVolumesChanged;
         services.Operations.Changed += OnOperationsChanged;
+        settings.Changed += OnSettingsChanged;
         _ = ReadVolumesAsync();
     }
 
@@ -94,7 +97,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     public CommandRegistry Commands { get; } = new();
 
-    public KeyMap KeyMap { get; }
+    /// <summary>The user's settings; a change to them takes effect at once.</summary>
+    public SettingsService Settings { get; }
+
+    /// <summary>The default key map with the user's overrides from <see cref="Settings"/>; replaced (and
+    /// PropertyChanged raised) when a settings change binds the chords differently.</summary>
+    public KeyMap KeyMap
+    {
+        get => _keyMap;
+        private set => SetProperty(ref _keyMap, value);
+    }
 
     /// <summary>The running and waiting file operations, for the progress window and the status indicator.</summary>
     public OperationsViewModel Operations { get; }
@@ -251,12 +263,19 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     public Task OpenVolumeAsync(VolumeInfo volume) => ActiveSide.OpenVolumeAsync(volume);
 
+    private void OnSettingsChanged(object? sender, EventArgs e)
+    {
+        var keyMap = KeyMap.Default.WithOverrides(Settings.Current.KeyBindings);
+        if (!keyMap.Bindings.SequenceEqual(KeyMap.Bindings)) KeyMap = keyMap;
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
         _volumeService.Changed -= OnVolumesChanged;
         Services.Operations.Changed -= OnOperationsChanged;
+        Settings.Changed -= OnSettingsChanged;
         Workspace.PropertyChanged -= OnWorkspacePropertyChanged;
         QuickView.PropertyChanged -= OnQuickViewPropertyChanged;
         Workspace.Left.StateChanged -= OnTabsStateChanged;
