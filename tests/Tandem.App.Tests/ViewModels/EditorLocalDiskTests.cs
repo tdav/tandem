@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Runtime.Versioning;
 using Avalonia.Headless.XUnit;
+using Tandem.App.Services;
+using Tandem.App.Tests.Views;
 using Tandem.App.ViewModels.Editing;
 using Tandem.Core.Vfs;
 using Tandem.Core.Vfs.Local;
@@ -102,5 +104,38 @@ public sealed class EditorLocalDiskTests : IDisposable
 
         Assert.Equal("edited real", await File.ReadAllTextAsync(target, TestContext.Current.CancellationToken));
         Assert.Equal("real.txt", new FileInfo(link).LinkTarget);
+    }
+
+    /// <summary>The temporary folder lies under "/var" (or "/tmp"), a link to "/private/var": the same file reached
+    /// by either spelling, or through a link to it, is one editor window.</summary>
+    [AvaloniaFact]
+    public async Task Second_spelling_or_a_link_of_an_open_file_activates_its_editor()
+    {
+        var file = Path.Combine(_folder, "x.txt");
+        await File.WriteAllTextAsync(file, "x", TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(Path.Combine(_folder, "other.txt"), "o", TestContext.Current.CancellationToken);
+        var link = Path.Combine(_folder, "link.txt");
+        File.CreateSymbolicLink(link, "x.txt");
+        var alias = file.StartsWith("/private/", StringComparison.Ordinal) ? file["/private".Length..] : "/private" + file;
+        Assert.True(File.Exists(alias), $"{alias} is not another spelling of {file}");
+        var providers = new ProviderRegistry();
+        providers.Register(new LocalFileSystemProvider(new UnrestrictedAccessBroker(), new MacExclusiveRename()));
+        var windows = new WindowService(new ScriptedDialogs(), providers);
+        Assert.False(await windows.TryActivateEditorAsync(VfsPath.Local(file)));
+
+        windows.ShowEditor(await EditorViewModel.OpenAsync(providers, VfsPath.Local(link), CancellationToken.None));
+        try
+        {
+            Assert.True(await windows.TryActivateEditorAsync(VfsPath.Local(link)));
+            Assert.True(await windows.TryActivateEditorAsync(VfsPath.Local(file)));
+            Assert.True(await windows.TryActivateEditorAsync(VfsPath.Local(alias)));
+            Assert.False(await windows.TryActivateEditorAsync(VfsPath.Local(Path.Combine(_folder, "other.txt"))));
+            Assert.False(await windows.TryActivateEditorAsync(VfsPath.Local(Path.Combine(_folder, "missing.txt"))));
+            Assert.Single(windows.Open);
+        }
+        finally
+        {
+            await windows.CloseAllAsync();
+        }
     }
 }

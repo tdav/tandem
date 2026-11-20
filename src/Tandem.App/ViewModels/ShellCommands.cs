@@ -314,7 +314,8 @@ public sealed class ShellCommands : IDisposable
     /// user.</summary>
     private async Task EditAsync()
     {
-        if (CursorEntry() is not { IsDirectoryLike: false } entry || _windows.TryActivateEditor(entry.Path)) return;
+        if (CursorEntry() is not { IsDirectoryLike: false } entry || await _windows.TryActivateEditorAsync(entry.Path))
+            return;
         EditorViewModel editor;
         try
         {
@@ -331,7 +332,7 @@ public sealed class ShellCommands : IDisposable
             if (!_disposed) await TellAsync(Loc.Format("Shell_OpenFailed", entry.Name), e);
             return;
         }
-        if (_disposed || _windows.TryActivateEditor(entry.Path)) return;
+        if (_disposed || await _windows.TryActivateEditorAsync(editor.Target)) return;
         _windows.ShowEditor(editor);
     }
 

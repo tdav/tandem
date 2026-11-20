@@ -114,6 +114,24 @@ public sealed partial class EditorViewModel : ObservableObject
     /// <summary>The file opened (a link stays the link's path).</summary>
     public VfsPath File { get; }
 
+    /// <summary>The file really read and written: <see cref="File"/> with every link followed (see
+    /// <see cref="ResolveTargetAsync"/>).</summary>
+    public VfsPath Target => _target;
+
+    /// <summary>The file <paramref name="file"/> really is on its provider, as the editor reads and writes it: every
+    /// link followed, by the provider itself where it can (<see cref="ILinkResolver"/>: on the local disk
+    /// "/tmp/x" gives "/private/tmp/x"). Runs off the UI thread.</summary>
+    /// <exception cref="IOException">The file cannot be reached (<see cref="VfsNotFoundException"/> when it, or a
+    /// link's target, does not exist).</exception>
+    public static async Task<VfsPath> ResolveTargetAsync(ProviderRegistry providers, VfsPath file,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(providers);
+        var provider = providers.For(file);
+        var (target, _) = await Task.Run(() => ResolveAsync(provider, file, ct), ct);
+        return target;
+    }
+
     /// <summary>The file's path as the user reads it, with " *" while there are unsaved changes.</summary>
     public string Title => IsModified ? _displayPath + " *" : _displayPath;
 

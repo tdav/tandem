@@ -105,7 +105,7 @@ internal sealed class TestApp : IAsyncDisposable
             trash ?? platform,
             new InMemoryNativeCopy(fs), processes ?? platform, new OperationQueue(), new UnrestrictedAccessBroker(),
             new ErrorLog(logFile), dialogs, new TempFileStore(tempDirectory),
-            windows ?? new WindowService(dialogs));
+            windows ?? new WindowService(dialogs, providers));
     }
 
     /// <param name="progressWindowDelay">How long before the progress window appears; never, when null.</param>

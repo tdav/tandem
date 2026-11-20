@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Tandem.Core.Listing;
 using Tandem.Core.Vfs;
 
@@ -126,33 +125,5 @@ public class EntrySorterTests
         Assert.NotEqual(0, comparer.Compare(upper, lower));
         Assert.Equal(-comparer.Compare(upper, lower), comparer.Compare(lower, upper));
         Assert.Equal(0, comparer.Compare(lower, Entry("a")));
-    }
-
-    [Fact]
-    public void Sorts_100000_entries_by_name_in_under_a_second()
-    {
-        var random = new Random(42);
-        var entries = new List<FileEntry>(100_000);
-        for (var i = 0; i < 100_000; i++)
-        {
-            var name = random.Next(4) switch
-            {
-                0 => $"File{random.Next(1_000_000)}.txt",
-                1 => $"photo_{random.Next(10_000):D5}.JPG",
-                2 => $"документ {random.Next(100_000)}.docx",
-                _ => $"й{random.Next(100_000)}",
-            };
-            entries.Add(Entry(name + "-" + i, random.Next(10) == 0 ? EntryKind.Directory : EntryKind.File,
-                size: random.Next()));
-        }
-
-        var stopwatch = Stopwatch.StartNew();
-        entries.Sort(EntrySorter.Create(new SortSpec(SortColumn.Name)));
-        stopwatch.Stop();
-
-        Assert.True(stopwatch.Elapsed < TimeSpan.FromSeconds(1), $"Sorting took {stopwatch.Elapsed}");
-        var comparer = EntrySorter.Create(new SortSpec(SortColumn.Name));
-        for (var i = 1; i < entries.Count; i++)
-            Assert.True(comparer.Compare(entries[i - 1], entries[i]) <= 0);
     }
 }

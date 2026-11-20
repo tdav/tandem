@@ -59,7 +59,7 @@ public static class Composition
         return new AppServices(providers, new MacVolumeService(), new MacShellIntegration(processes),
             new MacQuickLook(processes), new MacFileMetadataService(broker), new MacTrash(broker),
             new MacNativeCopy(broker), processes, new OperationQueue(), broker, log, dialogs,
-            new TempFileStore(TempFileStore.DefaultDirectory(homeDirectory)), new WindowService(dialogs));
+            new TempFileStore(TempFileStore.DefaultDirectory(homeDirectory)), new WindowService(dialogs, providers));
     }
 
     /// <summary>Where the app writes unexpected errors: <c>~/Library/Logs/Tandem/tandem.log</c>.</summary>

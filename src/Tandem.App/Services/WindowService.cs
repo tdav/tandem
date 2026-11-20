@@ -9,14 +9,16 @@ namespace Tandem.App.Services;
 /// <summary>
 /// Shows the editor windows as independent windows (not owned, so each comes forward on its own), placed over
 /// <see cref="Owner"/> (the main window) when it is shown. Their "save changes?" question goes through
-/// <paramref name="dialogs"/>. UI thread only.
+/// <paramref name="dialogs"/>; the files of <paramref name="providers"/> are told apart by what they really are, with
+/// links followed. UI thread only.
 /// </summary>
-public sealed class WindowService(IDialogService dialogs) : IWindowService
+public sealed class WindowService(IDialogService dialogs, ProviderRegistry providers) : IWindowService
 {
     /// <summary>How far each window opens from the main window's corner.</summary>
     private const int Offset = 40;
 
     private readonly IDialogService _dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
+    private readonly ProviderRegistry _providers = providers ?? throw new ArgumentNullException(nameof(providers));
     private readonly List<Window> _open = [];
 
     /// <summary>The main window; set by the app once it exists.</summary>
@@ -46,13 +48,31 @@ public sealed class WindowService(IDialogService dialogs) : IWindowService
         window.Show();
     }
 
-    public bool TryActivateEditor(VfsPath path)
+    public async Task<bool> TryActivateEditorAsync(VfsPath path)
     {
-        if (_open.OfType<EditorWindow>().FirstOrDefault(w => w.Editor.File == path) is not { } window) return false;
+        if (EditorOf(path) is not { } window)
+        {
+            if (!_open.OfType<EditorWindow>().Any()) return false;
+            VfsPath target;
+            try
+            {
+                target = await EditorViewModel.ResolveTargetAsync(_providers, path, CancellationToken.None);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                return false; // opening it will tell why
+            }
+            if (EditorOf(target) is not { } resolved) return false;
+            window = resolved;
+        }
         if (window.WindowState == WindowState.Minimized) window.WindowState = WindowState.Normal;
         window.Activate();
         return true;
     }
+
+    /// <summary>The editor window open on <paramref name="path"/>, as opened or as the file it really is.</summary>
+    private EditorWindow? EditorOf(VfsPath path) =>
+        _open.OfType<EditorWindow>().FirstOrDefault(w => w.Editor.File == path || w.Editor.Target == path);
 
     public async Task<bool> CloseAllAsync()
     {

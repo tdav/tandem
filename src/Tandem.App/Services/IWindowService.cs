@@ -12,8 +12,10 @@ public interface IWindowService
     /// <summary>Shows <paramref name="editor"/> in a window of its own.</summary>
     void ShowEditor(EditorViewModel editor);
 
-    /// <summary>Brings the editor window of <paramref name="path"/> to the front; false when none is open.</summary>
-    bool TryActivateEditor(VfsPath path);
+    /// <summary>Brings the editor window of <paramref name="path"/> to the front; false when none is open. The file is
+    /// matched by what it really is, links followed (<see cref="EditorViewModel.ResolveTargetAsync"/>): "/tmp/x" and
+    /// "/private/tmp/x", or a link and its target, are one editor.</summary>
+    Task<bool> TryActivateEditorAsync(VfsPath path);
 
     /// <summary>True while any window of this service is open.</summary>
     bool HasOpenWindows { get; }
