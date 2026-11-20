@@ -151,6 +151,16 @@ public class FileSearchTests
     }
 
     [Fact]
+    public async Task Negative_MaxDepth_is_rejected()
+    {
+        var query = Query() with { MaxDepth = -1 };
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => FileSearch.Validate(query));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => Run(query));
+        Assert.Equal(0, _counting.Count("Enumerate"));
+    }
+
+    [Fact]
     public async Task Excluded_folder_is_neither_listed_nor_entered()
     {
         _fs.AddFile("/r/keep/a.txt");

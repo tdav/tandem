@@ -32,7 +32,8 @@ public sealed class FileSearch(ProviderRegistry providers)
 
     /// <summary>Runs <paramref name="query"/>. A folder that cannot be read (<see cref="IOException"/>,
     /// <see cref="UnauthorizedAccessException"/>) is skipped and counted; <paramref name="progress"/> hears at most
-    /// ten times a second while the search runs, and once when it ends.</summary>
+    /// ten times a second while the search runs, and once more when it ends: that final report (with a null
+    /// <see cref="SearchProgress.CurrentFolder"/>) is sent whether the search finishes, is cancelled or fails.</summary>
     /// <exception cref="SearchQueryException">See <see cref="Validate"/>.</exception>
     /// <exception cref="IOException">The root cannot be read.</exception>
     public async IAsyncEnumerable<FileEntry> RunAsync(SearchQuery query, IProgress<SearchProgress>? progress,
