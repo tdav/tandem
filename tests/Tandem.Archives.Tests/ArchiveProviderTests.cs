@@ -155,6 +155,38 @@ public sealed class ArchiveProviderTests : IDisposable
     }
 
     [Fact]
+    public async Task Utf8_names_without_the_utf8_flag_are_decoded_as_utf8()
+    {
+        var bytes = Zip(("привет.txt", "п"));
+        ClearUtf8Flags(bytes);
+        _host.Files.AddFile("/arc/noflag.zip", bytes, HostTime);
+        var archive = await OpenHostAsync("/arc/noflag.zip");
+
+        var entry = Assert.Single(await ListAsync(archive, Arc("/")));
+        Assert.Equal("привет.txt", entry.Name);
+        Assert.Equal(Encoding.UTF8.GetBytes("п"), await ReadAsync(archive, entry.Path));
+    }
+
+    /// <summary>Clears the general-purpose bit 11 ("names are UTF-8") in every local and central header, the way
+    /// macOS's Archive Utility writes UTF-8 names.</summary>
+    private static void ClearUtf8Flags(byte[] zip)
+    {
+        var cleared = 0;
+        for (var i = 0; i + 4 <= zip.Length; i++)
+        {
+            var at = zip.AsSpan(i);
+            int flags;
+            if (at.StartsWith("PK\u0003\u0004"u8)) flags = i + 6;
+            else if (at.StartsWith("PK\u0001\u0002"u8)) flags = i + 8;
+            else continue;
+            Assert.NotEqual(0, zip[flags + 1] & 0x08); // the writer had set it
+            zip[flags + 1] &= 0xF7;
+            cleared++;
+        }
+        Assert.Equal(2, cleared);
+    }
+
+    [Fact]
     public async Task Reads_from_many_threads_at_once()
     {
         var archive = await OpenAsync("sample.zip");
@@ -321,6 +353,23 @@ public sealed class ArchiveProviderTests : IDisposable
 
         archive.Password = "secret";
         Assert.Equal("hello\n"u8.ToArray(), await ReadAsync(archive, Arc("/docs/readme.txt")));
+    }
+
+    [Fact]
+    public async Task Entry_stream_reports_its_close_even_when_closing_the_library_stream_throws()
+    {
+        var archive = await OpenAsync("sample.zip");
+        bool? closedOk = null;
+        var stream = new ArchiveProvider.EntryStream(archive, new ThrowingOnDisposeStream(), 0, null,
+            ok => closedOk = ok);
+
+        Assert.Throws<IOException>(stream.Dispose);
+        Assert.False(closedOk);
+    }
+
+    private sealed class ThrowingOnDisposeStream() : MemoryStream([])
+    {
+        protected override void Dispose(bool disposing) => throw new IOException("The host went away.");
     }
 
     // ---- Read-only --------------------------------------------------------------------------------------

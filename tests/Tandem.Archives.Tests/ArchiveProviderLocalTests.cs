@@ -1,3 +1,4 @@
+using System.Formats.Tar;
 using System.Runtime.Versioning;
 using Tandem.Core.Operations;
 using Tandem.Core.Tests.Operations;
@@ -67,5 +68,50 @@ public sealed class ArchiveProviderLocalTests : IDisposable
                 Assert.Equal(new DateTime(2024, 1, 2, 3, 4, 5, DateTimeKind.Utc), File.GetLastWriteTimeUtc(path));
         }
         Assert.Empty(Directory.EnumerateFileSystemEntries(_temp.Directory));
+    }
+
+    /// <summary>Review Focus 2 on a case-insensitive disk: a link "Link" to a folder outside, then "link/file.txt".
+    /// On APFS "out/link" is the link, so writing the file naively would land in the folder it points to.</summary>
+    [Fact]
+    public async Task Case_variant_entry_below_a_link_is_never_written_through_it()
+    {
+        using var victim = new TempDir();
+        var archivePath = _dir.Combine("trap-case.tar");
+        await using (var file = File.Create(archivePath))
+        await using (var tar = new TarWriter(file, TarEntryFormat.Pax, leaveOpen: false))
+        {
+            await tar.WriteEntryAsync(new PaxTarEntry(TarEntryType.SymbolicLink, "Link") { LinkName = victim.Path },
+                Ct);
+            var entry = new PaxTarEntry(TarEntryType.RegularFile, "link/file.txt")
+            {
+                DataStream = new MemoryStream("x"u8.ToArray()),
+            };
+            await tar.WriteEntryAsync(entry, Ct);
+        }
+        var archive = await ArchiveProvider.OpenAsync("arc", _providers, VfsPath.Local(archivePath), _temp, null,
+            Ct);
+        _providers.Register(archive);
+        var output = _dir.Combine("out");
+        Directory.CreateDirectory(output);
+        var before = Directory.EnumerateFileSystemEntries(_dir.Path, "*", SearchOption.AllDirectories)
+            .ToHashSet(StringComparer.Ordinal);
+        var sources = new List<VfsPath>();
+        await foreach (var entry in archive.EnumerateAsync(new VfsPath("arc", "/"), Ct)) sources.Add(entry.Path);
+
+        var interaction = new ScriptedInteraction().OnError(ErrorAction.Skip);
+        var op = new CopyOperation(_providers, sources, VfsPath.Local(output), new CopyOptions(), interaction);
+        await op.RunAsync().WaitAsync(TimeSpan.FromSeconds(30), Ct);
+
+        Assert.Empty(Directory.EnumerateFileSystemEntries(victim.Path, "*", SearchOption.AllDirectories));
+        var options = new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = 0 };
+        var added = Directory.EnumerateFileSystemEntries(_dir.Path, "*", options).Where(p => !before.Contains(p));
+        Assert.All(added, p => Assert.StartsWith(output + "/", p, StringComparison.Ordinal));
+        Assert.DoesNotContain(Directory.EnumerateFiles(output, "*", options), p => p.EndsWith("file.txt",
+            StringComparison.OrdinalIgnoreCase));
+
+        // The folder "link" meets the link "Link" already copied: an item error, skipped, not a merge into it.
+        Assert.IsType<VfsAlreadyExistsException>(Assert.Single(interaction.Errors).Error);
+        Assert.Equal(EntryKind.Symlink, (await _providers.For(VfsPath.Local(output))
+            .GetEntryAsync(VfsPath.Local(Path.Combine(output, "Link")), Ct))!.Kind);
     }
 }

@@ -774,8 +774,9 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
     }
 
     /// <summary>An entry's content as the library streams it, with the library's errors translated; closing it
-    /// calls <c>closed</c> with whether every read went well.</summary>
-    private sealed class EntryStream(ArchiveProvider owner, Stream inner, long length, string? password,
+    /// calls <c>closed</c> with whether every read went well, even when closing the library's stream throws.
+    /// Internal for tests.</summary>
+    internal sealed class EntryStream(ArchiveProvider owner, Stream inner, long length, string? password,
         Action<bool> closed) : Stream
     {
         private bool _failed;
@@ -840,7 +841,15 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
                 {
                     _failed = true;
                 }
-                closed(!_failed);
+                catch
+                {
+                    _failed = true; // passes on (cancellation, the host's I/O error): the archive is not reused
+                    throw;
+                }
+                finally
+                {
+                    closed(!_failed);
+                }
             }
             base.Dispose(disposing);
         }
