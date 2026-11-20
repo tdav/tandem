@@ -14,8 +14,9 @@ namespace Tandem.Archives;
 /// <para>Changes are collected: a written file's content goes to a file of the <see cref="TempFileStore"/>; deletions,
 /// renames (of a folder with its subtree), new folders and times are kept in memory, as a tree of the archive as it
 /// will be. Reads see that tree. In a batch the changes are applied by <see cref="IProviderBatch.CommitAsync"/>;
-/// outside one, each call applies its own change at once (a write when its stream is closed). While a batch is open,
-/// every change goes into it: the provider cannot tell the batch's own calls from others.</para>
+/// outside one, each call applies its own change at once (a write when its stream is closed). Only the flow that holds
+/// the batch (<see cref="BatchScope.Holds"/>) adds to it; any other caller waits for the batch to end and then applies
+/// its change on its own.</para>
 /// <para>Applying them rewrites the archive: the new archive is written through the host provider under
 /// <c>.{name}.tandem-part</c> next to it (every entry of the tree, each folder before its contents and as an entry of
 /// its own; unchanged files with their content and time; Deflate; UTF-8 names; Zip64 when the entries or the content
@@ -30,7 +31,7 @@ public sealed partial class ArchiveProvider
 {
     /// <summary>Content this large or larger is written in Zip64 form: 4 GiB, less room for deflate's growth of data
     /// that does not compress.</summary>
-    private const long Zip64Size = 4L * 1024 * 1024 * 1024 - 64L * 1024 * 1024;
+    internal const long Zip64Size = 4L * 1024 * 1024 * 1024 - 64L * 1024 * 1024;
 
     /// <summary>The most entries a zip without Zip64 can count.</summary>
     private const int MaxPlainZipEntries = ushort.MaxValue;
@@ -38,6 +39,10 @@ public sealed partial class ArchiveProvider
     private static readonly DateTime EarliestZipTime = new(1980, 1, 1, 0, 0, 0, DateTimeKind.Local);
 
     private readonly Lock _editLock = new();
+
+    /// <summary>Called just before a change that is not part of the open batch begins a batch of its own (and
+    /// waits for the open one to end). A seam for tests.</summary>
+    internal Action? BeforeOwnBatch { get; set; }
     private Batch? _openBatch; // guarded by _editLock
 
     public ProviderCapabilities Capabilities =>
@@ -59,8 +64,9 @@ public sealed partial class ArchiveProvider
     {
         ct.ThrowIfCancellationRequested();
         RequireEditable(path);
-        if (OpenBatch() is { } open)
+        if (JoinableBatch() is { } open)
             return CreateFile(await open.EditsAsync(ct).ConfigureAwait(false), path, commitOnClose: null);
+        BeforeOwnBatch?.Invoke();
         var batch = (Batch)await BeginBatchAsync(ct).ConfigureAwait(false);
         try
         {
@@ -124,17 +130,23 @@ public sealed partial class ArchiveProvider
         lock (_editLock) return _openBatch;
     }
 
-    /// <summary>Applies <paramref name="change"/> (true when it changed something) to the open batch, or, with
-    /// none, in a batch of its own that is committed right away.</summary>
+    /// <summary>The open batch when the calling flow is the one that holds it (<see cref="BatchScope.Holds"/>);
+    /// null otherwise. A change from any other caller waits for the batch to end and is applied on its own, so it is
+    /// never lost with a batch that fails or is dropped.</summary>
+    private Batch? JoinableBatch() => BatchScope.Holds(this) ? OpenBatch() : null;
+
+    /// <summary>Applies <paramref name="change"/> (true when it changed something) to the open batch the caller
+    /// holds, or else in a batch of its own that is committed right away.</summary>
     private async Task ChangeAsync(VfsPath path, Func<Edits, bool> change, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         RequireEditable(path);
-        if (OpenBatch() is { } open)
+        if (JoinableBatch() is { } open)
         {
             Apply(await open.EditsAsync(ct).ConfigureAwait(false), change);
             return;
         }
+        BeforeOwnBatch?.Invoke();
         await using var batch = (Batch)await BeginBatchAsync(ct).ConfigureAwait(false);
         Apply(await batch.EditsAsync(ct).ConfigureAwait(false), change);
         await batch.CommitAsync(ct).ConfigureAwait(false);
@@ -173,7 +185,8 @@ public sealed partial class ArchiveProvider
             var node = EditNode.NewFile(content, DateTimeOffset.Now);
             parent.Children[path.Name] = node;
             edits.Changed = true;
-            return new EditStream(this, file, node, commitOnClose);
+            edits.OpenStreams++;
+            return new EditStream(this, file, edits, node, commitOnClose);
         }
     }
 
@@ -327,6 +340,12 @@ public sealed partial class ArchiveProvider
         var part = SafeReplace.PartPathFor(Host);
         try
         {
+            lock (_editLock)
+                if (edits.OpenStreams > 0)
+                    throw new VfsException(
+                        $"A file written into '{_providers.DisplayPath(Host)}' is still open; the archive was left " +
+                        "as it is.");
+            if (!IsEditable(edits.Base)) throw ReadOnly(new VfsPath(Id, "/"));
             if (await HostStampAsync(ct).ConfigureAwait(false) != edits.Base.Stamp)
                 throw new VfsException(
                     $"'{_providers.DisplayPath(Host)}' was changed elsewhere after it was read; it was left as it is.");
@@ -353,7 +372,24 @@ public sealed partial class ArchiveProvider
         List<(string Key, EditNode Node, long Size)> entries;
         lock (_editLock) entries = Flatten(edits.Root);
         var zip64 = NeedsZip64(entries.Count, entries.Sum(e => e.Size));
-        await using var output = await host.OpenWriteAsync(part, ct).ConfigureAwait(false);
+        var output = await host.OpenWriteAsync(part, ct).ConfigureAwait(false);
+        Dictionary<string, (bool Directory, long Size)> written;
+        try
+        {
+            written = await WriteToAsync(output, edits, entries, zip64, ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            await AbortAsync(output).ConfigureAwait(false);
+            throw;
+        }
+        await output.DisposeAsync().ConfigureAwait(false); // a zip host outside a batch takes the part now
+        return written;
+    }
+
+    private async Task<Dictionary<string, (bool Directory, long Size)>> WriteToAsync(Stream output, Edits edits,
+        List<(string Key, EditNode Node, long Size)> entries, bool zip64, CancellationToken ct)
+    {
         if (output.CanSeek || !zip64)
         {
             var direct = await WriteEntriesAsync(output, edits, entries, zip64, ct).ConfigureAwait(false);
@@ -377,6 +413,25 @@ public sealed partial class ArchiveProvider
         }
     }
 
+    /// <summary>Closes the host's stream of a write that failed, so that nothing of it is applied (a zip host outside
+    /// a batch would otherwise take the half-written part) and the failure stays the one reported.</summary>
+    private static async Task AbortAsync(Stream output)
+    {
+        if (output is EditStream edit)
+        {
+            await edit.AbortAsync().ConfigureAwait(false);
+            return;
+        }
+        try
+        {
+            await output.DisposeAsync().ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // the write has failed already; the part file is removed next
+        }
+    }
+
     private async Task<Dictionary<string, (bool Directory, long Size)>> WriteEntriesAsync(Stream output, Edits edits,
         List<(string Key, EditNode Node, long Size)> entries, bool zip64, CancellationToken ct)
     {
@@ -389,6 +444,7 @@ public sealed partial class ArchiveProvider
             ArchiveEncoding = new ArchiveEncoding { Default = Encoding.UTF8 },
             UseZip64 = zip64,
         };
+        if (!string.IsNullOrEmpty(edits.Base.ArchiveComment)) options.ArchiveComment = edits.Base.ArchiveComment;
         var writer = new ZipWriter(output, options);
         // Not disposed after a failure: disposing writes the central directory, which would only hide the error.
         foreach (var (key, node, size) in entries)
@@ -407,6 +463,7 @@ public sealed partial class ArchiveProvider
                     CompressionType = CompressionType.Deflate,
                     ModificationDateTime = time,
                     EnableZip64 = EntryNeedsZip64(size),
+                    EntryComment = edits.Base.CommentOf(node.Original),
                 });
             written[key] = (false, size);
         }
@@ -514,7 +571,7 @@ public sealed partial class ArchiveProvider
                 _snapshot = await LoadAsync(stamp, CancellationToken.None).ConfigureAwait(false);
                 _stale = false;
             }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            catch (Exception e) when (e is not OperationCanceledException)
             {
                 _stale = true; // the change is in place; reading its listing is left to the next call
                 return;
@@ -536,6 +593,9 @@ public sealed partial class ArchiveProvider
         public EditNode Root { get; } = root;
         public List<string> TempFiles { get; } = [];
         public bool Changed { get; set; }
+
+        /// <summary>Write streams opened on these changes and not yet closed.</summary>
+        public int OpenStreams { get; set; }
 
         public static Edits From(Snapshot snapshot) => new(snapshot, Copy(snapshot.Index, snapshot.Index.Find("/")!));
 
@@ -578,8 +638,8 @@ public sealed partial class ArchiveProvider
 
     /// <summary>Writes a file of the changes. Closing it sets the file's time and, for a write outside a batch,
     /// rewrites the archive (an error of that is thrown from closing).</summary>
-    private sealed class EditStream(ArchiveProvider owner, FileStream file, EditNode node, Batch? commitOnClose)
-        : Stream
+    private sealed class EditStream(ArchiveProvider owner, FileStream file, Edits edits, EditNode node,
+        Batch? commitOnClose) : Stream
     {
         private bool _closed;
 
@@ -624,14 +684,43 @@ public sealed partial class ArchiveProvider
             base.Dispose(disposing);
         }
 
-        private async Task CloseAsync()
+        /// <summary>Closes the file without applying it: for a write that failed. Outside a batch nothing is
+        /// committed; in one the file stays as written until removed. Errors of closing are swallowed, so the
+        /// failure being handled stays the one reported.</summary>
+        public async Task AbortAsync()
         {
             if (_closed) return;
             _closed = true;
             try
             {
                 await file.DisposeAsync().ConfigureAwait(false);
-                lock (owner._editLock) node.Modified = DateTimeOffset.Now;
+            }
+            catch (Exception)
+            {
+                // the write has failed already
+            }
+            lock (owner._editLock) edits.OpenStreams--;
+            if (commitOnClose is not null) await commitOnClose.DisposeAsync().ConfigureAwait(false);
+        }
+
+        private async Task CloseAsync()
+        {
+            if (_closed) return;
+            _closed = true;
+            try
+            {
+                try
+                {
+                    await file.DisposeAsync().ConfigureAwait(false);
+                }
+                finally
+                {
+                    lock (owner._editLock)
+                    {
+                        edits.OpenStreams--;
+                        node.Modified = DateTimeOffset.Now;
+                    }
+                }
                 if (commitOnClose is not null)
                     await commitOnClose.CommitAsync(CancellationToken.None).ConfigureAwait(false);
             }

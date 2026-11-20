@@ -340,7 +340,8 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
             var index = ArchiveIndex.Build(listed.Select(ToRaw), stamp.Modified);
             var sequential = format is ArchiveFormat.SevenZip or ArchiveFormat.Rar && archive.IsSolid;
             var snapshot = new Snapshot(stamp, format, index, sequential, localCopy, HostProvider, Host,
-                storedLinks: format == ArchiveFormat.Zip && listed.Any(IsStoredLink));
+                storedLinks: format == ArchiveFormat.Zip && listed.Any(IsStoredLink),
+                comments: archive is ZipArchive zip ? ZipComments.Of(zip, listed) : null);
             if (!sequential)
             {
                 snapshot.Return(new OpenedArchive(stream, archive, password, listed));
@@ -683,10 +684,31 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
 
     private readonly record struct HostStamp(long Size, DateTimeOffset Modified);
 
+    /// <summary>A zip's comments: the archive's, and the entries' by (key, occurrence of that key).</summary>
+    private sealed record ZipComments(string? Archive,
+        IReadOnlyDictionary<(string Key, int Occurrence), string> Entries)
+    {
+        public static ZipComments Of(ZipArchive zip, IEnumerable<IArchiveEntry> listed)
+        {
+            var entries = new Dictionary<(string, int), string>();
+            var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (var entry in listed)
+            {
+                var key = entry.Key ?? "";
+                var occurrence = counts.GetValueOrDefault(key);
+                counts[key] = occurrence + 1;
+                if (entry is ZipArchiveEntry { Comment: { Length: > 0 } comment }) entries[(key, occurrence)] = comment;
+            }
+            return new ZipComments(zip.Volumes.FirstOrDefault()?.Comment, entries);
+        }
+    }
+
     /// <summary>The listing of one version of the host file, and the archives opened on that version.</summary>
     /// <param name="storedLinks">Whether the archive keeps links its listing shows as files (a zip's).</param>
+    /// <param name="comments">A zip's comments, which a rewrite carries over.</param>
     private sealed class Snapshot(HostStamp stamp, ArchiveFormat format, ArchiveIndex index, bool sequential,
-        string? localCopy, IFileSystemProvider hostProvider, VfsPath host, bool storedLinks = false)
+        string? localCopy, IFileSystemProvider hostProvider, VfsPath host, bool storedLinks = false,
+        ZipComments? comments = null)
     {
         private readonly Lock _lock = new();
         private readonly Stack<OpenedArchive> _pool = new();
@@ -698,6 +720,12 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
         public bool Sequential { get; } = sequential;
 
         public bool HasEncryptedEntries { get; } = Any(index, node => node.IsEncrypted);
+
+        public string? ArchiveComment => comments?.Archive;
+
+        /// <summary>The comment of the entry <paramref name="node"/> shows; null for none.</summary>
+        public string? CommentOf(ArchiveNode? node) =>
+            node?.EntryKey is { } key ? comments?.Entries.GetValueOrDefault((key, node.KeyOccurrence)) : null;
 
         /// <summary>Whether the archive holds links: listed as such, or kept as files (<c>storedLinks</c>).</summary>
         public bool HasLinks { get; } = storedLinks || Any(index, node => node.Kind == EntryKind.Symlink);
@@ -838,6 +866,8 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
                 if (PendingEdits is { } edits)
                     return edits;
             var snapshot = await owner.CurrentAsync(ct).ConfigureAwait(false);
+            // The listing may have just been read again: the archive may have become one that cannot be changed.
+            if (!owner.IsEditable(snapshot)) throw owner.ReadOnly(new VfsPath(owner.Id, "/"));
             var fresh = Edits.From(snapshot);
             lock (owner._editLock) return PendingEdits ??= fresh;
         }

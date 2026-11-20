@@ -306,7 +306,7 @@ public sealed class ZipEditingTests : IDisposable
         var archive = await OpenAsync();
         var original = await HostBytesAsync();
 
-        await using (var batch = await archive.BeginBatchAsync(Ct))
+        await using (var batch = await BatchScope.BeginAsync(_providers, [Arc("/")], Ct))
         {
             await WriteAsync(archive, "/new.txt", "pending");
             await archive.DeleteAsync(Arc("/a.txt"), recursive: false, Ct);
@@ -336,7 +336,7 @@ public sealed class ZipEditingTests : IDisposable
         var archive = await OpenAsync();
         var before = await TreeAsync(archive);
 
-        await using (await archive.BeginBatchAsync(Ct))
+        await using (await BatchScope.BeginAsync(_providers, [Arc("/")], Ct))
         {
             await WriteAsync(archive, "/new.txt", "pending");
             await archive.DeleteAsync(Arc("/docs"), recursive: true, Ct);
@@ -414,7 +414,7 @@ public sealed class ZipEditingTests : IDisposable
         _host.Files.FailOn((op, path) => op == "Move" && path.Path == PartPath,
             () => new IOException("The volume went away."));
 
-        await using (var batch = await archive.BeginBatchAsync(Ct))
+        await using (var batch = await BatchScope.BeginAsync(_providers, [Arc("/")], Ct))
         {
             await WriteAsync(archive, "/new.txt", "lost");
             await archive.DeleteAsync(Arc("/docs"), recursive: true, Ct);
@@ -465,7 +465,7 @@ public sealed class ZipEditingTests : IDisposable
         var archive = await OpenAsync();
         var replacement = Zip(("other.txt", "other"u8.ToArray()));
 
-        await using (var batch = await archive.BeginBatchAsync(Ct))
+        await using (var batch = await BatchScope.BeginAsync(_providers, [Arc("/")], Ct))
         {
             await WriteAsync(archive, "/new.txt", "pending");
             _host.Files.AddFile(ArchivePath, replacement, HostTime.AddHours(1)); // changed by someone else
@@ -531,8 +531,7 @@ public sealed class ZipEditingTests : IDisposable
         var first = await archive.BeginBatchAsync(Ct);
         var second = archive.BeginBatchAsync(Ct);
 
-        await Task.Delay(20, Ct);
-        Assert.False(second.IsCompleted);
+        Assert.False(second.IsCompleted); // without the wait, beginning completes at once
         await first.DisposeAsync();
         await (await second.WaitAsync(Timeout, Ct)).DisposeAsync();
     }
@@ -557,7 +556,7 @@ public sealed class ZipEditingTests : IDisposable
         await Assert.ThrowsAsync<VfsAccessDeniedException>(() => archive.DeleteAsync(any, recursive: false, Ct));
         await Assert.ThrowsAsync<VfsAccessDeniedException>(() => archive.MoveAsync(any, Arc("/moved"), Ct));
         await Assert.ThrowsAsync<VfsAccessDeniedException>(() => archive.SetModifiedAsync(any, FileTime, Ct));
-        await using (var batch = await archive.BeginBatchAsync(Ct))
+        await using (var batch = await BatchScope.BeginAsync(_providers, [Arc("/")], Ct))
         {
             await Assert.ThrowsAsync<VfsAccessDeniedException>(() => archive.OpenWriteAsync(Arc("/new.txt"), Ct));
             await batch.CommitAsync(Ct);
@@ -685,6 +684,166 @@ public sealed class ZipEditingTests : IDisposable
         AssertNoLeftovers();
     }
 
+    // ---- Who joins an open batch ------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Unrelated_write_during_a_batch_waits_and_is_not_lost_when_the_batch_fails()
+    {
+        var archive = await OpenAsync();
+        var ct = Ct;
+        var waiting = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        archive.BeforeOwnBatch = () => waiting.TrySetResult();
+        var failed = 0;
+        _host.Files.FailOn((op, path) => op == "Move" && path.Path == PartPath &&
+                                          Interlocked.Exchange(ref failed, 1) == 0,
+            () => new IOException("The volume went away."));
+        Task unrelated;
+
+        await using (var scope = await BatchScope.BeginAsync(_providers, [Arc("/")], Ct))
+        {
+            await WriteAsync(archive, "/pending.txt", "pending");
+            using (ExecutionContext.SuppressFlow()) // another caller: not the flow that holds the batch
+                unrelated = Task.Run(async () =>
+                {
+                    await using var stream = await archive.OpenWriteAsync(Arc("/other.txt"), ct);
+                    await stream.WriteAsync("other"u8.ToArray(), ct);
+                }, ct);
+            await waiting.Task.WaitAsync(Timeout, Ct);
+
+            Assert.False(unrelated.IsCompleted); // it waits for the batch instead of joining it
+            Assert.Null(await archive.GetEntryAsync(Arc("/other.txt"), Ct));
+            await Assert.ThrowsAnyAsync<IOException>(() => scope.CommitAsync(Ct));
+        }
+        await unrelated.WaitAsync(Timeout, Ct);
+
+        var reopened = await ReopenAsync();
+        Assert.Equal("other", await TextAsync(reopened, "/other.txt"));
+        Assert.Null(await reopened.GetEntryAsync(new VfsPath("fresh", "/pending.txt"), Ct));
+        AssertNoLeftovers();
+    }
+
+    [Fact]
+    public async Task Commit_refuses_while_a_stream_of_the_batch_is_still_open()
+    {
+        var archive = await OpenAsync();
+        var before = await TreeAsync(archive);
+
+        await using (var scope = await BatchScope.BeginAsync(_providers, [Arc("/")], Ct))
+        {
+            await WriteAsync(archive, "/done.txt", "done");
+            await using var open = await archive.OpenWriteAsync(Arc("/open.txt"), Ct);
+            await open.WriteAsync("half"u8.ToArray(), Ct);
+
+            await Assert.ThrowsAnyAsync<IOException>(() => scope.CommitAsync(Ct));
+        }
+
+        Assert.Equal(Fixture.Bytes("sample.zip"), await HostBytesAsync());
+        Assert.Equal(0, _host.ReplacementsOf(ArchivePath));
+        AssertNoLeftovers();
+        Assert.Equal(before, await TreeAsync(archive));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(_temp.Directory));
+    }
+
+    // ---- Review minors ---------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Archive_replaced_by_one_that_cannot_be_edited_is_refused()
+    {
+        var archive = await OpenAsync();
+        Assert.Equal(ProviderCapabilities.Write, archive.Capabilities);
+        _host.Files.AddFile(ArchivePath, Fixture.Bytes("encrypted.zip"), HostTime.AddHours(1)); // not yet re-read
+
+        await Assert.ThrowsAsync<VfsAccessDeniedException>(() => archive.DeleteAsync(Arc("/a.txt"), false, Ct));
+
+        Assert.Equal(Fixture.Bytes("encrypted.zip"), await HostBytesAsync());
+        Assert.Equal(0, _host.ReplacementsOf(ArchivePath));
+        Assert.Equal(ProviderCapabilities.None, archive.Capabilities);
+    }
+
+    [Fact]
+    public async Task Failure_to_reread_the_listing_after_the_swap_does_not_fail_the_write()
+    {
+        var archive = await OpenAsync();
+        var failed = 0;
+        _host.Files.FailOn((op, path) => op == "OpenRead" && path.Path == ArchivePath &&
+                                          _host.ReplacementsOf(ArchivePath) > 0 &&
+                                          Interlocked.Exchange(ref failed, 1) == 0,
+            () => new InvalidOperationException("Something odd."));
+
+        await WriteAsync(archive, "/new.txt", "kept");
+
+        Assert.Equal(1, failed);
+        Assert.Equal("kept", await TextAsync(archive, "/new.txt")); // the next call reads the listing
+        Assert.Equal("kept", await TextAsync(await ReopenAsync(), "/new.txt"));
+    }
+
+    [Fact]
+    public async Task Failed_rewrite_of_a_zip_inside_a_zip_puts_nothing_into_the_outer_archive()
+    {
+        const string outerPath = "/arc/outer.zip";
+        byte[] inner;
+        using (var buffer = new MemoryStream())
+        {
+            using (var zip = new SysZip.ZipArchive(buffer, SysZip.ZipArchiveMode.Create, leaveOpen: true))
+            using (var stream = zip.CreateEntry("bad.txt", SysZip.CompressionLevel.Optimal).Open())
+                stream.Write(Encoding.UTF8.GetBytes(new string('x', 1000)));
+            inner = buffer.ToArray();
+        }
+        // Damage the deflated data of the only entry: listing it works, reading it fails.
+        var dataStart = 30 + (inner[26] | inner[27] << 8) + (inner[28] | inner[29] << 8);
+        inner[dataStart] = 0xFF; // an invalid deflate block type
+        var outerBytes = Zip(("inner.zip", inner), ("note.txt", "n"u8.ToArray()));
+        _host.Files.AddFile(outerPath, outerBytes, HostTime);
+        var outer = await OpenOverAsync("outer", Mem(outerPath), register: true);
+        var nested = await OpenOverAsync("inner", new VfsPath("outer", "/inner.zip"), register: true);
+
+        await Assert.ThrowsAnyAsync<IOException>(() => WriteAsync(nested, "/new.txt", "new"));
+
+        Assert.Equal(0, _host.ReplacementsOf(outerPath));
+        Assert.Equal(outerBytes, await HostBytesAsync(outerPath));
+        Assert.Equal(["inner.zip", "note.txt"],
+            (await ListAsync(outer, "/")).Select(e => e.Name).Order(StringComparer.Ordinal));
+        AssertNoLeftovers();
+    }
+
+    [Fact]
+    public async Task Listed_and_pending_entries_carry_no_mode()
+    {
+        var archive = await OpenAsync();
+        Assert.Null((await archive.GetEntryAsync(Arc("/a.txt"), Ct))!.Mode);
+
+        await using var scope = await BatchScope.BeginAsync(_providers, [Arc("/")], Ct);
+        await WriteAsync(archive, "/new.txt", "x");
+
+        Assert.All(await ListAsync(archive, "/"), entry => Assert.Null(entry.Mode));
+    }
+
+    [Fact]
+    public async Task Comments_of_the_archive_and_its_entries_survive_a_rewrite()
+    {
+        using (var buffer = new MemoryStream())
+        {
+            using (var zip = new SysZip.ZipArchive(buffer, SysZip.ZipArchiveMode.Create, leaveOpen: true))
+            {
+                zip.Comment = "архив: comment";
+                var entry = zip.CreateEntry("a.txt");
+                entry.Comment = "запись: comment";
+                using (var stream = entry.Open()) stream.Write("a"u8);
+                using (var plain = zip.CreateEntry("b.txt").Open()) plain.Write("b"u8);
+            }
+            _host.Files.AddFile(ArchivePath, buffer.ToArray(), HostTime);
+        }
+        var archive = await OpenOverAsync("arc", Mem(ArchivePath), register: true);
+
+        await WriteAsync(archive, "/c.txt", "c");
+
+        using var check = new SysZip.ZipArchive(new MemoryStream(await HostBytesAsync()), SysZip.ZipArchiveMode.Read);
+        Assert.Equal("архив: comment", check.Comment);
+        Assert.Equal("запись: comment", check.GetEntry("a.txt")!.Comment);
+        Assert.Equal("", check.GetEntry("b.txt")!.Comment);
+        Assert.Equal("", check.GetEntry("c.txt")!.Comment);
+    }
+
     // ---- Zip64 ----------------------------------------------------------------------------------------
 
     [Fact]
@@ -692,7 +851,7 @@ public sealed class ZipEditingTests : IDisposable
     {
         var archive = await OpenAsync();
 
-        await using (var batch = await archive.BeginBatchAsync(Ct))
+        await using (var batch = await BatchScope.BeginAsync(_providers, [Arc("/")], Ct))
         {
             for (var i = 0; i < 65_536; i++) await archive.CreateDirectoryAsync(Arc($"/many/{i}"), Ct);
             await batch.CommitAsync(Ct);
@@ -711,11 +870,14 @@ public sealed class ZipEditingTests : IDisposable
     [InlineData(1, 4L * 1024 * 1024 * 1024, true)]
     [InlineData(2, 3L * 1024 * 1024 * 1024, true)] // together past the 4 GiB offsets
     [InlineData(2, 1L * 1024 * 1024 * 1024, false)]
+    [InlineData(1, ArchiveProvider.Zip64Size - 1, false)] // the boundary: 4 GiB less room for deflate's growth
+    [InlineData(1, ArchiveProvider.Zip64Size, true)]
     public void Zip64_is_used_for_many_entries_or_large_content(int entries, long eachSize, bool expected)
     {
         var sizes = Enumerable.Repeat(eachSize, entries).ToList();
 
         Assert.Equal(expected, ArchiveProvider.NeedsZip64(entries, sizes.Sum()));
-        Assert.Equal(eachSize >= 4L * 1024 * 1024 * 1024, ArchiveProvider.EntryNeedsZip64(eachSize));
+        Assert.Equal(eachSize >= ArchiveProvider.Zip64Size, ArchiveProvider.EntryNeedsZip64(eachSize));
+        Assert.InRange(ArchiveProvider.Zip64Size, 4L * 1024 * 1024 * 1024 - 64L * 1024 * 1024, uint.MaxValue);
     }
 }
