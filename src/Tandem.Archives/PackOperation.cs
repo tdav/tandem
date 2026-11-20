@@ -14,8 +14,8 @@ namespace Tandem.Archives;
 /// (one of <see cref="ArchiveFormats.Creatable"/>).
 /// <para>Refused before anything is written (<see cref="OperationRejectedException"/>): a format that cannot be
 /// created (<see cref="RejectionReason.FormatNotWritable"/>), an archive file inside a source
-/// (<see cref="RejectionReason.DestinationInsideSource"/>), a root as a source (<see cref="RejectionReason.InvalidName"/>),
-/// and an archive file that exists already (<see cref="RejectionReason.DestinationExists"/>).</para>
+/// (<see cref="RejectionReason.DestinationInsideSource"/>), a root as a source or two sources of one name
+/// (<see cref="RejectionReason.InvalidName"/>), and an archive file that exists already (<see cref="RejectionReason.DestinationExists"/>).</para>
 /// <para>Scans as a copy does (<see cref="OperationState.Scanning"/>: folders recursively, links not followed), then
 /// writes (<see cref="OperationState.Running"/>) with totals of files and bytes. Entries are named from the folder of
 /// the sources: <c>name</c>, <c>name/inner/file</c>; every folder, empty or not, is an entry of its own, before what it
@@ -26,8 +26,9 @@ namespace Tandem.Archives;
 /// <c>.{name}.tandem-part</c>, which a cancel or a failure removes, so neither leaves an archive under the real name
 /// or a temporary file. Files are read in blocks of at most 1 MiB, pausing and cancelling between blocks. A file that
 /// cannot be opened is put to <c>interaction</c> (retry, skip, skip all, abort); an error once its content
-/// is being written ends the operation as failed. The work runs in a <see cref="BatchScope"/> over the sources and
-/// the archive's folder, so an archive packed into a writable archive lands there in one rewrite.</para>
+/// is being written, or a file whose size differs from the scanned one, ends the operation as failed. The work runs
+/// in a <see cref="BatchScope"/> over the sources and the archive's folder, so an archive packed into a writable
+/// archive lands there in one rewrite.</para>
 /// </summary>
 public sealed class PackOperation : FileOperation
 {
@@ -87,15 +88,20 @@ public sealed class PackOperation : FileOperation
         return RunInBatchAsync(_providers, _sources.Append(_folder), _ => PackAsync(ct), afterCommit: null, ct);
     }
 
-    /// <exception cref="OperationRejectedException">The format cannot be created, a source is a root, or the archive
-    /// file lies in a source.</exception>
+    /// <exception cref="OperationRejectedException">The format cannot be created, a source is a root, two sources
+    /// share a name (ordinal), or the archive file lies in a source.</exception>
     private void RejectInvalidRequest()
     {
         if (!ArchiveFormats.Creatable.Contains(_format))
             throw new OperationRejectedException(RejectionReason.FormatNotWritable,
                 $"Archives of the format {_format} cannot be created.", destination: _archiveFile);
+        var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var source in _sources)
         {
+            if (!source.IsRoot && !names.Add(source.Name))
+                throw new OperationRejectedException(RejectionReason.InvalidName,
+                    $"Two sources are named '{source.Name}': they would be two entries of one name.", source,
+                    _archiveFile, source.Name);
             if (source.IsRoot)
                 throw new OperationRejectedException(RejectionReason.InvalidName,
                     $"The root '{source}' has no name to pack it under.", source, _archiveFile, source.Name);
@@ -325,6 +331,9 @@ public sealed class PackOperation : FileOperation
                     await using (var content = new SourceStream(this, input, ct))
                     {
                         await writeFile(item, content).ConfigureAwait(false);
+                        // A tar writer reads only the scanned size: a byte beyond it means the file grew.
+                        if (content.BytesRead == source.Size)
+                            await content.ReadAsync(new byte[1], ct).ConfigureAwait(false);
                         if (content.BytesRead != source.Size)
                             throw new VfsException(
                                 $"'{source.Path.Path}' changed while it was packed: {content.BytesRead} bytes were " +

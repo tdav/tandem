@@ -5,17 +5,25 @@ namespace Tandem.Archives.Tests;
 
 /// <summary>A host for archives in tests: an <see cref="InMemoryFileSystem"/> that counts how often each file is
 /// opened for reading and how often something is moved onto it (a rewritten archive put in place), and can hand out
-/// streams that do not seek (like an entry of another archive).</summary>
+/// streams that do not seek (like an entry of another archive) or that fail in the middle of a file.</summary>
 internal sealed class CountingHostProvider(string id = "mem") : IFileSystemProvider
 {
     private readonly Lock _lock = new();
     private readonly Dictionary<string, int> _reads = new(StringComparer.Ordinal);
     private readonly Dictionary<string, int> _movesOnto = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (long Bytes, Func<Exception> Error)> _readFailures = new(StringComparer.Ordinal);
 
     public InMemoryFileSystem Files { get; } = new(id);
 
     /// <summary>Streams from <see cref="OpenReadAsync"/> cannot seek.</summary>
     public bool Unseekable { get; set; }
+
+    /// <summary>Streams opened for reading <paramref name="path"/> give <paramref name="bytes"/> bytes, then throw
+    /// <paramref name="error"/>(): a read error in the middle of a file.</summary>
+    public void FailReadAfter(string path, long bytes, Func<Exception> error)
+    {
+        lock (_lock) _readFailures[path] = (bytes, error);
+    }
 
     public int ReadsOf(string path)
     {
@@ -41,6 +49,10 @@ internal sealed class CountingHostProvider(string id = "mem") : IFileSystemProvi
     {
         lock (_lock) _reads[path.Path] = _reads.GetValueOrDefault(path.Path) + 1;
         var stream = await Files.OpenReadAsync(path, ct);
+        (long Bytes, Func<Exception> Error) failure;
+        bool fails;
+        lock (_lock) fails = _readFailures.TryGetValue(path.Path, out failure);
+        if (fails) return new FailingReadStream(stream, failure.Bytes, failure.Error);
         return Unseekable ? new ForwardOnlyStream(stream) : stream;
     }
 
@@ -85,6 +97,48 @@ internal sealed class CountingHostProvider(string id = "mem") : IFileSystemProvi
             set => throw new NotSupportedException();
         }
         public override int Read(byte[] buffer, int offset, int count) => inner.Read(buffer, offset, count);
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override void Flush() { }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) inner.Dispose();
+            base.Dispose(disposing);
+        }
+    }
+
+    private sealed class FailingReadStream(Stream inner, long bytes, Func<Exception> error) : Stream
+    {
+        private long _left = bytes;
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            if (_left <= 0) throw error();
+            var read = inner.Read(buffer, offset, (int)Math.Min(count, _left));
+            _left -= read;
+            return read;
+        }
+
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            if (_left <= 0) throw error();
+            var read = inner.Read(buffer.Span[..(int)Math.Min(buffer.Length, _left)]);
+            _left -= read;
+            return ValueTask.FromResult(read);
+        }
+
         public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
         public override void SetLength(long value) => throw new NotSupportedException();
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();

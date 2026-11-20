@@ -282,6 +282,108 @@ public sealed class PackOperationTests : IDisposable
         AssertNothingLeft(path);
     }
 
+    [Theory]
+    [MemberData(nameof(CreatableFormats))]
+    public async Task Read_error_in_the_middle_of_a_file_fails_and_leaves_nothing(ArchiveFormat format)
+    {
+        var path = NameFor(format);
+        _host.Files.AddFile("/src/a.bin", new byte[3 * 1024 * 1024], FileTime);
+        _host.FailReadAfter("/src/a.bin", 1500 * 1024, () => new IOException("The disk was removed."));
+        var op = Pack(["/src/a.bin"], path, format);
+
+        var error = await Assert.ThrowsAsync<IOException>(() => RunAsync(op));
+
+        Assert.Equal("The disk was removed.", error.Message);
+        Assert.Equal(OperationState.Failed, op.State);
+        Assert.Empty(_interaction.Errors); // the archive is half written: no error question
+        AssertNothingLeft(path);
+    }
+
+    public static TheoryData<ArchiveFormat, int> ChangedSizes()
+    {
+        var data = new TheoryData<ArchiveFormat, int>();
+        foreach (var format in ArchiveFormats.Creatable)
+        {
+            data.Add(format, 4000); // grew
+            data.Add(format, 1000); // shrank
+        }
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(ChangedSizes))]
+    public async Task Source_whose_size_changed_during_the_pack_fails_and_leaves_nothing(ArchiveFormat format,
+        int newSize)
+    {
+        var path = NameFor(format);
+        _host.Files.AddFile("/src/a.bin", new byte[2000], FileTime);
+        _host.Files.ChangeContentOnRead("/src/a.bin", 1, new byte[newSize]);
+        var op = Pack(["/src/a.bin"], path, format);
+
+        var error = await Assert.ThrowsAnyAsync<Exception>(() => RunAsync(op));
+
+        Assert.IsNotType<OperationRejectedException>(error);
+        Assert.Equal(OperationState.Failed, op.State);
+        Assert.Empty(_interaction.Errors);
+        AssertNothingLeft(path);
+    }
+
+    [Fact]
+    public async Task Pause_between_blocks_holds_the_progress_until_resume()
+    {
+        const int size = 3 * 1024 * 1024;
+        var content = Enumerable.Range(0, size).Select(i => (byte)(i % 251)).ToArray();
+        _host.Files.AddFile("/src/big.bin", content, FileTime);
+        // Progress events come at most ten a second: a slow open lets the first block's event through.
+        _host.Files.FailOn((call, p) =>
+        {
+            if (call == "OpenRead" && p == Mem("/src/big.bin")) Thread.Sleep(150);
+            return false;
+        }, () => new IOException("not used"));
+        var op = Pack(["/src/big.bin"]);
+        var paused = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var pauseRequested = 0;
+        op.Changed += (_, _) =>
+        {
+            if (op.State == OperationState.Paused) paused.TrySetResult();
+            else if (op.Progress.BytesDone > 0 && Interlocked.Exchange(ref pauseRequested, 1) == 0) op.Pause();
+        };
+
+        var run = op.RunAsync();
+        await paused.Task.WaitAsync(Timeout, Ct);
+        var bytesWhenPaused = op.Progress.BytesDone;
+        await Task.Delay(200, Ct);
+
+        Assert.Equal(OperationState.Paused, op.State);
+        Assert.Equal(bytesWhenPaused, op.Progress.BytesDone);
+        Assert.InRange(bytesWhenPaused, 1, size - 1);
+        Assert.False(_host.Files.Exists(ArchivePath));
+
+        op.Resume();
+        var result = await run.WaitAsync(Timeout, Ct);
+
+        Assert.Equal(OperationState.Completed, result.State);
+        Assert.Equal(size, op.Progress.BytesDone);
+        var archive = await OpenArchiveAsync(ArchivePath);
+        Assert.Equal(content, await ReadAsync(archive, new VfsPath(archive.Id, "/big.bin")));
+    }
+
+    [Fact]
+    public async Task Two_sources_with_the_same_name_are_rejected()
+    {
+        _host.Files.AddFile("/src/one/a.txt", "alpha");
+        _host.Files.AddFile("/src/two/a.txt", "bravo");
+        _host.Files.AddFile("/src/two/A.txt", "other case");
+        var before = _host.Files.AllPaths.ToList();
+        var op = Pack(["/src/one/a.txt", "/src/two/A.txt", "/src/two/a.txt"]);
+
+        var rejection = await Assert.ThrowsAsync<OperationRejectedException>(() => RunAsync(op));
+
+        Assert.Equal(RejectionReason.InvalidName, rejection.Reason);
+        Assert.Equal(Mem("/src/two/a.txt"), rejection.SourcePath);
+        Assert.Equal(before, _host.Files.AllPaths);
+    }
+
     /// <summary>Files for a Zip64 archive (forced by <see cref="PackOperation.AlwaysZip64"/>; a real one needs more
     /// than 65,535 entries or about 4 GiB), which the zip writer cannot write to the host's write stream (it does not
     /// seek): it is built in a temporary file first.</summary>
