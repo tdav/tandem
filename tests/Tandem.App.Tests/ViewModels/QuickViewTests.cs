@@ -32,6 +32,9 @@ public class QuickViewTests : LanguageTestBase
     {
         public List<TaskCompletionSource> Calls { get; } = [];
 
+        /// <summary>The calls neither completed nor cancelled.</summary>
+        public IReadOnlyList<TaskCompletionSource> Pending => Calls.Where(c => !c.Task.IsCompleted).ToArray();
+
         public Task Wait(TimeSpan delay, CancellationToken ct)
         {
             Assert.Equal(QuickViewViewModel.FollowDelay, delay);
@@ -117,11 +120,11 @@ public class QuickViewTests : LanguageTestBase
         var delay = new ManualDelay();
         await using var app = await StartAsync(delay.Wait);
         var quick = await OpenAsync(app, "notes.txt");
-        Assert.Empty(delay.Calls); // opening shows the file at once
+        Assert.Empty(delay.Pending); // opening shows the file at once
 
         Cursor(app.Left, "README.md");
         Dispatcher.UIThread.RunJobs();
-        Assert.Single(delay.Calls);
+        Assert.Single(delay.Pending);
         Assert.Equal(["notes"], quick.Viewer!.Lines); // not yet: the cursor has not rested
 
         delay.CompleteAll();
@@ -382,5 +385,174 @@ public class QuickViewTests : LanguageTestBase
         Assert.True(quick.IsOpen);
         await app.Main.ExecuteCommandAsync(CommandIds.ViewQuickView);
         Assert.False(quick.IsOpen);
+    }
+
+    [AvaloniaFact]
+    public async Task Only_the_side_showing_quick_view_hosts_its_viewer()
+    {
+        await using var app = await StartAsync();
+
+        var quick = await OpenAsync(app, "notes.txt");
+
+        Assert.Same(quick.Viewer, app.Main.Right.QuickViewer);
+        Assert.Null(app.Main.Left.QuickViewer);
+
+        Cursor(app.Left, "README.md");
+        await quick.IdleAsync();
+        Assert.Same(quick.Viewer, app.Main.Right.QuickViewer);
+        Assert.Null(app.Main.Left.QuickViewer);
+
+        quick.Close();
+        Assert.Null(app.Main.Right.QuickViewer);
+    }
+
+    [AvaloniaFact]
+    public async Task Refresh_of_an_unchanged_file_keeps_its_viewer()
+    {
+        await using var app = await StartAsync();
+        var quick = await OpenAsync(app, "notes.txt");
+        var viewer = quick.Viewer;
+
+        await app.Left.RefreshAsync();
+        await quick.IdleAsync();
+
+        Assert.Same(viewer, quick.Viewer);
+    }
+
+    [AvaloniaFact]
+    public async Task Refresh_of_a_changed_file_opens_it_again()
+    {
+        await using var app = await StartAsync();
+        var quick = await OpenAsync(app, "notes.txt");
+        var viewer = quick.Viewer;
+
+        app.Fs.AddFile(TestApp.Home + "/notes.txt", "notes, longer now", DateTimeOffset.UtcNow.AddMinutes(1));
+        await app.Left.RefreshAsync();
+        await quick.IdleAsync();
+
+        Assert.NotSame(viewer, quick.Viewer);
+        Assert.Equal(["notes, longer now"], quick.Viewer!.Lines);
+    }
+
+    [AvaloniaFact]
+    public async Task Same_size_but_newer_file_opens_again()
+    {
+        await using var app = await StartAsync();
+        var quick = await OpenAsync(app, "notes.txt");
+        var viewer = quick.Viewer;
+
+        app.Fs.AddFile(TestApp.Home + "/notes.txt", "NOTES", DateTimeOffset.UtcNow.AddMinutes(1));
+        await app.Left.RefreshAsync();
+        await quick.IdleAsync();
+
+        Assert.NotSame(viewer, quick.Viewer);
+        Assert.Equal(["NOTES"], quick.Viewer!.Lines);
+    }
+
+    [AvaloniaFact]
+    public async Task Refresh_after_an_error_tries_the_file_again()
+    {
+        var failures = 1;
+        var (provider, _) = Streams(1, configure: (_, s) =>
+            failures-- > 0 ? new TestStream(s, seekable: true) { Failure = new IOException("busy") } : s);
+        await using var app = await StartAsync(streams: provider);
+        await ShowStreamsAsync(app);
+        var quick = await OpenAsync(app, "f00.txt");
+        Assert.Null(quick.Viewer);
+        Assert.NotNull(quick.Message);
+
+        await app.Left.RefreshAsync();
+        await quick.IdleAsync();
+
+        Assert.Equal(["file 0"], quick.Viewer!.Lines);
+        Assert.Null(quick.Message);
+    }
+
+    [AvaloniaFact]
+    public async Task Slow_open_shows_a_loading_cue_instead_of_the_previous_file()
+    {
+        var delay = new ManualDelay();
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var (provider, streams) = Streams(2,
+            configure: (i, s) => i == 1 ? new TestStream(s, seekable: true) { Gate = gate } : s);
+        await using var app = await StartAsync(delay.Wait, provider);
+        await ShowStreamsAsync(app);
+        var quick = await OpenAsync(app, "f00.txt");
+        Assert.Equal(["file 0"], quick.Viewer!.Lines);
+        Assert.Null(quick.Message);
+        Assert.Empty(delay.Pending);
+
+        Cursor(app.Left, "f01.txt");
+        Dispatcher.UIThread.RunJobs();
+        delay.CompleteAll(); // the cursor has rested: f01 starts opening and is held by the gate
+        await WaitForOpenAsync(provider, 2);
+        await TestApp.WaitUntil(() =>
+        {
+            Dispatcher.UIThread.RunJobs();
+            return delay.Pending.Count == 1;
+        });
+        Assert.Equal(["file 0"], quick.Viewer!.Lines); // not yet: the open is still within the delay
+
+        delay.CompleteAll(); // it takes longer than the delay
+        await TestApp.WaitUntil(() =>
+        {
+            Dispatcher.UIThread.RunJobs();
+            return quick.Message is not null;
+        });
+
+        Assert.Null(quick.Viewer);
+        Assert.Equal(Loc.Format("QuickView_Loading", "f01.txt"), quick.Message);
+        await TestApp.WaitUntil(() => streams[0].IsDisposed); // the previous file is let go (disposed off the UI thread)
+
+        gate.SetResult();
+        await quick.IdleAsync();
+        Assert.Equal(["file 1"], quick.Viewer!.Lines);
+        Assert.Null(quick.Message);
+    }
+
+    [AvaloniaFact]
+    public async Task Fast_open_shows_no_loading_cue()
+    {
+        var delay = new ManualDelay();
+        await using var app = await StartAsync(delay.Wait);
+        var quick = await OpenAsync(app, "notes.txt");
+
+        Assert.Equal(["notes"], quick.Viewer!.Lines);
+        Assert.Null(quick.Message);
+        Assert.Empty(delay.Pending); // the cue's wait was cancelled when the file opened
+        delay.CompleteAll();
+        await quick.IdleAsync();
+        Assert.Null(quick.Message);
+    }
+
+    [AvaloniaFact]
+    public async Task Folder_change_of_the_active_panel_follows_to_the_new_cursor_file()
+    {
+        var fs = TestApp.DefaultFileSystem();
+        fs.AddFile("/other/inside.txt", "inside");
+        await using var app = await TestApp.StartAsync(fs, show: false);
+        var quick = await OpenAsync(app, "notes.txt");
+
+        await app.Left.NavigateToAsync(VfsPath.Local("/other"), "inside.txt");
+        await quick.IdleAsync();
+
+        Assert.True(quick.IsOpen);
+        Assert.Equal(PanelSide.Right, quick.Side);
+        Assert.Equal(["inside"], quick.Viewer!.Lines);
+    }
+
+    [AvaloniaFact]
+    public async Task Swapping_panels_closes_quick_view()
+    {
+        await using var app = await StartAsync();
+        var quick = await OpenAsync(app, "notes.txt");
+
+        Assert.True(await app.Main.HandleKeyAsync(KeyChord.Parse("Cmd+U")));
+        await quick.IdleAsync();
+
+        Assert.False(quick.IsOpen);
+        Assert.Null(quick.Viewer);
+        Assert.False(app.Main.Left.ShowsQuickView);
+        Assert.False(app.Main.Right.ShowsQuickView);
     }
 }

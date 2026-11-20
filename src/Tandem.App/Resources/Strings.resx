@@ -1026,6 +1026,9 @@ Details were written to {1}.</value>
     <value>{0}
 Folder</value>
   </data>
+  <data name="QuickView_Loading" xml:space="preserve">
+    <value>Opening “{0}”…</value>
+  </data>
   <data name="QuickView_OpenFailed" xml:space="preserve">
     <value>Could not open “{0}”: {1}</value>
   </data>

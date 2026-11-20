@@ -184,8 +184,8 @@
             <v:FileListView x:Name="FileList" IsVisible="{Binding !ShowsQuickView}" />
             <!-- Quick view (Ctrl+Q): the file under the other side's cursor, in place of this side's list. -->
             <Panel x:Name="QuickViewArea" IsVisible="{Binding ShowsQuickView}">
-                <Panel IsVisible="{Binding QuickView.Viewer, Converter={x:Static ObjectConverters.IsNotNull}}">
-                    <vv:ViewerView x:Name="QuickViewer" DataContext="{Binding QuickView.Viewer}" />
+                <Panel IsVisible="{Binding QuickViewer, Converter={x:Static ObjectConverters.IsNotNull}}">
+                    <vv:ViewerView x:Name="QuickViewer" DataContext="{Binding QuickViewer}" />
                 </Panel>
                 <TextBlock x:Name="QuickViewMessage" Text="{Binding QuickView.Message}" Classes="secondary"
                            IsVisible="{Binding QuickView.Message, Converter={x:Static ObjectConverters.IsNotNull}}"

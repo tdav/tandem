@@ -64,6 +64,10 @@ public sealed partial class SideViewModel : ObservableObject
     /// <summary>Whether the quick-view panel shows in place of this side's file list.</summary>
     public bool ShowsQuickView => _main.QuickView.IsOpen && _main.QuickView.Side == Side;
 
+    /// <summary>The quick-view panel's viewer while this side shows it; null otherwise, so only the side that shows
+    /// the panel lays out its pages.</summary>
+    public ViewerViewModel? QuickViewer => ShowsQuickView ? _main.QuickView.Viewer : null;
+
     public bool ShowVolumeBar => _main.Workspace.View.VolumeBars;
 
     public IReadOnlyList<VolumeInfo> Volumes => _main.Volumes;
@@ -354,7 +358,11 @@ public sealed partial class SideViewModel : ObservableObject
 
     internal void OnActiveSideChanged() => OnPropertyChanged(nameof(IsActive));
 
-    internal void OnQuickViewChanged() => OnPropertyChanged(nameof(ShowsQuickView));
+    internal void OnQuickViewChanged()
+    {
+        OnPropertyChanged(nameof(ShowsQuickView));
+        OnPropertyChanged(nameof(QuickViewer));
+    }
 
     internal void OnViewChanged() => OnPropertyChanged(nameof(ShowVolumeBar));
 

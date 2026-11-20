@@ -36,6 +36,9 @@ public class QuickViewWindowTests : LanguageTestBase
         Assert.False(app.FileList(PanelSide.Right).IsEffectivelyVisible);
         Assert.True(app.FileList(PanelSide.Left).IsEffectivelyVisible);
         Assert.Null(ShownViewer(app, PanelSide.Left));
+        // The hidden side's viewer area has no page to lay out: the file is shown, and paged, once.
+        Assert.All(app.PanelView(PanelSide.Left).GetVisualDescendants().OfType<ViewerView>(),
+            v => Assert.Null(v.DataContext));
         // The replaced side keeps its tabs and path row; the keyboard stays with the active list.
         Assert.True(app.PanelView(PanelSide.Right).GetVisualDescendants().OfType<ListBox>()
             .Single(l => l.Name == "TabStrip").IsEffectivelyVisible);

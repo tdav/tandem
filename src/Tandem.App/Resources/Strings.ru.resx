@@ -1017,6 +1017,9 @@
     <value>{0}
 Папка</value>
   </data>
+  <data name="QuickView_Loading" xml:space="preserve">
+    <value>Открывается «{0}»…</value>
+  </data>
   <data name="QuickView_OpenFailed" xml:space="preserve">
     <value>Не удалось открыть «{0}»: {1}</value>
   </data>

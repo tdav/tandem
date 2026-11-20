@@ -438,7 +438,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
 
     private void OnQuickViewPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is not (nameof(QuickViewViewModel.IsOpen) or nameof(QuickViewViewModel.Side))) return;
+        if (e.PropertyName is not (nameof(QuickViewViewModel.IsOpen) or nameof(QuickViewViewModel.Side)
+            or nameof(QuickViewViewModel.Viewer))) return;
         Left.OnQuickViewChanged();
         Right.OnQuickViewChanged();
     }

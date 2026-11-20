@@ -15,7 +15,10 @@ namespace Tandem.App.ViewModels.Viewing;
 /// <para>Created and called on the UI thread; files are opened off it by <see cref="ViewerViewModel.OpenAsync"/>.</para>
 /// <para>At most one open runs at a time: a cursor move cancels the one waiting or opening, and an open that finishes
 /// anyway for a position the cursor has left is disposed unseen. The viewer shown stays until the next one is ready,
-/// and every viewer replaced or dropped is disposed (its stream closed, its temporary copy released).</para>
+/// unless the open takes longer than <see cref="FollowDelay"/>: then a loading message replaces it. Every viewer
+/// replaced or dropped is disposed (its stream closed, its temporary copy released).</para>
+/// <para>The cursor coming back to the entry shown, with the same size and modified time, keeps what is shown; a
+/// changed file, and a file that could not be opened, are opened again.</para>
 /// <para>The replaced side is not touched: its tabs, folder, cursor and selection are as they were when the panel
 /// closes. It closes on a second <see cref="Toggle"/>, on <see cref="Close"/> (the window closing), and when the
 /// active panel changes (another side or another tab).</para>
@@ -33,7 +36,7 @@ public sealed partial class QuickViewViewModel : ObservableObject, IDisposable
     private readonly List<Task> _work = [];
     private PanelViewModel? _panel;
     private CancellationTokenSource? _show;
-    private VfsPath? _shown;
+    private ShownEntry? _shown;
     private bool _disposed;
 
     /// <param name="delay">Waits <see cref="FollowDelay"/> before following the cursor; <see cref="Task.Delay(TimeSpan,
@@ -63,7 +66,8 @@ public sealed partial class QuickViewViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     public partial ViewerViewModel? Viewer { get; private set; }
 
-    /// <summary>Shown instead of a viewer: the folder's name and "Folder", or why the file could not be opened.</summary>
+    /// <summary>Shown instead of a viewer: the folder's name and "Folder", that a slow file is still opening, or why
+    /// the file could not be opened.</summary>
     [ObservableProperty]
     public partial string? Message { get; private set; }
 
@@ -158,7 +162,7 @@ public sealed partial class QuickViewViewModel : ObservableObject, IDisposable
                         panel.CurrentPath != default
                 ? e
                 : null;
-            if (entry is not null && entry.Path == _shown) return; // shown already (the cursor came back)
+            if (entry is not null && _shown == ShownEntry.Of(entry)) return; // shown already (the cursor came back)
             if (entry is null)
             {
                 Display(null, null, null);
@@ -166,14 +170,16 @@ public sealed partial class QuickViewViewModel : ObservableObject, IDisposable
             }
             if (entry.IsDirectoryLike)
             {
-                Display(entry.Path, null, Loc.Format("QuickView_Folder", entry.Name));
+                Display(ShownEntry.Of(entry), null, Loc.Format("QuickView_Folder", entry.Name));
                 return;
             }
 
             ViewerViewModel viewer;
             try
             {
-                viewer = await ViewerViewModel.OpenAsync(_providers, _temp, entry.Path, show.Token);
+                var opening = ViewerViewModel.OpenAsync(_providers, _temp, entry.Path, show.Token);
+                await ShowLoadingWhileSlowAsync(opening, entry, show);
+                viewer = await opening;
             }
             catch (OperationCanceledException) when (show.IsCancellationRequested)
             {
@@ -183,7 +189,8 @@ public sealed partial class QuickViewViewModel : ObservableObject, IDisposable
             {
                 if (_show != show) return;
                 if (failure is not (IOException or UnauthorizedAccessException)) _reportFailure?.Invoke(failure);
-                Display(entry.Path, null,
+                // Not remembered as shown: coming back to the file, or a refresh, tries it again.
+                Display(null, null,
                     Loc.Format("QuickView_OpenFailed", entry.Name, OperationTexts.ForFailure(failure)));
                 return;
             }
@@ -193,7 +200,7 @@ public sealed partial class QuickViewViewModel : ObservableObject, IDisposable
                 Track(viewer.DisposeAsync().AsTask());
                 return;
             }
-            Display(entry.Path, viewer, null);
+            Display(ShownEntry.Of(entry), viewer, null);
         }
         catch (Exception failure)
         {
@@ -206,12 +213,25 @@ public sealed partial class QuickViewViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>Shows <paramref name="viewer"/> or <paramref name="message"/> for <paramref name="path"/>, disposing
-    /// the viewer shown before.</summary>
-    private void Display(VfsPath? path, ViewerViewModel? viewer, string? message)
+    /// <summary>Once <paramref name="opening"/> has taken <see cref="FollowDelay"/> and is still the open wanted,
+    /// shows that <paramref name="entry"/> is loading in place of the previous file; completes when the open does
+    /// (whichever way) or the loading message is shown.</summary>
+    private async Task ShowLoadingWhileSlowAsync(Task opening, FileEntry entry, CancellationTokenSource show)
+    {
+        using var slow = CancellationTokenSource.CreateLinkedTokenSource(show.Token);
+        var wait = _delay(FollowDelay, slow.Token);
+        var first = await Task.WhenAny(opening, wait);
+        slow.Cancel();
+        if (first == wait && wait.IsCompletedSuccessfully && _show == show && !opening.IsCompleted)
+            Display(null, null, Loc.Format("QuickView_Loading", entry.Name));
+    }
+
+    /// <summary>Shows <paramref name="viewer"/> or <paramref name="message"/> for <paramref name="shown"/> (null when
+    /// what is shown must not stop the same entry from being opened again), disposing the viewer shown before.</summary>
+    private void Display(ShownEntry? shown, ViewerViewModel? viewer, string? message)
     {
         var previous = Viewer;
-        _shown = path;
+        _shown = shown;
         Viewer = viewer;
         Message = message;
         if (previous is not null && !ReferenceEquals(previous, viewer)) Track(previous.DisposeAsync().AsTask());
@@ -229,5 +249,12 @@ public sealed partial class QuickViewViewModel : ObservableObject, IDisposable
     {
         _work.RemoveAll(t => t.IsCompleted);
         if (!task.IsCompleted) _work.Add(task);
+    }
+
+    /// <summary>What identifies the version of an entry on show: a refresh that changes its size or modified time
+    /// shows it again.</summary>
+    private readonly record struct ShownEntry(VfsPath Path, long Size, DateTimeOffset Modified)
+    {
+        public static ShownEntry Of(FileEntry entry) => new(entry.Path, entry.Size, entry.Modified);
     }
 }
