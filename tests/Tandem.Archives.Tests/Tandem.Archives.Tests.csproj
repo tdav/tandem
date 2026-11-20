@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Tandem.Archives\Tandem.Archives.csproj" />
+    <ProjectReference Include="..\..\src\Tandem.Core\Tandem.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Tandem.Core.Tests\Operations\ScriptedInteraction.cs" Link="Operations\ScriptedInteraction.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Fixtures\**" Exclude="Fixtures\*.sh;Fixtures\*.py;Fixtures\README.md" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\fixtures\external\**" Exclude="..\fixtures\external\README.md" LinkBase="Fixtures\external" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
