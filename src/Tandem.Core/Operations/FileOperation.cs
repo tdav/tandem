@@ -36,6 +36,7 @@ public abstract class FileOperation
     private TimeSpan? _pausedSince; // the current pause
     private TimeSpan? _lastProgressEvent;
     private string? _currentItem;
+    private bool _committing;
     private TaskCompletionSource? _resume; // set while a pause is requested; completed by Resume
     private long _filesDone, _filesTotal, _bytesDone, _bytesTotal;
 
@@ -157,7 +158,9 @@ public abstract class FileOperation
     /// <see cref="BatchScope.DisposeErrorKey"/>. <paramref name="afterCommit"/> runs only once the commit and the
     /// disposal succeeded and the body did not fail (it may have been cancelled); a failed disposal skips it also when
     /// its error was only attached to a cancellation.</summary>
-    protected static async Task RunInBatchAsync(ProviderRegistry providers, IEnumerable<VfsPath> paths,
+    /// <para>While a scope that holds batches commits, <see cref="IsCommitting"/> is true (a provider writing its
+    /// collected changes, such as an archive rewritten as a whole, which neither pauses nor cancels).</para>
+    protected async Task RunInBatchAsync(ProviderRegistry providers, IEnumerable<VfsPath> paths,
         Func<BatchScope, Task> body, Func<Task>? afterCommit, CancellationToken ct)
     {
         var scope = await BatchScope.BeginAsync(providers, paths, ct).ConfigureAwait(false);
@@ -171,6 +174,8 @@ public abstract class FileOperation
             bodyError = ExceptionDispatchInfo.Capture(e);
         }
         var bodyFailed = bodyError is { SourceException: not OperationCanceledException };
+        var committing = scope.HoldsBatches;
+        if (committing) SetCommitting(true);
         try
         {
             await scope.CommitAsync(CancellationToken.None).ConfigureAwait(false);
@@ -183,6 +188,7 @@ public abstract class FileOperation
         {
             // The body's error is the outcome; the batch is discarded on disposal.
         }
+        if (committing) SetCommitting(false);
         var disposeFailed = false;
         if ((commitError ?? bodyError) is { } outcome)
         {
@@ -195,6 +201,19 @@ public abstract class FileOperation
         commitError?.Throw();
         if (!bodyFailed && !disposeFailed && afterCommit is not null) await afterCommit().ConfigureAwait(false);
         bodyError?.Throw();
+    }
+
+    /// <summary>True while the operation's batches commit (see <see cref="RunInBatchAsync"/>): the changes collected
+    /// are being written, all at once; the interface says so. The state stays what it was.</summary>
+    public bool IsCommitting
+    {
+        get { lock (_lock) return _committing; }
+    }
+
+    private void SetCommitting(bool committing)
+    {
+        lock (_lock) _committing = committing;
+        Changed?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>Moves to <paramref name="state"/> and raises <see cref="Changed"/>.</summary>

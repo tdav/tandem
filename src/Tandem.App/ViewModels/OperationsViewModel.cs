@@ -228,12 +228,14 @@ public sealed partial class OperationItemViewModel : ObservableObject
         if (_detached) return;
         var state = Operation.State;
         var progress = Operation.Progress;
-        StateText = Loc.Enum(state);
+        // Writing collected changes (an archive rewritten as a whole) neither pauses nor cancels: say what it does.
+        var committing = Operation.IsCommitting && !OperationsViewModel.IsFinal(state);
+        StateText = committing ? Loc.Get("Operation_Committing") : Loc.Enum(state);
         Percent = NextPercent(Percent, progress.BytesDone, progress.BytesTotal);
         CurrentItem = progress.CurrentItem;
         DetailText = Describe(progress);
         var pauseRequested = Operation.IsPauseRequested;
-        CanPause = (state is OperationState.Scanning or OperationState.Running) && !pauseRequested;
+        CanPause = (state is OperationState.Scanning or OperationState.Running) && !pauseRequested && !committing;
         CanResume = state == OperationState.Paused || (pauseRequested && !OperationsViewModel.IsFinal(state));
     }
 

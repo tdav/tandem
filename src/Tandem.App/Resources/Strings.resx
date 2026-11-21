@@ -552,6 +552,9 @@ Details were written to {1}.</value>
   <data name="Operation_Failed" xml:space="preserve">
     <value>The operation stopped: {0}</value>
   </data>
+  <data name="Operation_Committing" xml:space="preserve">
+    <value>Writing the archive…</value>
+  </data>
   <data name="CopyMove_CopyOne" xml:space="preserve">
     <value>Copy “{0}” to:</value>
   </data>

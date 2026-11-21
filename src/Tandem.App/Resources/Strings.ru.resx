@@ -543,6 +543,9 @@
   <data name="Operation_Failed" xml:space="preserve">
     <value>Операция прервана: {0}</value>
   </data>
+  <data name="Operation_Committing" xml:space="preserve">
+    <value>Запись архива…</value>
+  </data>
   <data name="CopyMove_CopyOne" xml:space="preserve">
     <value>Копировать «{0}» в:</value>
   </data>

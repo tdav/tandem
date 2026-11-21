@@ -122,6 +122,10 @@ public sealed class BatchScope : IAsyncDisposable
     public bool Covers(VfsPath path) =>
         _owner is null ? _held.ContainsKey(path.ProviderId) : _requested.Contains(path.ProviderId);
 
+    /// <summary>True when this scope owns batches, so that <see cref="CommitAsync"/> commits something; false for an
+    /// empty or a joined scope.</summary>
+    public bool HoldsBatches => _owner is null && _order.Count > 0;
+
     /// <summary>Passes the read hint to the batches it concerns: to each covered provider, its own files of
     /// <paramref name="files"/> in their order. Files of other providers are left out.</summary>
     public async Task PrepareReadAsync(IReadOnlyList<VfsPath> files, CancellationToken ct)

@@ -62,6 +62,47 @@ public sealed class BatchOperationTests
     }
 
     [Fact]
+    public async Task Operation_says_it_is_committing_while_the_batch_commits_and_not_before_or_after()
+    {
+        Arrange();
+        var copy = Copy(Arc("/dst"), Mem("/src/a.txt"));
+        var seen = new List<bool>();
+        bool? duringCommit = null;
+        var changedDuringCommit = false;
+        copy.Changed += (_, _) =>
+        {
+            lock (seen) seen.Add(copy.IsCommitting);
+        };
+        _arc.OnCommit = _ =>
+        {
+            duringCommit = copy.IsCommitting;
+            lock (seen) changedDuringCommit = seen.Contains(true);
+            return Task.CompletedTask;
+        };
+
+        var result = await copy.RunAsync().WaitAsync(Timeout, Ct);
+
+        Assert.Equal(OperationState.Completed, result.State);
+        Assert.True(duringCommit);
+        Assert.True(changedDuringCommit); // the window hears it as it starts
+        Assert.False(copy.IsCommitting);
+    }
+
+    [Fact]
+    public async Task Operation_without_batches_never_commits()
+    {
+        _mem.AddFile("/src/a.txt", "a");
+        _mem.AddDirectory("/dst");
+        var copy = Copy(Mem("/dst"), Mem("/src/a.txt"));
+        var committing = false;
+        copy.Changed += (_, _) => committing |= copy.IsCommitting;
+
+        await copy.RunAsync().WaitAsync(Timeout, Ct);
+
+        Assert.False(committing);
+    }
+
+    [Fact]
     public async Task Copy_announces_files_to_read_in_plan_order()
     {
         _arc.Files.AddFile("/src/b.txt", "b");

@@ -242,4 +242,25 @@ public class OperationsViewModelTests : LanguageTestBase
         Assert.Equal("5 операций", vm.IndicatorText);
         foreach (var op in ops) op.Release();
     }
+
+    [AvaloniaFact]
+    public async Task Operation_writing_its_collected_changes_says_so_and_offers_no_pause()
+    {
+        var queue = new OperationQueue();
+        using var vm = new OperationsViewModel(queue);
+        var op = new CommitGateOperation();
+        _ = queue.Enqueue(op, runImmediately: true);
+        await op.Committing;
+        await TestApp.WaitUntil(() =>
+        {
+            Dispatcher.UIThread.RunJobs();
+            return vm.Items.Count == 1 && vm.Items[0].StateText == Loc.Get("Operation_Committing");
+        });
+
+        Assert.Equal("Writing the archive…", vm.Items[0].StateText);
+        Assert.False(vm.Items[0].CanPause);
+
+        op.Release();
+        Assert.Equal(OperationState.Completed, (await op.Completion).State);
+    }
 }
