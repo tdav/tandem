@@ -127,7 +127,7 @@ public sealed class RemoteProvider : IFileSystemProvider, IHostedProvider, IAsyn
     {
         Require(path);
         ct.ThrowIfCancellationRequested();
-        return await OpenStreamAsync((session, token) => session.OpenReadAsync(path.Path, token), ct)
+        return await OpenStreamAsync((session, token) => session.OpenReadAsync(path.Path, token), reading: true, ct)
             .ConfigureAwait(false);
     }
 
@@ -140,8 +140,8 @@ public sealed class RemoteProvider : IFileSystemProvider, IHostedProvider, IAsyn
         var parent = path.Parent ?? throw new VfsAccessDeniedException("The root of a server cannot be written to.");
         try
         {
-            return await OpenStreamAsync((session, token) => session.OpenWriteAsync(path.Path, token), ct)
-                .ConfigureAwait(false);
+            return await OpenStreamAsync((session, token) => session.OpenWriteAsync(path.Path, token), reading: false,
+                ct).ConfigureAwait(false);
         }
         catch (VfsException e) when (e is not (VfsNotFoundException or VfsConnectionLostException
                                          or NetAuthenticationException or NetTrustException))
@@ -202,9 +202,14 @@ public sealed class RemoteProvider : IFileSystemProvider, IHostedProvider, IAsyn
             await CallAsync((session, token) => session.DeleteFileAsync(path.Path, token), ct).ConfigureAwait(false);
             return;
         }
-        if (!recursive && (await ListAsync(path, ct).ConfigureAwait(false)).Count > 0)
+        if (recursive)
+        {
+            await DeleteTreeAsync(path, ct).ConfigureAwait(false);
+            return;
+        }
+        if ((await ListAsync(path, ct).ConfigureAwait(false)).Count > 0)
             throw new VfsException($"'{GetDisplayPath(path)}' is not empty.");
-        await DeleteTreeAsync(path, ct).ConfigureAwait(false);
+        await CallAsync((session, token) => session.DeleteDirectoryAsync(path.Path, token), ct).ConfigureAwait(false);
     }
 
     /// <summary>Renames on the server. The destination is looked up first: if it exists the move is refused with
@@ -301,8 +306,13 @@ public sealed class RemoteProvider : IFileSystemProvider, IHostedProvider, IAsyn
         new(path, entry.Kind, entry.Size, entry.Modified, entry.Modified, entry.Mode,
             IsHidden: path.Name.StartsWith('.'), entry.LinkTarget, entry.LinkPointsToDirectory);
 
-    private Task<RemoteEntry?> StatAsync(VfsPath path, CancellationToken ct) =>
-        CallAsync((session, token) => session.StatAsync(path.Path, token), ct);
+    /// <summary>The root is a folder on every server and is not asked about: some servers cannot describe it.</summary>
+    private static readonly RemoteEntry RootEntry =
+        new("", EntryKind.Directory, 0, DateTimeOffset.UnixEpoch, Mode: null);
+
+    private Task<RemoteEntry?> StatAsync(VfsPath path, CancellationToken ct) => path.IsRoot
+        ? Task.FromResult<RemoteEntry?>(RootEntry)
+        : CallAsync((session, token) => session.StatAsync(path.Path, token), ct);
 
     private Task<List<RemoteEntry>> ListAsync(VfsPath directory, CancellationToken ct) =>
         CallAsync(async (session, token) =>
@@ -368,16 +378,18 @@ public sealed class RemoteProvider : IFileSystemProvider, IHostedProvider, IAsyn
         }
     }
 
-    /// <summary>As <see cref="CallAsync{T}"/>, but the connection stays with the stream until it is closed.</summary>
+    /// <summary>As <see cref="CallAsync{T}"/>, but the connection stays with the stream until it is closed. A read
+    /// stream closed before its end leaves a connection (not multiplexed) in a state this class cannot know — an FTP
+    /// transfer cut short — so that connection is closed rather than lent again.</summary>
     private async Task<Stream> OpenStreamAsync(Func<IRemoteSession, CancellationToken, Task<Stream>> open,
-        CancellationToken ct)
+        bool reading, CancellationToken ct)
     {
         for (var attempt = 1; ; attempt++)
         {
             var lease = await _pool.AcquireAsync(ct).ConfigureAwait(false);
             try
             {
-                return new LeasedStream(await open(lease.Session, ct).ConfigureAwait(false), lease);
+                return new LeasedStream(await open(lease.Session, ct).ConfigureAwait(false), lease, reading);
             }
             catch (VfsConnectionLostException e) when (lease.Reused && attempt == 1)
             {
@@ -393,11 +405,21 @@ public sealed class RemoteProvider : IFileSystemProvider, IHostedProvider, IAsyn
     }
 
     /// <summary>A stream of a connection: closing it closes the inner stream first — its error (the server's answer to
-    /// an upload) is thrown, never swallowed — and then gives the connection back.</summary>
-    private sealed class LeasedStream(Stream inner, SessionPool.Lease lease) : Stream
+    /// an upload) is thrown, never swallowed — and then gives the connection back (see
+    /// <see cref="OpenStreamAsync"/> for a read stream closed early).</summary>
+    private sealed class LeasedStream(Stream inner, SessionPool.Lease lease, bool reading) : Stream
     {
         private Exception? _failure;
         private bool _disposed;
+        private bool _atEnd;
+
+        private bool ClosedEarly => reading && !_atEnd;
+
+        private int Seen(int read, int asked)
+        {
+            if (read == 0 && asked > 0) _atEnd = true;
+            return read;
+        }
 
         public override bool CanRead => inner.CanRead;
         public override bool CanSeek => inner.CanSeek;
@@ -410,13 +432,14 @@ public sealed class RemoteProvider : IFileSystemProvider, IHostedProvider, IAsyn
             set => inner.Position = value;
         }
 
-        public override int Read(byte[] buffer, int offset, int count) => Watch(() => inner.Read(buffer, offset, count));
+        public override int Read(byte[] buffer, int offset, int count) =>
+            Watch(() => Seen(inner.Read(buffer, offset, count), count));
 
         public override int Read(Span<byte> buffer)
         {
             try
             {
-                return inner.Read(buffer);
+                return Seen(inner.Read(buffer), buffer.Length);
             }
             catch (Exception e)
             {
@@ -429,7 +452,7 @@ public sealed class RemoteProvider : IFileSystemProvider, IHostedProvider, IAsyn
         {
             try
             {
-                return await inner.ReadAsync(buffer, ct).ConfigureAwait(false);
+                return Seen(await inner.ReadAsync(buffer, ct).ConfigureAwait(false), buffer.Length);
             }
             catch (Exception e)
             {
@@ -520,7 +543,7 @@ public sealed class RemoteProvider : IFileSystemProvider, IHostedProvider, IAsyn
                 }
                 finally
                 {
-                    lease.Release(_failure);
+                    lease.Release(_failure, ClosedEarly);
                 }
             }
             base.Dispose(disposing);
@@ -542,7 +565,7 @@ public sealed class RemoteProvider : IFileSystemProvider, IHostedProvider, IAsyn
                 }
                 finally
                 {
-                    lease.Release(_failure);
+                    lease.Release(_failure, ClosedEarly);
                 }
             }
             await base.DisposeAsync().ConfigureAwait(false);

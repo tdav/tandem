@@ -14,7 +14,9 @@ namespace Tandem.Net.Tests.Remote;
 /// shares a connection it must not.</para>
 /// <para>Call names (for <see cref="FailOn"/> and <see cref="Log"/>) are the <see cref="IRemoteSession"/> method names
 /// without "Async": Connect, List, Stat, OpenRead, OpenWrite, CreateDirectory, DeleteFile, DeleteDirectory, Rename,
-/// CreateSymlink, SetModified, SetMode.</para>
+/// CreateSymlink, SetModified, SetMode. Connect counts as a call on "/".</para>
+/// <para>A link is always listed as <see cref="EntryKind.Symlink"/>; its target only with
+/// <see cref="RemoteFeatures.Symlinks"/>.</para>
 /// </summary>
 public sealed class FakeRemoteServer
 {
@@ -33,6 +35,8 @@ public sealed class FakeRemoteServer
     private bool _offline;
     private bool _renameOverwrites;
     private bool _failCloseWrite;
+    private Task? _holdCalls;
+    private Task? _holdConnect;
 
     public FakeRemoteServer() => _nodes["/"] = Node.Directory();
 
@@ -74,6 +78,21 @@ public sealed class FakeRemoteServer
     {
         get { lock (_lock) return _dropAfterBytes; }
         set { lock (_lock) _dropAfterBytes = value; }
+    }
+
+    /// <summary>While set, every call waits for this task after it is logged (inside the call: busy, cancellable).
+    /// Not connects and not stream reads or writes.</summary>
+    public Task? HoldCalls
+    {
+        get { lock (_lock) return _holdCalls; }
+        set { lock (_lock) _holdCalls = value; }
+    }
+
+    /// <summary>While set, every connect waits for this task after it is logged, then goes on (and may fail).</summary>
+    public Task? HoldConnect
+    {
+        get { lock (_lock) return _holdConnect; }
+        set { lock (_lock) _holdConnect = value; }
     }
 
     /// <summary>The server closes every connection it has now (as after an idle time-out). The clients do not know
@@ -254,8 +273,8 @@ public sealed class FakeRemoteServer
         var pointsToDirectory = node.Kind == EntryKind.Symlink && Resolve(path) is { } target &&
                                 _nodes[target].Kind == EntryKind.Directory;
         return new RemoteEntry(NameOf(path), node.Kind, node.Kind == EntryKind.File ? node.Data!.Length : 0,
-            node.Modified, features.HasFlag(RemoteFeatures.Modes) ? node.Mode : null, node.LinkTarget,
-            pointsToDirectory);
+            node.Modified, features.HasFlag(RemoteFeatures.Modes) ? node.Mode : null,
+            features.HasFlag(RemoteFeatures.Symlinks) ? node.LinkTarget : null, pointsToDirectory);
     }
 
     private sealed class Node
@@ -311,10 +330,19 @@ public sealed class FakeRemoteServer
         {
             ct.ThrowIfCancellationRequested();
             await Task.Yield();
+            Task? hold;
             lock (_lock)
             {
                 if (_disposed || _connected) throw new InvalidOperationException("Connect on a used connection.");
                 server._log.Add($"#{number} Connect");
+                hold = server._holdConnect;
+            }
+            if (hold is not null) await hold.WaitAsync(ct);
+            lock (_lock)
+            {
+                foreach (var (failCall, failPath, error) in server._failures)
+                    if (failCall == "Connect" && failPath == "/")
+                        throw error();
                 if (server._offline) throw new VfsConnectionLostException("The fake server is offline.");
                 _connected = true;
                 Features = server._features;
@@ -525,6 +553,7 @@ public sealed class FakeRemoteServer
         private async Task EnterAsync(string call, CancellationToken ct, params string[] paths)
         {
             ct.ThrowIfCancellationRequested();
+            Task? hold;
             lock (_lock)
             {
                 if (_disposed || (!_connected && !Dropped))
@@ -539,10 +568,12 @@ public sealed class FakeRemoteServer
                     if (failCall == call && normalized.Contains(failPath))
                         throw error();
                 _busy++;
+                hold = server._holdCalls;
             }
             try
             {
                 await Task.Yield();
+                if (hold is not null) await hold.WaitAsync(ct);
                 ct.ThrowIfCancellationRequested();
             }
             catch

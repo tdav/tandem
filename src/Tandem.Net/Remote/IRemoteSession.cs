@@ -7,7 +7,8 @@ public enum RemoteFeatures
 {
     None = 0,
 
-    /// <summary>Links are listed as links, their targets read and links created.</summary>
+    /// <summary>Link targets can be read (<see cref="RemoteEntry.LinkTarget"/>) and links created. Without it a link is
+    /// still reported as a link (<see cref="EntryKind.Symlink"/>), only its target is unknown.</summary>
     Symlinks = 1,
 
     /// <summary>Unix permissions are reported and can be set.</summary>
@@ -31,6 +32,19 @@ public sealed record RemoteEntry(string Name, EntryKind Kind, long Size, DateTim
 /// <see cref="NetTrustException"/>; cancellation is <see cref="OperationCanceledException"/>.
 /// Without <see cref="RemoteFeatures.Multiplexed"/> the connection runs one call at a time, and an open stream
 /// occupies it until the stream is closed.
+/// <para><b>Time limits.</b> No call waits forever: connecting (with logging in, not counting the user's answers) is
+/// limited to 15 s, and every read or write to 30 s without any data moving; past that, the call throws
+/// <see cref="VfsConnectionLostException"/> and the connection counts as closed. Closing a write stream takes no
+/// token (<see cref="IAsyncDisposable.DisposeAsync"/>), so the session itself must limit the wait for the server's
+/// final reply to the upload in the same way.</para>
+/// <para><b>Links.</b> An entry the server marks as a link is always reported as <see cref="EntryKind.Symlink"/>,
+/// whatever <see cref="Features"/> say: callers rely on that not to enter links (a recursive delete must not
+/// delete what a link points to). <see cref="RemoteFeatures.Symlinks"/> only governs reading targets and creating
+/// links. A session that cannot tell reports what the server says.</para>
+/// <para><b>Retries.</b> The caller makes a call once more on a fresh connection when the reused one turns out to be
+/// closed. If the server had carried out a call that changes something (delete, rename, create) and only its reply was
+/// lost, the repeated call may report <see cref="VfsNotFoundException"/> or <see cref="VfsAlreadyExistsException"/>
+/// for an action that succeeded. No data is lost that way; a session need not guard against it.</para>
 /// </summary>
 public interface IRemoteSession : IAsyncDisposable
 {
@@ -45,14 +59,18 @@ public interface IRemoteSession : IAsyncDisposable
     Task ConnectAsync(CancellationToken ct);
 
     /// <summary>The direct children, without "." and "..". A missing folder is
-    /// <see cref="VfsNotFoundException"/>.</summary>
+    /// <see cref="VfsNotFoundException"/>. A link is <see cref="EntryKind.Symlink"/> (see the class notes).</summary>
     IAsyncEnumerable<RemoteEntry> ListAsync(string directory, CancellationToken ct);
 
-    /// <summary>The entry itself (a link, not its target). Null only when the server says for certain that it does
+    /// <summary>The entry itself (a link, not its target; <see cref="EntryKind.Symlink"/> whatever the features). Null only when the server says for certain that it does
     /// not exist: an answer that may mean something else (no access, a failed or unclear reply) is an exception,
     /// never null — callers rely on null to decide that a name is free.</summary>
     Task<RemoteEntry?> StatAsync(string path, CancellationToken ct);
 
+    /// <summary>A stream of the file's bytes. Closing it before its end must either leave the connection usable for
+    /// the next call (the transfer properly ended) or make <see cref="IsConnected"/> false. The pool of
+    /// <see cref="RemoteProvider"/> does not rely on the first: a connection without
+    /// <see cref="RemoteFeatures.Multiplexed"/> whose read stream was closed early is closed, not lent again.</summary>
     Task<Stream> OpenReadAsync(string path, CancellationToken ct);
 
     /// <summary>Creates the file or truncates it. Closing the stream finishes the upload and throws its error (the

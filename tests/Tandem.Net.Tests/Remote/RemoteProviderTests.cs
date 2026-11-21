@@ -37,6 +37,12 @@ public sealed class RemoteProviderTests : IAsyncDisposable
         return names;
     }
 
+    private static async Task<string> ToEndAsync(Stream stream)
+    {
+        using var reader = new StreamReader(stream, leaveOpen: true);
+        return await reader.ReadToEndAsync(Ct);
+    }
+
     private async Task<string> ReadTextAsync(string path)
     {
         await using var stream = await _provider.OpenReadAsync(P(path), Ct);
@@ -64,9 +70,11 @@ public sealed class RemoteProviderTests : IAsyncDisposable
     public async Task Several_idle_connections_closed_by_the_server_cost_one_retry()
     {
         _server.AddFile("/a.txt", "a");
-        await using (await _provider.OpenReadAsync(P("/a.txt"), Ct))
-        await using (await _provider.OpenReadAsync(P("/a.txt"), Ct))
+        await using (var first = await _provider.OpenReadAsync(P("/a.txt"), Ct))
+        await using (var second = await _provider.OpenReadAsync(P("/a.txt"), Ct))
         {
+            Assert.Equal("a", await ToEndAsync(first));
+            Assert.Equal("a", await ToEndAsync(second));
         }
         Assert.Equal(2, _server.OpenNow); // both free now
 
@@ -237,8 +245,8 @@ public sealed class RemoteProviderTests : IAsyncDisposable
         await using (var b = await _provider.OpenReadAsync(P("/b.txt"), Ct))
         {
             Assert.Equal(["a.txt", "b.txt"], await NamesAsync("/")); // a third call while both are open
-            Assert.Equal((byte)'b', (byte)b.ReadByte());
-            Assert.Equal((byte)'a', (byte)a.ReadByte());
+            Assert.Equal("b", await ToEndAsync(b));
+            Assert.Equal("a", await ToEndAsync(a));
         }
 
         Assert.Equal(3, _server.MaxOpenAtOnce);
@@ -247,8 +255,8 @@ public sealed class RemoteProviderTests : IAsyncDisposable
         await using (var a = await _provider.OpenReadAsync(P("/a.txt"), Ct))
         await using (var b = await _provider.OpenReadAsync(P("/b.txt"), Ct)) // two free ones, not one twice
         {
-            Assert.Equal((byte)'a', (byte)a.ReadByte());
-            Assert.Equal((byte)'b', (byte)b.ReadByte());
+            Assert.Equal("a", await ToEndAsync(a));
+            Assert.Equal("b", await ToEndAsync(b));
         }
         Assert.Equal(3, _server.ConnectCount);
     }
@@ -270,6 +278,7 @@ public sealed class RemoteProviderTests : IAsyncDisposable
         var waiting = _provider.OpenReadAsync(P("/4.txt"), Ct);
         await Task.Delay(50, Ct);
         Assert.False(waiting.IsCompleted);
+        Assert.Equal("0", await ToEndAsync(open[0])); // read to the end: its connection is reused
         await open[0].DisposeAsync();
         await using (var stream = await waiting.WaitAsync(TimeSpan.FromSeconds(10), Ct))
             Assert.Equal((byte)'4', (byte)stream.ReadByte());
@@ -411,13 +420,105 @@ public sealed class RemoteProviderTests : IAsyncDisposable
     {
         _server.AddFile("/a.txt", "a");
         await _provider.ConnectAsync(Ct);
-        using var cts = new CancellationTokenSource();
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(Ct);
+        _server.HoldCalls = new TaskCompletionSource().Task; // never released: the call stays in flight
+
+        var call = _provider.GetEntryAsync(P("/a.txt"), cts.Token);
+        await WaitUntilAsync(() => _server.Log.Contains("#1 Stat /a.txt"));
+        Assert.False(call.IsCompleted);
         await cts.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => call);
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _provider.GetEntryAsync(P("/a.txt"), cts.Token));
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _provider.OpenReadAsync(P("/a.txt"), cts.Token));
-
+        _server.HoldCalls = null;
         Assert.Equal("a", await ReadTextAsync("/a.txt"));
+        Assert.Equal(2, _server.ConnectCount); // the interrupted connection was not trusted again
+    }
+
+    [Fact]
+    public async Task A_read_stream_closed_early_does_not_return_its_connection_to_the_pool()
+    {
+        _server.AddFile("/a.txt", "abc");
+
+        await using (var early = await _provider.OpenReadAsync(P("/a.txt"), Ct))
+            Assert.Equal((byte)'a', (byte)early.ReadByte());
+        Assert.Equal(0, _server.OpenNow);
+        Assert.Equal("abc", await ReadTextAsync("/a.txt"));
+        Assert.Equal("abc", await ReadTextAsync("/a.txt")); // read to the end: reused
+
+        Assert.Equal(2, _server.ConnectCount);
+        Assert.Equal(1, _server.OpenNow);
+    }
+
+    [Fact]
+    public async Task A_multiplexed_read_stream_closed_early_keeps_the_connection()
+    {
+        _server.Features |= RemoteFeatures.Multiplexed;
+        _server.AddFile("/a.txt", "abc");
+
+        await using (var early = await _provider.OpenReadAsync(P("/a.txt"), Ct))
+            Assert.Equal((byte)'a', (byte)early.ReadByte());
+        Assert.Equal("abc", await ReadTextAsync("/a.txt"));
+
+        Assert.Equal(1, _server.ConnectCount);
+    }
+
+    [Fact]
+    public async Task Callers_waiting_on_a_failed_connect_get_its_error_without_trying_again()
+    {
+        var hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _server.HoldConnect = hold.Task;
+        _server.FailOn("Connect", "/", () => new NetAuthenticationException("declined", declined: true));
+
+        var calls = Enumerable.Range(0, 3).Select(_ => _provider.GetEntryAsync(P("/a"), Ct)).ToArray();
+        await WaitUntilAsync(() => _server.Log.Count(line => line.EndsWith(" Connect", StringComparison.Ordinal)) == 1);
+        hold.SetResult();
+
+        foreach (var call in calls)
+            Assert.True((await Assert.ThrowsAsync<NetAuthenticationException>(() => call)).Declined);
+        Assert.Single(_server.Log, line => line.EndsWith(" Connect", StringComparison.Ordinal));
+
+        _server.HoldConnect = null;
+        _server.ClearFailures();
+        Assert.NotNull(await _provider.GetEntryAsync(_provider.Root, Ct));
+        await _provider.ConnectAsync(Ct);
+        Assert.Equal(1, _server.ConnectCount);
+    }
+
+    [Fact]
+    public async Task The_root_is_a_folder_without_asking_the_server()
+    {
+        _server.FailOn("Stat", "/", () => new VfsAccessDeniedException("this server cannot stat its root"));
+
+        var root = await _provider.GetEntryAsync(_provider.Root, Ct);
+        await _provider.CreateDirectoryAsync(_provider.Root, Ct);
+        Assert.Equal(0, _server.ConnectCount); // the root alone needs no connection
+        await _provider.CreateDirectoryAsync(P("/a/b"), Ct);
+
+        Assert.Equal(EntryKind.Directory, root!.Kind);
+        Assert.Equal(_provider.Root, root.Path);
+        Assert.Equal(["/a", "/a/b"], _server.AllPaths);
+        Assert.DoesNotContain(_server.Log, line => line.EndsWith(" Stat /", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Deleting_an_empty_folder_lists_it_once()
+    {
+        _server.AddDirectory("/d");
+
+        await _provider.DeleteAsync(P("/d"), recursive: false, Ct);
+
+        Assert.False(_server.Exists("/d"));
+        Assert.Single(_server.Log, line => line.EndsWith(" List /d", StringComparison.Ordinal));
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        while (!condition())
+        {
+            Assert.True(DateTime.UtcNow < deadline, "The condition did not come true in time.");
+            await Task.Delay(5, Ct);
+        }
     }
 
     [Fact]
@@ -428,6 +529,6 @@ public sealed class RemoteProviderTests : IAsyncDisposable
         await _provider.DisposeAsync();
 
         Assert.Equal(0, _server.OpenNow);
-        await Assert.ThrowsAsync<ObjectDisposedException>(() => _provider.GetEntryAsync(P("/"), Ct));
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => _provider.GetEntryAsync(P("/a"), Ct));
     }
 }

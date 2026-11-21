@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using Tandem.Core.Vfs;
 
 namespace Tandem.Net.Remote;
@@ -7,7 +8,10 @@ namespace Tandem.Net.Remote;
 /// the server multiplexes (<see cref="RemoteFeatures.Multiplexed"/>), a single connection lent to everyone at once.
 /// <para>A caller takes a free connection or opens a new one; at the maximum it waits (cancellably). New connections
 /// are opened one at a time, so that the user is asked about credentials once, not by every caller together, and
-/// so that the callers waiting meanwhile learn whether the server multiplexes before they open their own.</para>
+/// so that the callers waiting meanwhile learn whether the server multiplexes before they open their own. When that
+/// attempt fails, the callers that waited for it fail with its error instead of each trying again (no repeated
+/// connect time-outs, no second credential question after the user declined); a later call tries again. An attempt
+/// that is cancelled by its own caller is not passed on: the others then try themselves.</para>
 /// <para>A connection given back is kept for the next caller unless it is no longer connected, failed in a way that
 /// leaves its state unknown, or was retired by <see cref="CloseAllAsync"/>; then it is closed. Thread-safe.</para>
 /// </summary>
@@ -20,6 +24,7 @@ internal sealed class SessionPool(Func<IRemoteSession> newSession, int maxSessio
     private int _count;       // connections open or being opened, retired ones not yet closed included
     private int _open;        // connections that connected and are not closed yet
     private bool _connecting;
+    private TaskCompletionSource<Exception?>? _attempt; // while connecting: its error, or null for success or cancel
     private int _generation;
     private bool _disposed;
     private RemoteFeatures? _features;
@@ -43,6 +48,7 @@ internal sealed class SessionPool(Func<IRemoteSession> newSession, int maxSessio
         {
             ct.ThrowIfCancellationRequested();
             TaskCompletionSource wake;
+            Task<Exception?>? attempt = null;
             List<Slot> dead = [];
             var connect = false;
             lock (_lock)
@@ -65,6 +71,7 @@ internal sealed class SessionPool(Func<IRemoteSession> newSession, int maxSessio
                 if (!_connecting && _count < maxSessions)
                 {
                     _connecting = true;
+                    _attempt = new TaskCompletionSource<Exception?>(TaskCreationOptions.RunContinuationsAsynchronously);
                     _count++;
                     connect = true;
                     wake = null!;
@@ -73,6 +80,7 @@ internal sealed class SessionPool(Func<IRemoteSession> newSession, int maxSessio
                 {
                     wake = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                     _waiters.Add(wake);
+                    if (_connecting) attempt = _attempt!.Task;
                 }
             }
             await CloseQuietlyAsync(dead).ConfigureAwait(false);
@@ -86,6 +94,8 @@ internal sealed class SessionPool(Func<IRemoteSession> newSession, int maxSessio
                 lock (_lock) _waiters.Remove(wake);
                 throw;
             }
+            // The attempt is settled before the waiters are woken; one still running is looked at on the next round.
+            if (attempt is { IsCompleted: true, Result: { } failed }) ExceptionDispatchInfo.Throw(failed);
         }
     }
 
@@ -131,12 +141,13 @@ internal sealed class SessionPool(Func<IRemoteSession> newSession, int maxSessio
             session = newSession();
             await session.ConnectAsync(ct).ConfigureAwait(false);
         }
-        catch
+        catch (Exception e)
         {
             lock (_lock)
             {
                 _count--;
                 _connecting = false;
+                _attempt!.TrySetResult(e is OperationCanceledException ? null : e);
                 WakeLocked();
             }
             if (session is not null) await CloseQuietlyAsync(session).ConfigureAwait(false);
@@ -147,6 +158,7 @@ internal sealed class SessionPool(Func<IRemoteSession> newSession, int maxSessio
         lock (_lock)
         {
             _connecting = false;
+            _attempt!.TrySetResult(null);
             _open++;
             _features = session.Features;
             slot.Generation = _generation;
@@ -265,12 +277,13 @@ internal sealed class SessionPool(Func<IRemoteSession> newSession, int maxSessio
 
         /// <summary>Gives the connection back. <paramref name="failure"/>: what the last call threw, if anything; a
         /// lost connection, a cancelled or unexpected failure (the connection's state is then unknown) closes it,
-        /// while a plain answer of the server (not found, access denied, …) keeps it. A multiplexed connection is
-        /// closed only when lost. Only the first call counts.</summary>
-        public void Release(Exception? failure = null)
+        /// while a plain answer of the server (not found, access denied, …) keeps it. <paramref name="cutShort"/>: a
+        /// transfer was left unfinished, which closes a connection that is not multiplexed. A multiplexed connection
+        /// is closed only when lost. Only the first call counts.</summary>
+        public void Release(Exception? failure = null, bool cutShort = false)
         {
             if (Interlocked.Exchange(ref _released, 1) != 0) return;
-            _pool.Release(_slot, failure is not null && Breaks(failure, _slot.Shared));
+            _pool.Release(_slot, (failure is not null && Breaks(failure, _slot.Shared)) || (cutShort && !_slot.Shared));
         }
 
         private static bool Breaks(Exception failure, bool shared) => failure switch
