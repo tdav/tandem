@@ -40,7 +40,16 @@ public class MainViewModelTests : LanguageTestBase
         var panel = app.Main.Workspace.ActivePanel;
         panel.CursorIndex = panel.Rows.ToList().FindIndex(r => r.Name == "notes.zip");
 
-        Assert.All(CommandIds.All, id => Assert.True(app.Main.Commands.CanExecute(id), id));
+        // The stage 3 commands are registered by the tracks that build them; task 24 puts them back in this check.
+        string[] stage3 =
+        [
+            CommandIds.ToolsMultiRename, CommandIds.ToolsUndoRename, CommandIds.ToolsCompareDirs, CommandIds.ToolsSyncDirs,
+            CommandIds.ToolsCompareFiles, CommandIds.ToolsChecksumCreate, CommandIds.ToolsChecksumVerify,
+            CommandIds.ToolsFolderSize, CommandIds.ToolsFolderSizeAll, CommandIds.NetConnect, CommandIds.NetDisconnect,
+            CommandIds.NetConsole,
+        ];
+
+        Assert.All(CommandIds.All.Except(stage3), id => Assert.True(app.Main.Commands.CanExecute(id), id));
     }
 
     [AvaloniaFact]
@@ -468,6 +477,131 @@ public class MainViewModelTests : LanguageTestBase
         Assert.Contains("did not stop in time", File.ReadAllText(app.LogFile));
         stubborn.Release();
         await stubborn.Completion;
+    }
+
+    [AvaloniaFact]
+    public async Task Notice_is_shown_in_the_status_line_and_goes_away_on_navigation_but_not_on_refresh()
+    {
+        await using var app = await TestApp.StartAsync(show: false);
+        var side = app.Main.Left;
+        var panel = app.Left;
+        var raised = 0;
+        side.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(SideViewModel.StatusLine)) raised++;
+        };
+
+        panel.ShowNotice("Marked: left 3, right 1");
+
+        Assert.Equal("Marked: left 3, right 1", panel.Notice);
+        Assert.Equal("Marked: left 3, right 1", side.StatusLine);
+        Assert.False(side.HasError);
+        Assert.True(raised > 0);
+
+        await panel.RefreshAsync();
+        Assert.Equal("Marked: left 3, right 1", side.StatusLine);
+
+        await panel.NavigateToAsync(VfsPath.Local(TestApp.Home + "/docs"));
+        Assert.Null(panel.Notice);
+        Assert.Equal(panel.StatusText, side.StatusLine);
+
+        panel.ShowNotice("Connecting");
+        panel.ShowNotice(null);
+        Assert.Null(panel.Notice);
+        Assert.Equal(panel.StatusText, side.StatusLine);
+    }
+
+    [AvaloniaFact]
+    public async Task Notice_does_not_hide_an_error_and_is_not_an_error()
+    {
+        await using var app = await TestApp.StartAsync(show: false);
+        var side = app.Main.Left;
+        var panel = app.Left;
+        panel.ShowNotice("Folders do not differ");
+        Assert.False(side.HasError);
+
+        await panel.NavigateToAsync(VfsPath.Local("/missing"));
+
+        Assert.NotNull(panel.Error);
+        Assert.Equal(panel.Error, side.StatusLine);
+        Assert.True(side.HasError);
+        Assert.Equal("Folders do not differ", panel.Notice); // the panel went nowhere
+    }
+
+    [AvaloniaFact]
+    public async Task Escape_handler_gets_the_key_before_the_panel_and_stops_getting_it_once_disposed()
+    {
+        await using var app = await TestApp.StartAsync(show: false);
+        var escape = new KeyChord(Key.Escape, KeyModifiers.None);
+        var calls = new List<string>();
+        var first = app.Main.OnEscape(() =>
+        {
+            calls.Add("first");
+            return false;
+        });
+        var second = app.Main.OnEscape(() =>
+        {
+            calls.Add("second");
+            return true;
+        });
+        Assert.True(app.Left.QuickSearchInput("n"));
+
+        Assert.True(await app.Main.HandleKeyAsync(escape));
+        Assert.Equal(["second"], calls); // the last one registered first; it took the key
+        Assert.Equal("n", app.Left.QuickSearchText);
+
+        second.Dispose();
+        Assert.True(await app.Main.HandleKeyAsync(escape));
+        Assert.Equal(["second", "first"], calls); // declined: the panel got it
+        Assert.Equal("", app.Left.QuickSearchText);
+
+        first.Dispose();
+        first.Dispose(); // twice is harmless
+        await app.Main.HandleKeyAsync(escape);
+        Assert.Equal(["second", "first"], calls);
+    }
+
+    [AvaloniaFact]
+    public async Task Quit_waits_for_the_network_close_but_not_longer_than_the_limit()
+    {
+        await using var app = await TestApp.StartAsync(show: false);
+        Assert.Equal(TimeSpan.FromSeconds(5), MainViewModel.NetworkCloseTimeout);
+        var closes = 0;
+        Func<Task> close = () => Task.CompletedTask;
+        app.Main.Net.OnClose(() =>
+        {
+            closes++;
+            return close();
+        });
+
+        // The user stays: nothing is closed.
+        var op = new GateOperation();
+        _ = app.Main.Services.Operations.Enqueue(op, runImmediately: true);
+        await op.Started;
+        app.Dialogs.QuitAnswers.Enqueue(false);
+        Assert.False(await app.Main.ConfirmCloseAsync());
+        Assert.Equal(0, closes);
+        op.Release();
+        await op.Completion;
+
+        // A close that takes a while is waited for.
+        var closed = false;
+        close = async () =>
+        {
+            await Task.Delay(50);
+            closed = true;
+        };
+        Assert.True(await app.Main.ConfirmCloseAsync());
+        Assert.Equal(1, closes);
+        Assert.True(closed);
+
+        // One that never ends is given up on after the limit, and logged.
+        close = () => new TaskCompletionSource().Task;
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        Assert.True(await app.Main.ConfirmCloseAsync(networkCloseTimeout: TimeSpan.FromMilliseconds(100)));
+        Assert.Equal(2, closes);
+        Assert.InRange(clock.ElapsedMilliseconds, 90, 4000);
+        Assert.Contains("did not close in time", File.ReadAllText(app.LogFile));
     }
 
     /// <summary>An operation that does not react to cancellation until released.</summary>

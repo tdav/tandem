@@ -65,6 +65,23 @@ public static class CommandIds
     public const string ArchivePack = "archive.pack";
     public const string ArchiveUnpack = "archive.unpack";
 
+    // Tools (stage 3): multi-rename, folder comparison and synchronization, file comparison, checksums (menu only,
+    // no default chord), folder sizes.
+    public const string ToolsMultiRename = "tools.multiRename";
+    public const string ToolsUndoRename = "tools.undoRename";
+    public const string ToolsCompareDirs = "tools.compareDirs";
+    public const string ToolsSyncDirs = "tools.syncDirs";
+    public const string ToolsCompareFiles = "tools.compareFiles";
+    public const string ToolsChecksumCreate = "tools.checksumCreate";
+    public const string ToolsChecksumVerify = "tools.checksumVerify";
+    public const string ToolsFolderSize = "tools.folderSize";
+    public const string ToolsFolderSizeAll = "tools.folderSizeAll";
+
+    // Network (stage 3): server connections and the SSH console.
+    public const string NetConnect = "net.connect";
+    public const string NetDisconnect = "net.disconnect";
+    public const string NetConsole = "net.console";
+
     // Invoked from menus only; no default key binding.
     public const string ShellReveal = "shell.reveal";
     public const string ShellOpenTerminal = "shell.openTerminal";

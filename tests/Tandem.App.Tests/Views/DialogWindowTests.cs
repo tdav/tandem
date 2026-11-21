@@ -204,6 +204,30 @@ public class DialogWindowTests : LanguageTestBase
     }
 
     [AvaloniaFact]
+    public async Task Conflict_dialog_is_given_the_compare_hook_of_the_dialog_service()
+    {
+        var (owner, service) = Start();
+        var entry = new FileEntry(VfsPath.Local("/a"), EntryKind.File, 1, DateTimeOffset.UnixEpoch,
+            DateTimeOffset.UnixEpoch, null, false);
+        Assert.Null(service.CompareFiles);
+
+        var asking = service.AskConflictAsync(entry, entry, CancellationToken.None);
+        Assert.Null(Dialog<ConflictDialog>(owner).Compare);
+        Press(Dialog<ConflictDialog>(owner), Key.Escape);
+        await Finish(asking);
+
+        Func<FileEntry, FileEntry, Window, Task> compare = (_, _, _) => Task.CompletedTask;
+        service.CompareFiles = compare;
+        asking = service.AskConflictAsync(entry, entry, CancellationToken.None);
+        var dialog = Dialog<ConflictDialog>(owner);
+
+        Assert.Same(compare, dialog.Compare);
+        Press(dialog, Key.Escape);
+        Assert.Equal(ConflictAction.Cancel, (await Finish(asking)).Action);
+        owner.Close();
+    }
+
+    [AvaloniaFact]
     public async Task Error_dialog_for_lost_connection_labels_retry_as_reconnect()
     {
         var (owner, service) = Start();

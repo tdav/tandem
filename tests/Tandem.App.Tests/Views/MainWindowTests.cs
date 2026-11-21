@@ -545,6 +545,40 @@ public class MainWindowTests : LanguageTestBase
     }
 
     [AvaloniaFact]
+    public async Task Tools_and_network_menus_list_every_new_command_in_order()
+    {
+        await using var app = await TestApp.StartAsync();
+        var menus = NativeMenu.GetMenu(app.Window)!.Items.OfType<NativeMenuItem>().ToList();
+
+        Assert.Equal(["File", "Selection", "Go", "Tools", "Network", "View", "Window"], menus.Select(m => m.Header));
+
+        static string[] Entries(NativeMenuItem menu) => menu.Menu!.Items
+            .Select(i => i is NativeMenuItem { CommandParameter: string id } ? id : "-").ToArray();
+
+        Assert.Equal(
+        [
+            CommandIds.ToolsMultiRename, CommandIds.ToolsUndoRename, "-",
+            CommandIds.ToolsCompareDirs, CommandIds.ToolsSyncDirs, CommandIds.ToolsCompareFiles, "-",
+            CommandIds.ToolsChecksumCreate, CommandIds.ToolsChecksumVerify, "-",
+            CommandIds.ToolsFolderSize, CommandIds.ToolsFolderSizeAll,
+        ], Entries(menus[3]));
+        Assert.Equal([CommandIds.NetConnect, CommandIds.NetDisconnect, "-", CommandIds.NetConsole], Entries(menus[4]));
+        static List<NativeMenuItem> Commands(NativeMenuItem menu) =>
+            menu.Menu!.Items.OfType<NativeMenuItem>().Where(i => i is not NativeMenuItemSeparator).ToList();
+
+        var tools = Commands(menus[3]);
+        Assert.Equal(
+        [
+            "Multi-Rename…", "Undo Last Rename", "Compare Folders", "Synchronize Folders…", "Compare Files…",
+            "Create Checksums…", "Verify Checksums", "Folder Size", "All Folder Sizes",
+        ], tools.Select(i => i.Header));
+        Assert.Equal(["Connect to Server…", "Disconnect", "SSH Console"],
+            Commands(menus[4]).Select(i => i.Header));
+        Assert.Equal(new KeyGesture(Key.M, KeyModifiers.Meta), tools[0].Gesture);
+        Assert.Null(tools.Single(i => i.CommandParameter as string == CommandIds.ToolsChecksumCreate).Gesture);
+    }
+
+    [AvaloniaFact]
     public async Task Menu_view_items_follow_the_view_state()
     {
         await using var app = await TestApp.StartAsync();

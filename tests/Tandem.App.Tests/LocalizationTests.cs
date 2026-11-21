@@ -1,8 +1,12 @@
 using System.Collections;
 using System.Globalization;
 using System.Resources;
+using System.Runtime.CompilerServices;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.Media;
+using Avalonia.Styling;
 using Tandem.App.Resources;
 using Tandem.Core.Operations;
 
@@ -157,5 +161,85 @@ public class LocalizationTests : LanguageTestBase
         Loc.SetLanguage("ru");
         var probe = new LocProbe();
         Assert.Equal("Отменить", probe.FindControl<TextBlock>("Text")!.Text);
+    }
+
+    private static string ResourceFile(string name, [CallerFilePath] string here = "") =>
+        Path.GetFullPath(Path.Combine(Path.GetDirectoryName(here)!, "..", "..", "src", "Tandem.App", "Resources", name));
+
+    [Fact]
+    public void Stage_3_section_markers_are_present_in_both_resource_files()
+    {
+        foreach (var file in new[] { "Strings.resx", "Strings.ru.resx" }) AssertSectionMarkers(file);
+    }
+
+    private static void AssertSectionMarkers(string file)
+    {
+        string[] markers =
+        [
+            "<!-- stage3:tools-a begin (Rename_*, Checksum_*, FolderSize_*) -->",
+            "<!-- stage3:tools-a end -->",
+            "<!-- stage3:tools-b begin (CompareDirs_*, Compare_*, Sync_*) -->",
+            "<!-- stage3:tools-b end -->",
+            "<!-- stage3:net begin (Net_*, Connection_*, RemoteEdit_*) -->",
+            "<!-- stage3:net end -->",
+            "<!-- stage3:net-ssh begin (Console_*, Terminal_*) -->",
+            "<!-- stage3:net-ssh end -->",
+        ];
+        var lines = File.ReadAllLines(ResourceFile(file)).Select(l => l.Trim()).ToList();
+
+        var positions = markers.Select(m => lines.IndexOf(m)).ToList();
+        Assert.All(positions.Zip(markers), p => Assert.True(p.First >= 0, $"{file} lacks {p.Second}"));
+        Assert.Equal(positions.Order(), positions); // in this order
+        Assert.All(markers, m => Assert.Single(lines, m));
+        Assert.Equal("</root>", lines.Last(l => l.Length > 0));
+        Assert.DoesNotContain(lines.Skip(positions[^1] + 1), l => l.StartsWith("<data", StringComparison.Ordinal));
+    }
+
+    private static Color ThemeColor(string key, ThemeVariant theme)
+    {
+        Assert.True(Application.Current!.TryGetResource(key, theme, out var value), $"{key} is missing in {theme}");
+        return Assert.IsType<SolidColorBrush>(value).Color;
+    }
+
+    /// <summary>The WCAG contrast ratio of two colours.</summary>
+    private static double Contrast(Color a, Color b)
+    {
+        static double Channel(byte c)
+        {
+            var v = c / 255.0;
+            return v <= 0.04045 ? v / 12.92 : Math.Pow((v + 0.055) / 1.055, 2.4);
+        }
+
+        static double Luminance(Color c) =>
+            0.2126 * Channel(c.R) + 0.7152 * Channel(c.G) + 0.0722 * Channel(c.B);
+
+        var (la, lb) = (Luminance(a), Luminance(b));
+        return (Math.Max(la, lb) + 0.05) / (Math.Min(la, lb) + 0.05);
+    }
+
+    [AvaloniaFact]
+    public void Terminal_colours_exist_in_both_themes_and_every_ansi_colour_is_readable_on_the_background()
+    {
+        foreach (var theme in new[] { ThemeVariant.Light, ThemeVariant.Dark })
+        {
+            var background = ThemeColor("Tandem.TerminalBackground", theme);
+            ThemeColor("Tandem.TerminalCursor", theme);
+            ThemeColor("Tandem.TerminalSelection", theme);
+            var foreground = ThemeColor("Tandem.TerminalForeground", theme);
+            Assert.True(Contrast(foreground, background) >= 3, $"foreground in {theme}");
+
+            var ansi = Enumerable.Range(0, 16).Select(i => ThemeColor("Tandem.TerminalAnsi" + i, theme)).ToArray();
+            // The colours akin to the background are exempt: programs paint backgrounds with them.
+            int[] exempt = theme == ThemeVariant.Dark ? [0, 8] : [7, 15];
+            for (var i = 0; i < 16; i++)
+            {
+                if (exempt.Contains(i)) continue;
+                Assert.True(Contrast(ansi[i], background) >= 3,
+                    $"ANSI {i} in {theme}: {Contrast(ansi[i], background):0.00}");
+            }
+            // Black stays black and white white; white on black is what mc and htop draw.
+            Assert.True(Contrast(ansi[7], ansi[0]) >= 4.5, $"7 on 0 in {theme}");
+            Assert.True(Contrast(ansi[15], ansi[8]) >= 4.5, $"15 on 8 in {theme}");
+        }
     }
 }

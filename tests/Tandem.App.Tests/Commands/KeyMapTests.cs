@@ -39,6 +39,20 @@ public class KeyMapTests
     [InlineData("Cmd+Shift+OemPeriod", "view.toggleHidden")]
     [InlineData("Ctrl+Cmd+P", "tab.togglePin")]
     [InlineData("Cmd+OemComma", "app.settings")]
+    [InlineData("Cmd+M", "tools.multiRename")]
+    [InlineData("Ctrl+M", "tools.multiRename")]
+    [InlineData("Ctrl+Shift+M", "tools.undoRename")]
+    [InlineData("Cmd+Alt+I", "tools.folderSize")]
+    [InlineData("Cmd+Shift+I", "tools.folderSizeAll")]
+    [InlineData("Shift+F2", "tools.compareDirs")]
+    [InlineData("Cmd+Shift+C", "tools.compareDirs")]
+    [InlineData("Cmd+Shift+D", "tools.compareFiles")]
+    [InlineData("Cmd+Shift+S", "tools.syncDirs")]
+    [InlineData("Cmd+K", "net.connect")]
+    [InlineData("Ctrl+F", "net.connect")]
+    [InlineData("Cmd+Shift+K", "net.disconnect")]
+    [InlineData("Ctrl+Shift+F", "net.disconnect")]
+    [InlineData("Cmd+Alt+K", "net.console")]
     public void Default_binding(string chord, string id) => Assert.Equal(id, KeyMap.Default.Find(KeyChord.Parse(chord)));
 
     [Fact]
@@ -63,6 +77,12 @@ public class KeyMapTests
             "app.settings=Cmd+OemComma",
             "search.files=Alt+F7", "search.files=Cmd+F",
             "archive.pack=Alt+F5", "archive.pack=Cmd+Alt+5", "archive.unpack=Alt+F9", "archive.unpack=Cmd+Alt+9",
+            "tools.multiRename=Cmd+M", "tools.multiRename=Ctrl+M", "tools.undoRename=Ctrl+Shift+M",
+            "tools.folderSize=Cmd+Alt+I", "tools.folderSizeAll=Cmd+Shift+I",
+            "tools.compareDirs=Shift+F2", "tools.compareDirs=Cmd+Shift+C", "tools.compareFiles=Cmd+Shift+D",
+            "tools.syncDirs=Cmd+Shift+S",
+            "net.connect=Cmd+K", "net.connect=Ctrl+F", "net.disconnect=Cmd+Shift+K", "net.disconnect=Ctrl+Shift+F",
+            "net.console=Cmd+Alt+K",
         ];
 
         var expectedBindings = expected.Select(e => e.Split('=')).Select(p => (p[0], KeyChord.Parse(p[1])));
@@ -87,6 +107,8 @@ public class KeyMapTests
         Assert.Empty(KeyMap.Default.ChordsFor(CommandIds.ShellOpenWith));
         Assert.Empty(KeyMap.Default.ChordsFor(CommandIds.TabDuplicate));
         Assert.Empty(KeyMap.Default.ChordsFor(CommandIds.TabCloseOthers));
+        Assert.Empty(KeyMap.Default.ChordsFor(CommandIds.ToolsChecksumCreate));
+        Assert.Empty(KeyMap.Default.ChordsFor(CommandIds.ToolsChecksumVerify));
         Assert.Empty(KeyMap.Default.ChordsFor("no.such.command"));
     }
 
@@ -142,7 +164,7 @@ public class KeyMapTests
 
         Assert.Equal(
             [CommandIds.ShellOpenTerminal, CommandIds.ShellOpenWith, CommandIds.ShellReveal, CommandIds.TabCloseOthers,
-                CommandIds.TabDuplicate],
+                CommandIds.TabDuplicate, CommandIds.ToolsChecksumCreate, CommandIds.ToolsChecksumVerify],
             unbound);
     }
 

@@ -18,8 +18,9 @@ namespace Tandem.App;
 /// queue, the error log. The app gets the real ones from <see cref="Composition.CreatePlatformServices"/>; tests pass in-memory and
 /// fake ones. Without <see cref="Metadata"/> the properties dialog shows tags and owner as unavailable.
 /// <see cref="Temp"/> holds the copies of files opened from providers that are not the local disk; it is emptied when
-/// it is created (at start) and when the services are disposed (at exit). <see cref="Windows"/> shows the editor windows
-/// (and later the other non-modal windows). Without <see cref="Quarantine"/> nothing taken out of an archive gets the
+/// it is created (at start) and when the services are disposed (at exit). <see cref="Windows"/> shows the editor,
+/// viewer, search and settings windows; <see cref="ToolWindows"/> the windows of the tools and of the network part.
+/// Without <see cref="Quarantine"/> nothing taken out of an archive gets the
 /// archive's quarantine mark (<see cref="QuarantineCarrier"/>).</summary>
 public sealed record AppServices(
     ProviderRegistry Providers,
@@ -36,6 +37,7 @@ public sealed record AppServices(
     IDialogService Dialogs,
     TempFileStore Temp,
     IWindowService Windows,
+    IToolWindows ToolWindows,
     IQuarantine? Quarantine = null) : IDisposable
 {
     /// <summary>Disposes the services that hold resources (the volume watch) and empties <see cref="Temp"/>.</summary>
@@ -64,7 +66,7 @@ public static class Composition
             new MacQuickLook(processes), new MacFileMetadataService(broker), new MacTrash(broker),
             new MacNativeCopy(broker), processes, new OperationQueue(), broker, log, dialogs,
             new TempFileStore(TempFileStore.DefaultDirectory(homeDirectory)), new WindowService(dialogs, providers),
-            new MacQuarantine(broker));
+            new ToolWindows(), new MacQuarantine(broker));
     }
 
     /// <summary>Where the app writes unexpected errors: <c>~/Library/Logs/Tandem/tandem.log</c>.</summary>

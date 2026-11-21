@@ -62,6 +62,12 @@ internal sealed class TestApp : IAsyncDisposable
     /// <summary>The app's real window service: its editor windows open without a screen.</summary>
     public WindowService Windows => (WindowService)Main.Services.Windows;
 
+    /// <summary>The app's real tool windows (the default): their windows open without a screen.</summary>
+    public ToolWindows ToolWindows => (ToolWindows)Main.Services.ToolWindows;
+
+    /// <summary>The scripted tool windows of an app started with <c>scriptedToolWindows</c>.</summary>
+    public ScriptedToolWindows ScriptedToolWindows => (ScriptedToolWindows)Main.Services.ToolWindows;
+
     /// <summary>The app's temporary files, in this app's temporary state folder.</summary>
     public TempFileStore Temp => Main.Services.Temp;
 
@@ -94,7 +100,7 @@ internal sealed class TestApp : IAsyncDisposable
         IQuickLook? quickLook = null, IFileMetadataService? metadata = null,
         IReadOnlyList<IFileSystemProvider>? extraProviders = null, IProcessRunner? processes = null,
         IReadOnlyList<IFileMounter>? mounters = null, IWindowService? windows = null,
-        IQuarantine? quarantine = null)
+        IQuarantine? quarantine = null, IToolWindows? toolWindows = null)
     {
         dialogs ??= new ScriptedDialogs();
         var providers = new ProviderRegistry();
@@ -109,11 +115,13 @@ internal sealed class TestApp : IAsyncDisposable
             trash ?? platform,
             new InMemoryNativeCopy(fs), processes ?? platform, new OperationQueue(), new UnrestrictedAccessBroker(),
             new ErrorLog(logFile), dialogs, new TempFileStore(tempDirectory),
-            windows ?? new WindowService(dialogs, providers), quarantine);
+            windows ?? new WindowService(dialogs, providers), toolWindows ?? new ToolWindows(), quarantine);
     }
 
     /// <param name="progressWindowDelay">How long before the progress window appears; never, when null.</param>
     /// <param name="settings">Written to the state folder's <c>settings.json</c> before start; none when null.</param>
+    /// <param name="scriptedToolWindows">Tool windows answered by a <see cref="Views.ScriptedToolWindows"/> (no window
+    /// is made); otherwise the real <see cref="Services.ToolWindows"/>, its windows opening without a screen.</param>
     public static async Task<TestApp> StartAsync(InMemoryFileSystem? fs = null, AppState? state = null,
         bool show = true, bool trashCapable = false,
         Func<TimeSpan, CancellationToken, Task>? progressWindowDelay = null,
@@ -121,7 +129,7 @@ internal sealed class TestApp : IAsyncDisposable
         Func<TimeSpan, CancellationToken, Task>? quickLookDelay = null,
         IReadOnlyList<IFileSystemProvider>? extraProviders = null, bool withMetadata = true,
         IProcessRunner? processes = null, IReadOnlyList<IFileMounter>? mounters = null,
-        AppSettings? settings = null)
+        AppSettings? settings = null, bool scriptedToolWindows = false)
     {
         fs ??= DefaultFileSystem();
         var stateDirectory = Path.Combine(Path.GetTempPath(), "tandem-window-tests-" + Guid.NewGuid().ToString("N"));
@@ -132,7 +140,8 @@ internal sealed class TestApp : IAsyncDisposable
         app.Main = await Composition.StartAsync(
             Services(fs, app.Volumes, app.LogFile, Path.Combine(stateDirectory, "tmp"), app.Dialogs, app.Trash,
                 trashCapable, removedCapabilities, app.Shell, app.QuickLook, withMetadata ? app.Metadata : null,
-                extraProviders, processes, mounters, quarantine: app.Quarantine),
+                extraProviders, processes, mounters, quarantine: app.Quarantine,
+                toolWindows: scriptedToolWindows ? new ScriptedToolWindows() : new ToolWindows()),
             stateDirectory, Home,
             autosaveDelay: (_, ct) => Task.Delay(Timeout.Infinite, ct),
             progressWindowDelay: progressWindowDelay ?? ((_, ct) => Task.Delay(Timeout.Infinite, ct)),
@@ -146,6 +155,7 @@ internal sealed class TestApp : IAsyncDisposable
     {
         Window = new MainWindow(Main, screens: null);
         Windows.Owner = Window;
+        if (Main.Services.ToolWindows is ToolWindows tools) tools.Owner = Window;
         Window.Show();
         Pump();
     }
@@ -159,6 +169,7 @@ internal sealed class TestApp : IAsyncDisposable
             foreach (var _ in windows.Open) Dialogs.SaveChangesAnswers.Enqueue(SaveChangesAnswer.Discard);
             await windows.CloseAllAsync();
         }
+        await Main.Services.ToolWindows.CloseAllAsync();
         if (Window is { } window) window.Close();
         Main.Dispose();
         Main.Services.Dispose();

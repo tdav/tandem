@@ -37,6 +37,29 @@
                     <SolidColorBrush x:Key="Tandem.FileColor.Blue" Color="#FF1565C0" />
                     <SolidColorBrush x:Key="Tandem.FileColor.Purple" Color="#FF6A1B9A" />
                     <SolidColorBrush x:Key="Tandem.FileColor.Gray" Color="#FF6B6B73" />
+                    <!-- SSH console: the screen, the cursor, the selection and the 16 ANSI colours (0–7 black, red, green,
+                         yellow, blue, magenta, cyan, white; 8–15 their bright variants). Black stays black and white white:
+                         programs on the server paint backgrounds with them. -->
+                    <SolidColorBrush x:Key="Tandem.TerminalBackground" Color="#FFFFFFFF" />
+                    <SolidColorBrush x:Key="Tandem.TerminalForeground" Color="#FF1F1F1F" />
+                    <SolidColorBrush x:Key="Tandem.TerminalCursor" Color="#FF1F1F1F" />
+                    <SolidColorBrush x:Key="Tandem.TerminalSelection" Color="#FFBFD7FF" />
+                    <SolidColorBrush x:Key="Tandem.TerminalAnsi0" Color="#FF000000" />
+                    <SolidColorBrush x:Key="Tandem.TerminalAnsi1" Color="#FFB42318" />
+                    <SolidColorBrush x:Key="Tandem.TerminalAnsi2" Color="#FF1A7F37" />
+                    <SolidColorBrush x:Key="Tandem.TerminalAnsi3" Color="#FF8A6100" />
+                    <SolidColorBrush x:Key="Tandem.TerminalAnsi4" Color="#FF0550AE" />
+                    <SolidColorBrush x:Key="Tandem.TerminalAnsi5" Color="#FF9A2BA0" />
+                    <SolidColorBrush x:Key="Tandem.TerminalAnsi6" Color="#FF0B7285" />
+                    <SolidColorBrush x:Key="Tandem.TerminalAnsi7" Color="#FFE5E5E5" />
+                    <SolidColorBrush x:Key="Tandem.TerminalAnsi8" Color="#FF5E5E5E" />
+                    <SolidColorBrush x:Key="Tandem.TerminalAnsi9" Color="#FFD1242F" />
+                    <SolidColorBrush x:Key="Tandem.TerminalAnsi10" Color="#FF1E8B3E" />
+                    <SolidColorBrush x:Key="Tandem.TerminalAnsi11" Color="#FF9A6700" />
+                    <SolidColorBrush x:Key="Tandem.TerminalAnsi12" Color="#FF1F6FEB" />
+                    <SolidColorBrush x:Key="Tandem.TerminalAnsi13" Color="#FFBF3989" />
+                    <SolidColorBrush x:Key="Tandem.TerminalAnsi14" Color="#FF0E8599" />
+                    <SolidColorBrush x:Key="Tandem.TerminalAnsi15" Color="#FFFFFFFF" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <SolidColorBrush x:Key="Tandem.BarBackground" Color="#FF232326" />
@@ -67,6 +90,29 @@
                     <SolidColorBrush x:Key="Tandem.FileColor.Blue" Color="#FF64B5F6" />
                     <SolidColorBrush x:Key="Tandem.FileColor.Purple" Color="#FFCE93D8" />
                     <SolidColorBrush x:Key="Tandem.FileColor.Gray" Color="#FFA1A1AA" />
+                    <!-- SSH console: the screen, the cursor, the selection and the 16 ANSI colours (0–7 black, red, green,
+                         yellow, blue, magenta, cyan, white; 8–15 their bright variants). Black stays black and white white:
+                         programs on the server paint backgrounds with them. -->
+                    <SolidColorBrush x:Key="Tandem.TerminalBackground" Color="#FF1E1E1E" />
+                    <SolidColorBrush x:Key="Tandem.TerminalForeground" Color="#FFD4D4D4" />
+                    <SolidColorBrush x:Key="Tandem.TerminalCursor" Color="#FFE5E5E5" />
+                    <SolidColorBrush x:Key="Tandem.TerminalSelection" Color="#FF264F78" />
+                    <SolidColorBrush x:Key="Tandem.TerminalAnsi0" Color="#FF000000" />
+                    <SolidColorBrush x:Key="Tandem.TerminalAnsi1" Color="#FFE05252" />
+                    <SolidColorBrush x:Key="Tandem.TerminalAnsi2" Color="#FF3FB950" />
+                    <SolidColorBrush x:Key="Tandem.TerminalAnsi3" Color="#FFD7BA3D" />
+                    <SolidColorBrush x:Key="Tandem.TerminalAnsi4" Color="#FF4E94F0" />
+                    <SolidColorBrush x:Key="Tandem.TerminalAnsi5" Color="#FFC678DD" />
+                    <SolidColorBrush x:Key="Tandem.TerminalAnsi6" Color="#FF2EB8C8" />
+                    <SolidColorBrush x:Key="Tandem.TerminalAnsi7" Color="#FFE5E5E5" />
+                    <SolidColorBrush x:Key="Tandem.TerminalAnsi8" Color="#FF6E6E6E" />
+                    <SolidColorBrush x:Key="Tandem.TerminalAnsi9" Color="#FFFF7B72" />
+                    <SolidColorBrush x:Key="Tandem.TerminalAnsi10" Color="#FF56D364" />
+                    <SolidColorBrush x:Key="Tandem.TerminalAnsi11" Color="#FFF2CC60" />
+                    <SolidColorBrush x:Key="Tandem.TerminalAnsi12" Color="#FF79B8FF" />
+                    <SolidColorBrush x:Key="Tandem.TerminalAnsi13" Color="#FFE0A3F0" />
+                    <SolidColorBrush x:Key="Tandem.TerminalAnsi14" Color="#FF56D4E0" />
+                    <SolidColorBrush x:Key="Tandem.TerminalAnsi15" Color="#FFFFFFFF" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
 

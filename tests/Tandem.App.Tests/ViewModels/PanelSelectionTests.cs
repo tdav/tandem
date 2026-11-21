@@ -51,6 +51,40 @@ public class PanelSelectionTests : IDisposable
     }
 
     [AvaloniaFact]
+    public async Task SelectWhere_marks_matching_rows_and_unmarks_the_rest()
+    {
+        var panel = await OpenSampleAsync();
+        Row(panel, "b.txt").IsSelected = true;
+        Row(panel, "notes").IsSelected = true;
+
+        panel.SelectWhere(e => e.Name.EndsWith(".txt", StringComparison.Ordinal) || e.Name == "sub");
+
+        Assert.Equal(["sub", "a.txt", "b.txt"], SelectedNames(panel));
+        Assert.Equal(3, panel.SelectedCount);
+        Assert.Equal(2048, panel.SelectedBytes);
+
+        panel.SelectWhere(_ => false);
+        Assert.Empty(SelectedNames(panel));
+        Assert.Equal(0, panel.SelectedCount);
+    }
+
+    [AvaloniaFact]
+    public async Task SelectWhere_never_marks_the_parent_link_and_updates_the_status()
+    {
+        var panel = await OpenSampleAsync();
+        var changed = new List<string?>();
+        panel.PropertyChanged += (_, e) => changed.Add(e.PropertyName);
+
+        panel.SelectWhere(_ => true);
+
+        Assert.False(Row(panel, "..").IsSelected);
+        Assert.Equal(5, panel.SelectedCount);
+        Assert.Equal("Selected 5 of 5, 2.3 KB", panel.StatusText);
+        Assert.Contains(nameof(PanelViewModel.SelectedCount), changed);
+        Assert.Contains(nameof(PanelViewModel.StatusText), changed);
+    }
+
+    [AvaloniaFact]
     public async Task Toggle_selects_and_moves_down()
     {
         var panel = await OpenSampleAsync();

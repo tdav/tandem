@@ -71,6 +71,18 @@ public sealed class KeyMap
             (CommandIds.SearchFiles, "Alt+F7"), (CommandIds.SearchFiles, "Cmd+F"),
             (CommandIds.ArchivePack, "Alt+F5"), (CommandIds.ArchivePack, "Cmd+Alt+5"),
             (CommandIds.ArchiveUnpack, "Alt+F9"), (CommandIds.ArchiveUnpack, "Cmd+Alt+9"),
+            // Stage 3. Cmd+M minimizes a window by custom; the spec gives it to multi-rename (the yellow button
+            // still minimizes).
+            (CommandIds.ToolsMultiRename, "Cmd+M"), (CommandIds.ToolsMultiRename, "Ctrl+M"),
+            (CommandIds.ToolsUndoRename, "Ctrl+Shift+M"),
+            (CommandIds.ToolsFolderSize, "Cmd+Alt+I"),
+            (CommandIds.ToolsFolderSizeAll, "Cmd+Shift+I"),
+            (CommandIds.ToolsCompareDirs, "Shift+F2"), (CommandIds.ToolsCompareDirs, "Cmd+Shift+C"),
+            (CommandIds.ToolsCompareFiles, "Cmd+Shift+D"),
+            (CommandIds.ToolsSyncDirs, "Cmd+Shift+S"),
+            (CommandIds.NetConnect, "Cmd+K"), (CommandIds.NetConnect, "Ctrl+F"),
+            (CommandIds.NetDisconnect, "Cmd+Shift+K"), (CommandIds.NetDisconnect, "Ctrl+Shift+F"),
+            (CommandIds.NetConsole, "Cmd+Alt+K"),
         }.Select(b => (b.Item1, KeyChord.Parse(b.Item2))));
 
     /// <summary>All bindings in order; for a key map editor and for showing shortcuts in menus.</summary>

@@ -63,6 +63,10 @@ public enum EditorSaveQuestion
 /// </summary>
 public interface IDialogService
 {
+    /// <summary>When set, the conflict dialog offers "Compare…", which calls this with the two files (the source, the
+    /// existing one) and the dialog's own window, for a comparison modal to it; the dialog stays open meanwhile.</summary>
+    Func<FileEntry, FileEntry, Window, Task>? CompareFiles { get; set; }
+
     Task<CopyMoveAnswer?> AskCopyMoveAsync(CopyMoveRequest request);
 
     /// <summary>The name of a new folder ("a/b" makes nested folders), starting from <paramref name="initial"/>.</summary>

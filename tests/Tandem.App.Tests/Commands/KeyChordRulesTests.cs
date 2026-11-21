@@ -58,4 +58,17 @@ public class KeyChordRulesTests
     [Fact]
     public void Every_default_chord_is_assignable() =>
         Assert.All(KeyMap.Default.Bindings, b => Assert.True(KeyChordRules.IsAssignable(b.Chord), b.Chord.ToString()));
+
+    [Fact]
+    public void Every_stage_3_chord_is_assignable()
+    {
+        string[] chords =
+        [
+            "Cmd+M", "Ctrl+M", "Ctrl+Shift+M", "Cmd+Alt+I", "Cmd+Shift+I", "Shift+F2", "Cmd+Shift+C", "Cmd+Shift+D",
+            "Cmd+Shift+S", "Cmd+K", "Ctrl+F", "Cmd+Shift+K", "Ctrl+Shift+F", "Cmd+Alt+K",
+        ];
+
+        Assert.Equal(14, chords.Length);
+        Assert.All(chords, chord => Assert.True(KeyChordRules.IsAssignable(KeyChord.Parse(chord)), chord));
+    }
 }

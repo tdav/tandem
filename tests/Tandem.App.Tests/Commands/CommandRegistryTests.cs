@@ -142,4 +142,31 @@ public class CommandRegistryTests
 
         Assert.Same(registry, sender);
     }
+
+    [Fact]
+    public void A_menu_item_of_an_unregistered_command_is_disabled_and_of_a_registered_one_enabled()
+    {
+        // Menu items run their command through RunCommand with the id as the parameter (MainMenu.CommandItem).
+        var registry = new CommandRegistry();
+        var runs = new List<string>();
+        var command = new RunCommand(registry, id =>
+        {
+            runs.Add(id);
+            return Task.CompletedTask;
+        });
+        var changes = 0;
+        command.CanExecuteChanged += (_, _) => changes++;
+
+        Assert.False(command.CanExecute("made.up"));
+        command.Execute("made.up");
+        Assert.Empty(runs);
+
+        registry.Register("made.up", () => Task.CompletedTask);
+        registry.RaiseCanExecuteChanged();
+
+        Assert.Equal(1, changes);
+        Assert.True(command.CanExecute("made.up"));
+        command.Execute("made.up");
+        Assert.Equal(["made.up"], runs);
+    }
 }

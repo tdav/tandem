@@ -117,6 +117,15 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     public partial PanelErrorKind? ErrorKind { get; private set; }
 
+    /// <summary>A short message for the panel's status line ("Marked: left 3, right 1", "Connecting to …"), not an
+    /// error: an error shows instead of it. Gone once the panel moves to a folder and after <see cref="ShowNotice"/>
+    /// with null; a refresh of the folder keeps it.</summary>
+    [ObservableProperty]
+    public partial string? Notice { get; private set; }
+
+    /// <summary>Shows <paramref name="text"/> as the <see cref="Notice"/>; null takes it away.</summary>
+    public void ShowNotice(string? text) => Notice = text;
+
     /// <summary>The folder <see cref="Error"/> is about: the one shown, or the one a failed navigation was heading
     /// for (the panel stays where it was); null after a successful load.</summary>
     public VfsPath? ErrorPath { get; private set; }
@@ -502,6 +511,7 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
             DisplayPath = DisplayPathOf(path);
             CurrentPath = path;
             _hasPath = true;
+            Notice = null;
             EndQuickSearch();
             cursor = focusName is null ? 0 : Math.Max(IndexOf(rows, focusName), 0);
         }

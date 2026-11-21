@@ -11,7 +11,7 @@ using Tandem.Core.Settings;
 namespace Tandem.App.Views;
 
 /// <summary>
-/// The application's native menus: the application menu, and the window's File, Selection, Go, View, Window. Every command has an item (one registered by a
+/// The application's native menus: the application menu, and the window's File, Selection, Go, Tools, Network, View, Window. Every command has an item (one registered by a
 /// later part of the app shows disabled until then), labelled from <c>Menu_&lt;id&gt;</c> and showing its first
 /// chord from the key map.
 /// </summary>
@@ -41,6 +41,20 @@ public static class MainMenu
         CommandIds.CmdlineFocus,
     ];
 
+    private static readonly string[] ToolsCommands =
+    [
+        CommandIds.ToolsMultiRename, CommandIds.ToolsUndoRename, "-",
+        CommandIds.ToolsCompareDirs, CommandIds.ToolsSyncDirs, CommandIds.ToolsCompareFiles, "-",
+        CommandIds.ToolsChecksumCreate, CommandIds.ToolsChecksumVerify, "-",
+        CommandIds.ToolsFolderSize, CommandIds.ToolsFolderSizeAll,
+    ];
+
+    private static readonly string[] NetCommands =
+    [
+        CommandIds.NetConnect, CommandIds.NetDisconnect, "-",
+        CommandIds.NetConsole,
+    ];
+
     private static readonly string[] WindowCommands =
     [
         CommandIds.TabNew, CommandIds.TabDuplicate, CommandIds.TabClose, CommandIds.TabCloseOthers, "-",
@@ -68,6 +82,8 @@ public static class MainMenu
         menu.Items.Add(Submenu("Menu_File", Commands(main, FileCommands)));
         menu.Items.Add(Submenu("Menu_Selection", Commands(main, SelectionCommands)));
         menu.Items.Add(Submenu("Menu_Go", Commands(main, GoCommands)));
+        menu.Items.Add(Submenu("Menu_Tools", Commands(main, ToolsCommands)));
+        menu.Items.Add(Submenu("Menu_Net", Commands(main, NetCommands)));
         menu.Items.Add(Submenu("Menu_View", ViewItems(main)));
         menu.Items.Add(Submenu("Menu_Window", WindowItems(main)));
         return menu;

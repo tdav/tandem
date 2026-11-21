@@ -57,6 +57,9 @@ internal class ScriptedDialogs : IDialogService
         get;
     } = [];
 
+    /// <summary>Set by the file comparison (as on the real service); the scripted conflict question ignores it.</summary>
+    public Func<FileEntry, FileEntry, Window, Task>? CompareFiles { get; set; }
+
     public Queue<bool> ReassignAnswers { get; } = new();
     /// <summary>Each "this shortcut is taken: reassign?" question: the chord, the label of the command that has it,
     /// and the window it was modal to.</summary>

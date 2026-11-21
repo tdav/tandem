@@ -90,27 +90,6 @@ public sealed class ReassignShortcutDialog : DialogWindow
     }
 }
 
-/// <summary>The destination exists: both files' size and date, the choices and "apply to all". Closing the window
-/// any other way cancels the operation.</summary>
-public sealed class ConflictDialog : DialogWindow
-{
-    public ConflictDialog(ConflictDialogViewModel vm) : base(vm.Title)
-    {
-        var all = new CheckBox { Name = "ApplyToAll", Content = Loc.Get("Conflict_ApplyToAll") };
-        all.IsCheckedChanged += (_, _) => vm.ApplyToAll = all.IsChecked == true;
-        var buttons = vm.Actions.Select(action =>
-        {
-            var button = MakeButton(Loc.Enum(action), isDefault: action == vm.DefaultAction,
-                isCancel: action == ConflictAction.Cancel, name: action.ToString());
-            button.Click += (_, _) => Close(vm.Decide(action));
-            return button;
-        }).ToArray();
-        SetContent(buttons.Single(b => b.IsDefault),
-            [Text(vm.Message), Text(vm.SourceDetails, secondary: true), Text(vm.ExistingDetails, secondary: true), all],
-            buttons);
-    }
-}
-
 /// <summary>An item failed: retry (reconnect and retry, when the connection was lost), skip, skip all or abort;
 /// closing the window aborts.</summary>
 public sealed class ErrorDialog : DialogWindow

@@ -110,8 +110,9 @@ public sealed partial class SideViewModel : ObservableObject
     [ObservableProperty]
     public partial string? Message { get; private set; }
 
-    /// <summary>The status row: this side's message, else the panel's error, else its selection status.</summary>
-    public string StatusLine => Message ?? _panel?.Error ?? _panel?.StatusText ?? "";
+    /// <summary>The status row: this side's message, else the panel's error, else its notice, else its selection
+    /// status.</summary>
+    public string StatusLine => Message ?? _panel?.Error ?? _panel?.Notice ?? _panel?.StatusText ?? "";
 
     public bool HasError => Message is not null || _panel?.Error is not null;
 
@@ -430,6 +431,7 @@ public sealed partial class SideViewModel : ObservableObject
         switch (e.PropertyName)
         {
             case nameof(PanelViewModel.StatusText):
+            case nameof(PanelViewModel.Notice):
             case nameof(PanelViewModel.Error):
             case nameof(PanelViewModel.ErrorKind):
                 RaiseStatusChanged();

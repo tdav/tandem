@@ -6,8 +6,10 @@ using CommunityToolkit.Mvvm.Input;
 using Tandem.App.Commands;
 using Tandem.App.Resources;
 using Tandem.App.Services;
+using Tandem.App.ViewModels.Net;
 using Tandem.App.ViewModels.Search;
 using Tandem.App.ViewModels.Settings;
+using Tandem.App.ViewModels.Tools;
 using Tandem.App.ViewModels.Viewing;
 using Tandem.Archives;
 using Tandem.Core.Listing;
@@ -48,6 +50,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private FileColors _fileColors;
     private IReadOnlyList<FileColorRule> _fileColorRules;
     private ThemeChoice _theme;
+    private readonly List<Func<bool>> _escapeHandlers = [];
 
     /// <param name="progressWindowDelay">Waits before the progress window may appear; the real delay when null.</param>
     /// <param name="quickLookDelay">Waits before an open Quick Look or quick-view panel follows the cursor; the real
@@ -111,6 +114,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         ArchiveMounts = archiveMounts;
         Archives = new ArchiveCommands(workspace, services, ArchiveMounts, Files, Interaction, Commands,
             ReportFailure);
+        Tools = new ToolsCommands(workspace, services, Files, Interaction, Commands, ReportFailure);
+        Net = new NetCommands(workspace, services, Files, Commands, ReportFailure);
         Commands.RaiseCanExecuteChanged();
         workspace.PropertyChanged += OnWorkspacePropertyChanged;
         QuickView.PropertyChanged += OnQuickViewPropertyChanged;
@@ -191,6 +196,12 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>Packing and unpacking archives.</summary>
     public ArchiveCommands Archives { get; }
 
+    /// <summary>The Tools menu: multi-rename, comparison, synchronization, checksums, folder sizes.</summary>
+    public ToolsCommands Tools { get; }
+
+    /// <summary>The Network menu: server connections and the SSH console.</summary>
+    public NetCommands Net { get; }
+
     /// <summary>The command line under the panels and its output pane.</summary>
     public CommandLineViewModel CommandLine { get; }
 
@@ -256,15 +267,17 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     public event EventHandler<string>? NoticeRequested;
 
     /// <summary>
-    /// A key chord pressed while a panel (not a text editor) has the focus: cursor keys, Enter and Esc act on the
-    /// active panel, Backspace edits a running quick search, anything else runs the command <see cref="KeyMap"/>
-    /// binds to it. True when the key was used. A command that throws is reported through
-    /// <see cref="CommandFailed"/>, not thrown. Completes synchronously unless the command itself waits.
+    /// A key chord pressed while a panel (not a text editor) has the focus: Esc first goes to the handlers of
+    /// <see cref="OnEscape"/>; cursor keys, Enter and Esc act on the active panel, Backspace edits a running quick
+    /// search, anything else runs the command <see cref="KeyMap"/> binds to it. True when the key was used. A command
+    /// (or an Esc handler) that throws is reported through <see cref="CommandFailed"/>, not thrown. Completes
+    /// synchronously unless the command itself waits.
     /// </summary>
     public async Task<bool> HandleKeyAsync(KeyChord chord)
     {
         try
         {
+            if (chord is { Key: Key.Escape, Modifiers: KeyModifiers.None } && HandleEscape()) return true;
             if (PanelKey(chord) is { } panelTask)
             {
                 await panelTask;
@@ -277,6 +290,33 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             ReportFailure(e);
             return true;
         }
+    }
+
+    /// <summary>Adds an Esc handler that is asked before the panel's own keys (the last added first): true takes the
+    /// key, false passes it on. Disposing the result removes the handler. For something running that Esc stops,
+    /// such as a connection being made.</summary>
+    public IDisposable OnEscape(Func<bool> tryHandle)
+    {
+        ArgumentNullException.ThrowIfNull(tryHandle);
+        _escapeHandlers.Add(tryHandle);
+        return new Unsubscriber(() => _escapeHandlers.Remove(tryHandle));
+    }
+
+    private bool HandleEscape()
+    {
+        for (var i = _escapeHandlers.Count - 1; i >= 0; i--)
+        {
+            if (i >= _escapeHandlers.Count) continue; // a handler removed others
+            if (_escapeHandlers[i]()) return true;
+        }
+        return false;
+    }
+
+    private sealed class Unsubscriber(Action remove) : IDisposable
+    {
+        private Action? _remove = remove;
+
+        public void Dispose() => Interlocked.Exchange(ref _remove, null)?.Invoke();
     }
 
     /// <summary>Text typed while a panel has the focus: quick search in the active panel. Blank text and control
@@ -385,6 +425,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         CommandLine.Dispose();
         ButtonBar.Dispose();
         Shell.Dispose();
+        Net.Dispose();
+        Tools.Dispose();
         Archives.Dispose();
         Files.Dispose();
         Operations.Dispose();
@@ -399,18 +441,36 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>True while file operations are running or waiting in the queue.</summary>
     public bool HasOperations => Services.Operations.Operations.Count > 0;
 
-    /// <summary>True while an editor (or another window of <see cref="AppServices.Windows"/>) is open.</summary>
-    public bool HasOpenWindows => Services.Windows.HasOpenWindows;
+    /// <summary>How long quitting waits for the network connections to close (<see cref="NetCommands.CloseAsync"/>)
+    /// before it goes ahead anyway.</summary>
+    public static readonly TimeSpan NetworkCloseTimeout = TimeSpan.FromSeconds(5);
+
+    /// <summary>True while an editor (or another window of <see cref="AppServices.Windows"/>) or a tool window
+    /// (<see cref="AppServices.ToolWindows"/>) is open.</summary>
+    public bool HasOpenWindows => Services.Windows.HasOpenWindows || Services.ToolWindows.HasOpenWindows;
 
     /// <summary>The window (or the app) is asked to close. First every window of <see cref="AppServices.Windows"/> is
-    /// closed, an editor with unsaved changes asking: if the user keeps one open, false. Then, with no file operation
-    /// running or waiting, true. Otherwise the user is asked whether to stop them and quit: on "stay", false; on "stop", every operation is
+    /// closed, an editor with unsaved changes asking, then every tool window, a window that guards its close
+    /// (<see cref="ICloseGuard"/>) asking: if the user keeps one open, false. Then, with file operations running or
+    /// waiting, the user is asked whether to stop them and quit: on "stay", false; on "stop", every operation is
     /// cancelled, their open questions are answered as cancelled, and their ends are awaited (at most
     /// <paramref name="timeout"/>, <see cref="StopOperationsTimeout"/> by default) so each removes its unfinished part
-    /// file; then true.</summary>
-    public async Task<bool> ConfirmCloseAsync(TimeSpan? timeout = null)
+    /// file. Last, the network connections are closed (<see cref="NetCommands.CloseAsync"/>, awaited at most
+    /// <paramref name="networkCloseTimeout"/>, <see cref="NetworkCloseTimeout"/> by default; a failure or a timeout is
+    /// logged); then true.</summary>
+    public async Task<bool> ConfirmCloseAsync(TimeSpan? timeout = null, TimeSpan? networkCloseTimeout = null)
     {
         if (!await Services.Windows.CloseAllAsync()) return false;
+        if (!await Services.ToolWindows.CloseAllAsync()) return false;
+        if (!await StopOperationsAsync(timeout)) return false;
+        await CloseNetworkAsync(networkCloseTimeout ?? NetworkCloseTimeout);
+        return true;
+    }
+
+    /// <summary>With no operation running or waiting, true. Otherwise asks whether to stop them: false to stay;
+    /// on "stop" cancels them and awaits their ends, at most <paramref name="timeout"/>.</summary>
+    private async Task<bool> StopOperationsAsync(TimeSpan? timeout)
+    {
         var operations = Services.Operations.Operations;
         if (operations.Count == 0) return true;
         if (!await Services.Dialogs.ConfirmQuitAsync(operations.Count)) return false;
@@ -432,6 +492,23 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             // An operation that failed has ended all the same.
         }
         return true;
+    }
+
+    private async Task CloseNetworkAsync(TimeSpan timeout)
+    {
+        try
+        {
+            await Net.CloseAsync().WaitAsync(timeout);
+        }
+        catch (TimeoutException)
+        {
+            Services.Log.Write(new TimeoutException("Network connections did not close in time before quitting."),
+                "quit");
+        }
+        catch (Exception e)
+        {
+            Services.Log.Write(e, "quit"); // quitting goes ahead
+        }
     }
 
     /// <summary>The main window is closing: questions of running operations are answered as cancelled, so no

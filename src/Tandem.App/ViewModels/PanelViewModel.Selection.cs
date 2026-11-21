@@ -100,6 +100,14 @@ public sealed partial class PanelViewModel
         ApplyToAll(row => row.IsSelected && !fileMask.IsMatch(row.Name));
     }
 
+    /// <summary>Marks the rows whose entry <paramref name="predicate"/> holds for and unmarks the rest; ".." is
+    /// never marked.</summary>
+    public void SelectWhere(Func<FileEntry, bool> predicate)
+    {
+        ArgumentNullException.ThrowIfNull(predicate);
+        ApplyToAll(row => predicate(row.Entry!));
+    }
+
     public void SelectAll() => ApplyToAll(static _ => true);
 
     public void InvertSelection() => ApplyToAll(static row => !row.IsSelected);

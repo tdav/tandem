@@ -20,6 +20,8 @@ public sealed class DialogService : IDialogService
     /// <summary>The window the dialogs belong to; set by the app once the main window exists.</summary>
     public Window? Owner { get; set; }
 
+    public Func<FileEntry, FileEntry, Window, Task>? CompareFiles { get; set; }
+
     public Task<CopyMoveAnswer?> AskCopyMoveAsync(CopyMoveRequest request) =>
         ShowAsync<CopyMoveAnswer>(new CopyMoveDialog(new CopyMoveDialogViewModel(request)));
 
@@ -35,7 +37,7 @@ public sealed class DialogService : IDialogService
         ShowAsync<string>(new MaskDialog(new MaskDialogViewModel(select, initial), select));
 
     public async Task<ConflictDecision> AskConflictAsync(FileEntry source, FileEntry existing, CancellationToken ct) =>
-        await ShowAsync<object>(new ConflictDialog(new ConflictDialogViewModel(source, existing)), ct) is
+        await ShowAsync<object>(new ConflictDialog(new ConflictDialogViewModel(source, existing), CompareFiles), ct) is
             ConflictDecision decision
             ? decision
             : new ConflictDecision(ConflictAction.Cancel, false);

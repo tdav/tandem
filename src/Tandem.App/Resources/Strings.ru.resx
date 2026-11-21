@@ -286,6 +286,12 @@
   <data name="Menu_View" xml:space="preserve">
     <value>Вид</value>
   </data>
+  <data name="Menu_Tools" xml:space="preserve">
+    <value>Инструменты</value>
+  </data>
+  <data name="Menu_Net" xml:space="preserve">
+    <value>Сеть</value>
+  </data>
   <data name="Menu_Window" xml:space="preserve">
     <value>Окно</value>
   </data>
@@ -1479,4 +1485,54 @@
   <data name="OperationFailed_InvalidName" xml:space="preserve">
     <value>у объекта имя, которое архив не может сохранить.</value>
   </data>
+
+  <!-- Stage 3: the tool and network commands (Menu_ + command id with '.' as '_') -->
+  <data name="Menu_tools_multiRename" xml:space="preserve">
+    <value>Групповое переименование…</value>
+  </data>
+  <data name="Menu_tools_undoRename" xml:space="preserve">
+    <value>Отменить последнее переименование</value>
+  </data>
+  <data name="Menu_tools_compareDirs" xml:space="preserve">
+    <value>Сравнить папки</value>
+  </data>
+  <data name="Menu_tools_syncDirs" xml:space="preserve">
+    <value>Синхронизировать папки…</value>
+  </data>
+  <data name="Menu_tools_compareFiles" xml:space="preserve">
+    <value>Сравнить файлы…</value>
+  </data>
+  <data name="Menu_tools_checksumCreate" xml:space="preserve">
+    <value>Создать контрольные суммы…</value>
+  </data>
+  <data name="Menu_tools_checksumVerify" xml:space="preserve">
+    <value>Проверить контрольные суммы</value>
+  </data>
+  <data name="Menu_tools_folderSize" xml:space="preserve">
+    <value>Размер папки</value>
+  </data>
+  <data name="Menu_tools_folderSizeAll" xml:space="preserve">
+    <value>Размеры всех папок</value>
+  </data>
+  <data name="Menu_net_connect" xml:space="preserve">
+    <value>Подключиться к серверу…</value>
+  </data>
+  <data name="Menu_net_disconnect" xml:space="preserve">
+    <value>Отключиться</value>
+  </data>
+  <data name="Menu_net_console" xml:space="preserve">
+    <value>SSH-консоль</value>
+  </data>
+
+  <!-- stage3:tools-a begin (Rename_*, Checksum_*, FolderSize_*) -->
+  <!-- stage3:tools-a end -->
+  <!-- ======================================================== -->
+  <!-- stage3:tools-b begin (CompareDirs_*, Compare_*, Sync_*) -->
+  <!-- stage3:tools-b end -->
+  <!-- ======================================================== -->
+  <!-- stage3:net begin (Net_*, Connection_*, RemoteEdit_*) -->
+  <!-- stage3:net end -->
+  <!-- ======================================================== -->
+  <!-- stage3:net-ssh begin (Console_*, Terminal_*) -->
+  <!-- stage3:net-ssh end -->
 </root>
