@@ -379,7 +379,7 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
         _ => throw new ArgumentOutOfRangeException(nameof(format), format, null),
     };
 
-    private static ReaderOptions Options(string? password) => new()
+    internal static ReaderOptions Options(string? password) => new()
     {
         Password = password,
         LeaveStreamOpen = true,
@@ -733,6 +733,10 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
         public bool Sequential { get; } = sequential;
 
         public bool HasEncryptedEntries { get; } = Any(index, node => node.IsEncrypted);
+
+        /// <summary>Whether a name in the archive is one the zip writer would change, so a rewrite could not carry it
+        /// over (<see cref="ArchiveEntryNames.IsStorable"/>).</summary>
+        public bool HasUnstorableNames { get; } = Any(index, node => !ArchiveEntryNames.IsStorable(node.Name));
 
         public string? ArchiveComment => comments?.Archive;
 

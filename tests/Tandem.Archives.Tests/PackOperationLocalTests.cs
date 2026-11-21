@@ -72,4 +72,78 @@ public sealed class PackOperationLocalTests : IDisposable
         }
         Assert.Empty(Directory.EnumerateFiles(_dir.Path, "*" + SafeReplace.PartSuffix, SearchOption.AllDirectories));
     }
+
+    /// <summary>Names the archive writers would change (they cut up to a ':' and read '\' as a separator), beside
+    /// names they keep. Both characters are legal on APFS.</summary>
+    private (string Source, List<VfsPath> Sources, List<VfsPath> Unstorable) AddNamesWritersWouldChange()
+    {
+        var source = _dir.Combine("names");
+        Directory.CreateDirectory(Path.Combine(source, "ok"));
+        File.WriteAllText(Path.Combine(source, "plain.txt"), "plain");
+        File.WriteAllText(Path.Combine(source, "ok", "inner.txt"), "inner");
+        File.WriteAllText(Path.Combine(source, "ok", "bad:in.txt"), "bad");
+        foreach (var name in new[] { "Report 11:21.txt", "a:x.txt", "b:x.txt", "back\\slash.txt", "tail:" })
+            File.WriteAllText(Path.Combine(source, name), name);
+        Directory.CreateDirectory(Path.Combine(source, "dir:name"));
+        File.WriteAllText(Path.Combine(source, "dir:name", "in.txt"), "in");
+        string[] unstorable = ["Report 11:21.txt", "a:x.txt", "b:x.txt", "dir:name", "back\\slash.txt", "tail:"];
+        string[] top = ["plain.txt", "ok", .. unstorable];
+        unstorable = [.. unstorable, "ok/bad:in.txt"];
+        return (source, top.Select(n => VfsPath.Local(Path.Combine(source, n))).ToList(),
+            unstorable.Select(n => VfsPath.Local(Path.Combine(source, n))).ToList());
+    }
+
+    /// <summary>The entries as a reader of the archive lists them, folders with a trailing '/'.</summary>
+    private static List<string> ListEntries(string archive)
+    {
+        var names = new List<string>();
+        using var stream = File.OpenRead(archive);
+        using var reader = SharpCompress.Readers.ReaderFactory.Open(stream);
+        while (reader.MoveToNextEntry())
+            names.Add((reader.Entry.Key ?? "").TrimEnd('/') + (reader.Entry.IsDirectory ? "/" : ""));
+        return names.Order(StringComparer.Ordinal).ToList();
+    }
+
+    [Theory]
+    [InlineData(ArchiveFormat.Zip)]
+    [InlineData(ArchiveFormat.Tar)]
+    [InlineData(ArchiveFormat.TarGz)]
+    public async Task Names_the_writer_would_change_are_skipped_and_listed_never_written_altered(ArchiveFormat format)
+    {
+        var (_, sources, unstorable) = AddNamesWritersWouldChange();
+        var archive = _dir.Combine("packed." + ArchiveFormats.DefaultExtension(format));
+        var op = new PackOperation(_providers, sources, VfsPath.Local(archive), format, new ScriptedInteraction(),
+            _temp);
+
+        var result = await op.RunAsync().WaitAsync(TimeSpan.FromSeconds(30), Ct);
+
+        Assert.Equal(OperationState.Completed, result.State);
+        Assert.Equal(["ok/", "ok/inner.txt", "plain.txt"], ListEntries(archive));
+        Assert.Equal(unstorable.Select(p => p.Path).Order(StringComparer.Ordinal),
+            result.Skipped.Select(s => s.Path.Path).Order(StringComparer.Ordinal));
+        Assert.All(result.Skipped, s => Assert.Equal(SkipReason.NameNotStorable, s.Reason));
+        Assert.Equal(2, op.Progress.FilesTotal); // the skipped files are not in the totals
+    }
+
+    [Theory]
+    [InlineData(ArchiveFormat.Zip)]
+    [InlineData(ArchiveFormat.Tar)]
+    [InlineData(ArchiveFormat.TarGz)]
+    public async Task Archive_whose_listing_differs_from_what_was_written_fails_and_leaves_nothing(
+        ArchiveFormat format)
+    {
+        var (source, _, _) = AddNamesWritersWouldChange();
+        var archive = _dir.Combine("packed." + ArchiveFormats.DefaultExtension(format));
+        var op = new PackOperation(_providers,
+            [VfsPath.Local(Path.Combine(source, "plain.txt")), VfsPath.Local(Path.Combine(source, "Report 11:21.txt"))],
+            VfsPath.Local(archive), format, new ScriptedInteraction(), _temp) { StoreAnyName = true };
+
+        var error = await Assert.ThrowsAsync<VfsException>(
+            () => op.RunAsync().WaitAsync(TimeSpan.FromSeconds(30), Ct));
+
+        Assert.Contains("does not list what was written", error.Message, StringComparison.Ordinal);
+        Assert.Equal(OperationState.Failed, op.State);
+        Assert.False(File.Exists(archive));
+        Assert.Empty(Directory.EnumerateFiles(_dir.Path, "*" + SafeReplace.PartSuffix, SearchOption.AllDirectories));
+    }
 }

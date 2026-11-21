@@ -34,6 +34,7 @@ public static class OperationTexts
             ContentMismatchException => "ContentMismatch",
             ArchivePasswordRequiredException => "PasswordRequired",
             ArchiveDamagedException => "ArchiveDamaged",
+            ArchiveEntryNameException => "InvalidName",
             IOException { HResult: MacDiskFull or WindowsDiskFull or WindowsHandleDiskFull } => "DiskFull",
             IOException => "IO",
             _ => "Other",

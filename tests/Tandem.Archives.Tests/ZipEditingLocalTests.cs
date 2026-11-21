@@ -161,4 +161,63 @@ public sealed class ZipEditingLocalTests : IDisposable
         Assert.Equal("hello\n", await TextAsync(archive, "/docs/прочти.txt"));
         Assert.Empty(Directory.EnumerateFileSystemEntries(_temp.Directory));
     }
+
+    [Fact]
+    public async Task Copying_a_name_the_zip_writer_would_change_is_an_item_error_and_the_others_land()
+    {
+        var archive = await OpenAsync();
+        var source = _dir.Combine("names");
+        Directory.CreateDirectory(source);
+        await File.WriteAllTextAsync(Path.Combine(source, "plain.txt"), "plain", Ct);
+        await File.WriteAllTextAsync(Path.Combine(source, "Report 11:21.txt"), "report", Ct);
+        var interaction = new ScriptedInteraction().OnError(ErrorAction.Skip);
+        var copy = new CopyOperation(_providers,
+            [VfsPath.Local(Path.Combine(source, "plain.txt")), VfsPath.Local(Path.Combine(source, "Report 11:21.txt"))],
+            Arc("/"), new CopyOptions(), interaction);
+
+        var result = await copy.RunAsync().WaitAsync(TimeSpan.FromSeconds(30), Ct);
+
+        Assert.Equal(OperationState.Completed, result.State);
+        var (item, error) = Assert.Single(interaction.Errors);
+        Assert.Equal("Report 11:21.txt", item.Name);
+        Assert.IsType<ArchiveEntryNameException>(error);
+        Assert.Equal("plain", await TextAsync(archive, "/plain.txt"));
+        Assert.Null(await archive.GetEntryAsync(Arc("/Report 11:21.txt"), Ct));
+        Assert.Null(await archive.GetEntryAsync(Arc("/21.txt"), Ct));
+    }
+
+    [Theory]
+    [InlineData("/a:b")]
+    [InlineData("/back\\slash")]
+    [InlineData("/docs/tail:")]
+    public async Task Every_change_to_a_name_the_zip_writer_would_change_is_refused(string path)
+    {
+        var archive = await OpenAsync();
+
+        await Assert.ThrowsAsync<ArchiveEntryNameException>(() => archive.OpenWriteAsync(Arc(path), Ct));
+        await Assert.ThrowsAsync<ArchiveEntryNameException>(() => archive.CreateDirectoryAsync(Arc(path), Ct));
+        await Assert.ThrowsAsync<ArchiveEntryNameException>(() => archive.MoveAsync(Arc("/a.txt"), Arc(path), Ct));
+        await Assert.ThrowsAsync<ArchiveEntryNameException>(
+            () => archive.CreateDirectoryAsync(Arc(path + "/inner"), Ct));
+        Assert.NotNull(await archive.GetEntryAsync(Arc("/a.txt"), Ct));
+    }
+
+    [Fact]
+    public async Task Zip_holding_a_name_the_writer_would_change_is_read_only()
+    {
+        using (var zip = System.IO.Compression.ZipFile.Open(_archivePath, System.IO.Compression.ZipArchiveMode.Create))
+        {
+            await using (var entry = await zip.CreateEntry("Report 11:21.txt").OpenAsync(Ct))
+                await entry.WriteAsync("report"u8.ToArray(), Ct);
+            await using (var entry = await zip.CreateEntry("plain.txt").OpenAsync(Ct))
+                await entry.WriteAsync("plain"u8.ToArray(), Ct);
+        }
+        _archive = await ArchiveProvider.OpenAsync("arc", _providers, VfsPath.Local(_archivePath), _temp, null,
+            prompt: null, Ct);
+        _providers.Register(_archive);
+
+        Assert.Equal("report", await TextAsync(_archive, "/Report 11:21.txt"));
+        Assert.Equal(ProviderCapabilities.None, _archive.Capabilities);
+        await Assert.ThrowsAsync<VfsAccessDeniedException>(() => _archive.OpenWriteAsync(Arc("/new.txt"), Ct));
+    }
 }

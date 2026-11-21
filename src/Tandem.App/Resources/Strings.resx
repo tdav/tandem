@@ -194,6 +194,9 @@
   <data name="SkipReason_SourceIsDestination" xml:space="preserve">
     <value>Not deleted: the item in the destination folder is the source itself</value>
   </data>
+  <data name="SkipReason_NameNotStorable" xml:space="preserve">
+    <value>Skipped: an archive cannot store this name (it contains “:” or “\”)</value>
+  </data>
 
   <!-- Tandem.Core.Operations.OperationKind (names of operations, not buttons) -->
   <data name="OperationKind_Copy" xml:space="preserve">
@@ -1433,10 +1436,16 @@ Folder</value>
   <data name="OperationError_ArchiveDamaged" xml:space="preserve">
     <value>{0} is damaged or is not an archive.</value>
   </data>
+  <data name="OperationError_InvalidName" xml:space="preserve">
+    <value>{0} has a name an archive cannot store (it contains “:” or “\”).</value>
+  </data>
   <data name="OperationFailed_PasswordRequired" xml:space="preserve">
     <value>the archive's password was not given or is wrong.</value>
   </data>
   <data name="OperationFailed_ArchiveDamaged" xml:space="preserve">
     <value>the archive is damaged or is not an archive.</value>
+  </data>
+  <data name="OperationFailed_InvalidName" xml:space="preserve">
+    <value>an item has a name an archive cannot store.</value>
   </data>
 </root>

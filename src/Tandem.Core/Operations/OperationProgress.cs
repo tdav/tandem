@@ -27,6 +27,10 @@ public enum SkipReason
     /// <summary>The destination turned out to be the source itself (the same file-system object under another
     /// path), so the source was not deleted.</summary>
     SourceIsDestination,
+
+    /// <summary>The destination (an archive) cannot store the item's name as it is: writing it would change the
+    /// name, so the item was left out.</summary>
+    NameNotStorable,
 }
 
 /// <summary>An item the operation left alone, and why. <paramref name="Detail"/> is the underlying error message,

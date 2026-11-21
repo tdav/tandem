@@ -58,4 +58,19 @@ public class OperationTextsTests : LanguageTestBase
         Assert.Equal("Для /dst/a.txt нужен пароль архива.", OperationTexts.ForError(Item, password));
         Assert.Equal("архив повреждён или не является архивом.", OperationTexts.ForFailure(damaged));
     }
+
+    [Fact]
+    public void Name_an_archive_cannot_store_has_its_own_words()
+    {
+        var error = new ArchiveEntryNameException("a:b.txt", "x");
+
+        Assert.Equal("/dst/a.txt has a name an archive cannot store (it contains “:” or “\\”).",
+            OperationTexts.ForError(Item, error));
+        Assert.Equal(Loc.Get("OperationFailed_InvalidName"), OperationTexts.ForFailure(error));
+        Assert.Equal("Skipped: an archive cannot store this name (it contains “:” or “\\”)",
+            Loc.Enum(Tandem.Core.Operations.SkipReason.NameNotStorable));
+        Loc.SetLanguage("ru");
+        Assert.Equal("У /dst/a.txt имя, которое архив не может сохранить (в нём есть «:» или «\\»).",
+            OperationTexts.ForError(Item, error));
+    }
 }

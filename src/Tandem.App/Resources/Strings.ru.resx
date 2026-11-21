@@ -185,6 +185,9 @@
   <data name="SkipReason_SourceIsDestination" xml:space="preserve">
     <value>Не удалено: объект в папке назначения — это сам исходный объект</value>
   </data>
+  <data name="SkipReason_NameNotStorable" xml:space="preserve">
+    <value>Пропущено: архив не может сохранить это имя (в нём есть «:» или «\»)</value>
+  </data>
 
   <!-- Tandem.Core.Operations.OperationKind (names of operations, not buttons) -->
   <data name="OperationKind_Copy" xml:space="preserve">
@@ -1424,10 +1427,16 @@
   <data name="OperationError_ArchiveDamaged" xml:space="preserve">
     <value>{0} повреждён или не является архивом.</value>
   </data>
+  <data name="OperationError_InvalidName" xml:space="preserve">
+    <value>У {0} имя, которое архив не может сохранить (в нём есть «:» или «\»).</value>
+  </data>
   <data name="OperationFailed_PasswordRequired" xml:space="preserve">
     <value>пароль архива не введён или неверен.</value>
   </data>
   <data name="OperationFailed_ArchiveDamaged" xml:space="preserve">
     <value>архив повреждён или не является архивом.</value>
+  </data>
+  <data name="OperationFailed_InvalidName" xml:space="preserve">
+    <value>у объекта имя, которое архив не может сохранить.</value>
   </data>
 </root>

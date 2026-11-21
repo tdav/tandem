@@ -8,7 +8,8 @@ using Tandem.Core.Vfs;
 namespace Tandem.Archives;
 
 /// <summary>
-/// Changing a zip. A zip without encrypted entries, links or entries its listing renamed or left out
+/// Changing a zip. A zip without encrypted entries, links, names the writer would change
+/// (<see cref="ArchiveEntryNames.IsStorable"/>) or entries its listing renamed or left out
 /// (<see cref="ArchiveIndex.RenamedOrDroppedCount"/>), whose host takes writes, offers
 /// <see cref="ProviderCapabilities.Write"/>.
 /// <para>Changes are collected: a written file's content goes to a file of the <see cref="TempFileStore"/>; deletions,
@@ -120,7 +121,7 @@ public sealed partial class ArchiveProvider
     private bool IsEditable(Snapshot snapshot)
     {
         if (snapshot.Format != ArchiveFormat.Zip || snapshot.HasEncryptedEntries || snapshot.HasLinks ||
-            snapshot.Index.RenamedOrDroppedCount != 0)
+            snapshot.HasUnstorableNames || snapshot.Index.RenamedOrDroppedCount != 0)
             return false;
         var host = _providers.TryGet(Host.ProviderId, out var found) ? found : null;
         return host is not null && host.Capabilities.HasFlag(ProviderCapabilities.Write) &&
@@ -193,6 +194,7 @@ public sealed partial class ArchiveProvider
         lock (_editLock)
         {
             if (path.IsRoot) throw new VfsException($"'{GetDisplayPath(path)}' is the archive's root.");
+            RequireStorable(path, path.Name);
             var parent = RequireDirectory(edits, path.Parent!.Value);
             if (parent.Children!.TryGetValue(path.Name, out var existing) && existing.Kind == EntryKind.Directory)
                 throw new VfsException($"'{GetDisplayPath(path)}' is a directory.");
@@ -227,6 +229,7 @@ public sealed partial class ArchiveProvider
             walked = Join(walked, name);
             if (!node.Children!.TryGetValue(name, out var child))
             {
+                RequireStorable(new VfsPath(Id, walked), name);
                 node.Children[name] = child = EditNode.NewDirectory(DateTimeOffset.Now);
                 created = true;
             }
@@ -262,6 +265,7 @@ public sealed partial class ArchiveProvider
             throw new VfsNotFoundException($"'{GetDisplayPath(source)}' does not exist.");
         if (Find(edits, destination) is not null)
             throw new VfsAlreadyExistsException($"'{GetDisplayPath(destination)}' already exists.");
+        RequireStorable(destination, destination.Name);
         if (destination.IsSameOrDescendantOf(source))
             throw new VfsException($"'{GetDisplayPath(source)}' cannot be moved into itself.");
         var destinationParent = RequireDirectory(edits, destination.Parent!.Value);
@@ -276,6 +280,16 @@ public sealed partial class ArchiveProvider
         var node = Find(edits, path) ?? throw new VfsNotFoundException($"'{GetDisplayPath(path)}' does not exist.");
         node.Modified = modified;
         return true;
+    }
+
+    /// <summary>Refuses a new name the zip writer would change (<see cref="ArchiveEntryNames.IsStorable"/>), so that
+    /// the change is an error of its own item and never reaches the rewrite.</summary>
+    /// <exception cref="ArchiveEntryNameException"><paramref name="name"/> cannot be stored.</exception>
+    private void RequireStorable(VfsPath path, string name)
+    {
+        if (!ArchiveEntryNames.IsStorable(name))
+            throw new ArchiveEntryNameException(name,
+                $"'{GetDisplayPath(path)}': a zip cannot store the name '{name}' (it holds ':' or '\\').");
     }
 
     private EditNode RequireDirectory(Edits edits, VfsPath path)
@@ -377,7 +391,8 @@ public sealed partial class ArchiveProvider
                 throw new VfsException(
                     $"'{_providers.DisplayPath(Host)}' was changed elsewhere after it was read; it was left as it is.");
             var written = await WriteArchiveAsync(edits, host, part, ct).ConfigureAwait(false);
-            await CheckArchiveAsync(host, part, written, ct).ConfigureAwait(false);
+            await written.VerifyAsync(host, part, ArchiveFormat.Zip, _temp,
+                $"The rewritten '{_providers.DisplayPath(Host)}'", ct).ConfigureAwait(false);
             await SafeReplace.MoveIntoPlaceAsync(host, part, Host, replace: true).ConfigureAwait(false);
         }
         catch
@@ -390,17 +405,16 @@ public sealed partial class ArchiveProvider
         await ReloadAfterRewriteAsync().ConfigureAwait(false);
     }
 
-    /// <summary>Writes the archive as the changes make it to <paramref name="part"/>; returns the entries written:
-    /// name → (folder, size). The zip writer cannot write Zip64 to a stream that does not seek (a file inside another
+    /// <summary>Writes the archive as the changes make it to <paramref name="part"/>; returns the entries written. The zip writer cannot write Zip64 to a stream that does not seek (a file inside another
     /// archive): such an archive is written to a temporary file first and copied.</summary>
-    private async Task<Dictionary<string, (bool Directory, long Size)>> WriteArchiveAsync(Edits edits,
+    private async Task<WrittenListing> WriteArchiveAsync(Edits edits,
         IFileSystemProvider host, VfsPath part, CancellationToken ct)
     {
         List<(string Key, EditNode Node, long Size)> entries;
         lock (_editLock) entries = Flatten(edits.Root);
         var zip64 = NeedsZip64(entries.Count, entries.Sum(e => e.Size));
         var output = await host.OpenWriteAsync(part, ct).ConfigureAwait(false);
-        Dictionary<string, (bool Directory, long Size)> written;
+        WrittenListing written;
         try
         {
             written = await WriteToAsync(output, edits, entries, zip64, ct).ConfigureAwait(false);
@@ -414,7 +428,7 @@ public sealed partial class ArchiveProvider
         return written;
     }
 
-    private async Task<Dictionary<string, (bool Directory, long Size)>> WriteToAsync(Stream output, Edits edits,
+    private async Task<WrittenListing> WriteToAsync(Stream output, Edits edits,
         List<(string Key, EditNode Node, long Size)> entries, bool zip64, CancellationToken ct)
     {
         if (output.CanSeek || !zip64)
@@ -460,10 +474,10 @@ public sealed partial class ArchiveProvider
         }
     }
 
-    private async Task<Dictionary<string, (bool Directory, long Size)>> WriteEntriesAsync(Stream output, Edits edits,
+    private async Task<WrittenListing> WriteEntriesAsync(Stream output, Edits edits,
         List<(string Key, EditNode Node, long Size)> entries, bool zip64, CancellationToken ct)
     {
-        var written = new Dictionary<string, (bool, long)>(StringComparer.Ordinal);
+        var written = new WrittenListing();
         // Stored by default, Deflate per file: a folder written under a Deflate default is marked deflated with no
         // data, which other tools (unzip) reject.
         var options = new ZipWriterOptions(CompressionType.None)
@@ -482,7 +496,7 @@ public sealed partial class ArchiveProvider
             if (node.Kind == EntryKind.Directory)
             {
                 writer.WriteDirectory(key, time);
-                written[key + "/"] = (true, 0);
+                written.AddDirectory(key);
                 continue;
             }
             await using (var content = await OpenContentAsync(edits, node, ct).ConfigureAwait(false))
@@ -493,7 +507,7 @@ public sealed partial class ArchiveProvider
                     EnableZip64 = EntryNeedsZip64(size),
                     EntryComment = edits.Base.CommentOf(node.Original),
                 });
-            written[key] = (false, size);
+            written.AddFile(key, size);
         }
         writer.Dispose(); // the central directory
         return written;
@@ -526,50 +540,6 @@ public sealed partial class ArchiveProvider
     {
         var local = time.LocalDateTime;
         return local < EarliestZipTime ? EarliestZipTime : local;
-    }
-
-    /// <summary>Reads the written archive back and compares its listing with what was written.</summary>
-    /// <exception cref="VfsException">The archive cannot be read back, or lists other entries.</exception>
-    private async Task CheckArchiveAsync(IFileSystemProvider host, VfsPath part,
-        Dictionary<string, (bool Directory, long Size)> written, CancellationToken ct)
-    {
-        var stream = await host.OpenReadAsync(part, ct).ConfigureAwait(false);
-        string? copy = null;
-        try
-        {
-            if (!stream.CanSeek)
-            {
-                copy = _temp.NewFile("check.zip");
-                await using (var local = new FileStream(copy, FileMode.CreateNew, FileAccess.Write, FileShare.None,
-                                 CopyBufferSize, useAsync: true))
-                    await stream.CopyToAsync(local, CopyBufferSize, ct).ConfigureAwait(false);
-                await stream.DisposeAsync().ConfigureAwait(false);
-                stream = OpenLocalCopy(copy);
-            }
-            var listed = new Dictionary<string, (bool, long)>(StringComparer.Ordinal);
-            try
-            {
-                using var archive = ZipArchive.Open(stream, Options(password: null));
-                foreach (var entry in archive.Entries)
-                    if (!listed.TryAdd(entry.Key ?? "", (entry.IsDirectory, entry.IsDirectory ? 0 : entry.Size)))
-                        throw new VfsException($"'{entry.Key}' is in the rewritten archive twice.");
-            }
-            catch (Exception e) when (e is not (OperationCanceledException or VfsException))
-            {
-                throw new VfsException(
-                    $"The rewritten '{_providers.DisplayPath(Host)}' cannot be read back; it was not put in place.", e);
-            }
-            if (listed.Count != written.Count ||
-                written.Any(w => !listed.TryGetValue(w.Key, out var found) || found != w.Value))
-                throw new VfsException(
-                    $"The rewritten '{_providers.DisplayPath(Host)}' does not list what was written; it was not put " +
-                    "in place.");
-        }
-        finally
-        {
-            await stream.DisposeAsync().ConfigureAwait(false);
-            if (copy is not null) ReleaseQuietly(copy);
-        }
     }
 
     private static async Task DeletePartQuietlyAsync(IFileSystemProvider host, VfsPath part)

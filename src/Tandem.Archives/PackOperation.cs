@@ -20,9 +20,12 @@ namespace Tandem.Archives;
 /// writes (<see cref="OperationState.Running"/>) with totals of files and bytes. Entries are named from the folder of
 /// the sources: <c>name</c>, <c>name/inner/file</c>; every folder, empty or not, is an entry of its own, before what it
 /// holds; times are kept; names are UTF-8. Links are not packed: each is in the summary as
-/// <see cref="SkipReason.SymlinksNotSupported"/>. A zip stores folders and compresses files with Deflate; a zip that
+/// <see cref="SkipReason.SymlinksNotSupported"/>; nor is an item whose name the writers would change (with ':' or
+/// '\', <see cref="ArchiveEntryNames.IsStorable"/>), a folder with everything inside it: each is in the summary as
+/// <see cref="SkipReason.NameNotStorable"/>. A zip stores folders and compresses files with Deflate; a zip that
 /// needs Zip64 on a stream that does not seek is built in a file of <c>temp</c> first.</para>
-/// <para>The archive is written through <see cref="SafeReplace.WriteAsync"/>: until it is complete it exists only as
+/// <para>The archive is written through <see cref="SafeReplace.WriteAsync"/>: until it is complete and read back with
+/// the listing it should have (any other listing fails the operation) it exists only as
 /// <c>.{name}.tandem-part</c>, which a cancel or a failure removes, so neither leaves an archive under the real name
 /// or a temporary file. Files are read in blocks of at most 1 MiB, pausing and cancelling between blocks. A file that
 /// cannot be opened is put to <c>interaction</c> (retry, skip, skip all, abort); an error once its content
@@ -72,6 +75,10 @@ public sealed class PackOperation : FileOperation
 
     /// <summary>Writes a zip in Zip64 form whatever its size. A seam for tests.</summary>
     internal bool AlwaysZip64 { get; init; }
+
+    /// <summary>Packs names the writers would change instead of leaving them out, so that the read-back check is what
+    /// catches them. A seam for tests.</summary>
+    internal bool StoreAnyName { get; init; }
 
     /// <summary>"{provider id}:{volume key}" for every source and the archive's folder, without duplicates.</summary>
     public override async Task<IReadOnlyCollection<string>> GetVolumeKeysAsync(CancellationToken ct)
@@ -146,21 +153,27 @@ public sealed class PackOperation : FileOperation
         {
             var entry = await _providers.For(source).GetEntryAsync(source, ct).ConfigureAwait(false)
                         ?? throw new VfsNotFoundException($"'{source.Path}' does not exist.");
-            await AddAsync(entry, source.Name).ConfigureAwait(false);
+            await AddAsync(entry, source.Name, source.Name).ConfigureAwait(false);
         }
         SetTotals(files, bytes);
         return (items, bytes);
 
-        async Task AddAsync(FileEntry entry, string name)
+        async Task AddAsync(FileEntry entry, string name, string segment)
         {
             await WaitWhilePausedAsync(ct).ConfigureAwait(false);
+            if (!StoreAnyName && !ArchiveEntryNames.IsStorable(segment))
+            {
+                // never written under a name the writer would change; a folder with everything inside it
+                AddSkipped(new SkippedItem(entry.Path, SkipReason.NameNotStorable));
+                return;
+            }
             if (entry.Kind == EntryKind.Directory)
             {
                 var children = await ListChildrenAsync(entry.Path, errors, ct).ConfigureAwait(false);
                 if (children is null) return; // skipped, with everything inside it
                 items.Add(new PackItem(entry, name));
                 foreach (var child in children)
-                    await AddAsync(child, name + "/" + child.Name).ConfigureAwait(false);
+                    await AddAsync(child, name + "/" + child.Name, child.Name).ConfigureAwait(false);
                 return;
             }
             items.Add(new PackItem(entry, name));
@@ -198,13 +211,15 @@ public sealed class PackOperation : FileOperation
         ItemErrors errors, CancellationToken ct)
     {
         var output = await target.OpenWriteAsync(part, ct).ConfigureAwait(false);
+        var written = new WrittenListing();
         try
         {
             var zip64 = _format == ArchiveFormat.Zip && (AlwaysZip64 || ArchiveProvider.NeedsZip64(items.Count, bytes));
             if (zip64 && !output.CanSeek)
-                await WriteThroughTemporaryFileAsync(output, part.Name, items, errors, ct).ConfigureAwait(false);
+                await WriteThroughTemporaryFileAsync(output, part.Name, items, written, errors, ct)
+                    .ConfigureAwait(false);
             else
-                await WriteEntriesAsync(output, items, zip64, errors, ct).ConfigureAwait(false);
+                await WriteEntriesAsync(output, items, zip64, written, errors, ct).ConfigureAwait(false);
             await output.FlushAsync(ct).ConfigureAwait(false);
         }
         catch
@@ -213,19 +228,21 @@ public sealed class PackOperation : FileOperation
             throw;
         }
         await output.DisposeAsync().ConfigureAwait(false);
+        await written.VerifyAsync(target, part, _format, _temp, $"The packed '{_archiveFile.Path}'", ct)
+            .ConfigureAwait(false);
     }
 
     /// <summary>The zip writer writes Zip64 only to a stream that seeks: the archive is built in a temporary file and
     /// then copied to <paramref name="output"/>. The temporary file is removed in any case.</summary>
     private async Task WriteThroughTemporaryFileAsync(Stream output, string name, List<PackItem> items,
-        ItemErrors errors, CancellationToken ct)
+        WrittenListing written, ItemErrors errors, CancellationToken ct)
     {
         var local = _temp.NewFile(name);
         try
         {
             await using var file = new FileStream(local, FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None,
                 BlockSize, useAsync: true);
-            await WriteEntriesAsync(file, items, zip64: true, errors, ct).ConfigureAwait(false);
+            await WriteEntriesAsync(file, items, zip64: true, written, errors, ct).ConfigureAwait(false);
             file.Position = 0;
             var buffer = ArrayPool<byte>.Shared.Rent(BlockSize);
             try
@@ -257,8 +274,8 @@ public sealed class PackOperation : FileOperation
 
     /// <summary>Writes every entry and the archive's end. After a failure the writer is not closed: closing would
     /// write the archive's end, which can only hide the error (the part is thrown away anyway).</summary>
-    private async Task WriteEntriesAsync(Stream output, List<PackItem> items, bool zip64, ItemErrors errors,
-        CancellationToken ct)
+    private async Task WriteEntriesAsync(Stream output, List<PackItem> items, bool zip64, WrittenListing written,
+        ItemErrors errors, CancellationToken ct)
     {
         var encoding = new ArchiveEncoding { Default = Encoding.UTF8 };
         if (_format == ArchiveFormat.Zip)
@@ -271,7 +288,7 @@ public sealed class PackOperation : FileOperation
                 ArchiveEncoding = encoding,
                 UseZip64 = zip64,
             });
-            await WriteEachAsync(items, errors, ct,
+            await WriteEachAsync(items, written, errors, ct,
                 (item, time) =>
                 {
                     zip.WriteDirectory(item.Name, ArchiveProvider.ZipTime(time));
@@ -299,7 +316,7 @@ public sealed class PackOperation : FileOperation
             LeaveStreamOpen = true,
             ArchiveEncoding = encoding,
         });
-        await WriteEachAsync(items, errors, ct,
+        await WriteEachAsync(items, written, errors, ct,
             (item, time) => tar.WriteDirectoryAsync(item.Name, time.UtcDateTime, ct),
             (item, content) => tar.WriteAsync(item.Name, content, item.Source.Modified.UtcDateTime, item.Source.Size,
                 ct)).ConfigureAwait(false);
@@ -309,7 +326,8 @@ public sealed class PackOperation : FileOperation
     /// <summary>Goes through the plan: folders and files to <paramref name="writeFolder"/> and
     /// <paramref name="writeFile"/> (a file's content as a <see cref="SourceStream"/> that pauses, cancels and counts
     /// between blocks), links to the summary.</summary>
-    private async Task WriteEachAsync(List<PackItem> items, ItemErrors errors, CancellationToken ct,
+    private async Task WriteEachAsync(List<PackItem> items, WrittenListing written, ItemErrors errors,
+        CancellationToken ct,
         Func<PackItem, DateTimeOffset, Task> writeFolder, Func<PackItem, Stream, Task> writeFile)
     {
         foreach (var item in items)
@@ -321,6 +339,7 @@ public sealed class PackOperation : FileOperation
             {
                 case EntryKind.Directory:
                     await writeFolder(item, source.Modified).ConfigureAwait(false);
+                    written.AddDirectory(item.Name);
                     break;
                 case EntryKind.File:
                     if (await OpenSourceAsync(source, errors, ct).ConfigureAwait(false) is not { } input)
@@ -340,6 +359,7 @@ public sealed class PackOperation : FileOperation
                                 $"'{source.Path.Path}' changed while it was packed: {content.BytesRead} bytes were " +
                                 $"read, {source.Size} expected.");
                     }
+                    written.AddFile(item.Name, source.Size);
                     CompleteFile();
                     break;
                 default: // a link

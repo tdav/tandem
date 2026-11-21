@@ -17,3 +17,11 @@ public sealed class ArchivePasswordRequiredException(VfsPath archive, bool wrong
 
     public bool WrongPassword { get; } = wrongPassword;
 }
+
+/// <summary>The archive cannot store <see cref="Name"/> as it is: its writer would change it (see
+/// <see cref="ArchiveEntryNames.IsStorable"/>), so the change is refused.</summary>
+public sealed class ArchiveEntryNameException(string name, string message) : VfsException(message)
+{
+    /// <summary>The name that cannot be stored.</summary>
+    public string Name { get; } = name;
+}
