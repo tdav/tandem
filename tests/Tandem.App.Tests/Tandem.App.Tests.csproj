@@ -23,6 +23,9 @@
     <Compile Include="..\Tandem.Core.Tests\Vfs\DroppingProvider.cs" Link="ViewModels\DroppingProvider.cs" />
     <!-- The archive fixtures and their loader (skips a test whose external fixture is absent). -->
     <Compile Include="..\Tandem.Archives.Tests\Fixture.cs" Link="Views\Fixture.cs" />
+    <Compile Include="..\Tandem.Net.Tests\Remote\FakeRemoteServer.cs" Link="Integration\FakeRemoteServer.cs" />
+    <Compile Include="..\Tandem.Core.Tests\Platform\FakeSecretStore.cs" Link="Integration\FakeSecretStore.cs" />
+    <Compile Include="..\Tandem.Net.Tests\Ftp\TestFtpServer.cs" Link="Integration\TestFtpServer.cs" />
   </ItemGroup>
 
   <ItemGroup>

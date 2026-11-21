@@ -24,7 +24,7 @@ public sealed partial class PanelViewModel
     /// <summary>Marked rows.</summary>
     public int SelectedCount => _selectedCount;
 
-    /// <summary>The size of the marked files; folders count as 0.</summary>
+    /// <summary>The size of the marked files and of marked folders with a computed size.</summary>
     public long SelectedBytes => _selectedBytes;
 
     /// <summary>Rows other than "..".</summary>

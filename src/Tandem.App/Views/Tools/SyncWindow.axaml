@@ -1,0 +1,67 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:Tandem.App.Resources"
+        xmlns:vm="using:Tandem.App.ViewModels.Tools"
+        xmlns:converters="using:Avalonia.Data.Converters"
+        x:Class="Tandem.App.Views.Tools.SyncWindow" x:DataType="vm:SyncViewModel"
+        Title="{loc:Tr Key=Sync_Title}" Width="990" Height="640" MinWidth="680" MinHeight="400">
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto" Margin="14">
+        <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+            <TextBlock Text="{Binding LeftTitle}" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="1" Text="{Binding RightTitle}" TextTrimming="CharacterEllipsis" />
+        </Grid>
+        <WrapPanel Grid.Row="1" Margin="0,10,0,4" ItemSpacing="8" LineSpacing="6">
+            <WrapPanel ItemSpacing="8" LineSpacing="6" IsEnabled="{Binding CanEdit}">
+                <CheckBox IsChecked="{Binding ByContent}" Content="{loc:Tr Key=Sync_ByContent}" />
+                <CheckBox IsChecked="{Binding Subfolders}" Content="{loc:Tr Key=Sync_Subfolders}" />
+                <CheckBox IsChecked="{Binding IncludeHidden}" Content="{loc:Tr Key=Sync_IncludeHidden}" />
+                <TextBlock VerticalAlignment="Center" Text="{loc:Tr Key=Sync_Mask}" />
+                <TextBox Width="110" Text="{Binding Mask}" AutomationProperties.Name="{loc:Tr Key=Sync_Mask}" />
+                <Button Command="{Binding CompareCommand}" Content="{loc:Tr Key=Sync_Compare}" />
+            </WrapPanel>
+            <Button IsEnabled="{Binding IsComparing}" Command="{Binding StopComparingCommand}"
+                    Content="{loc:Tr Key=Sync_Stop}" />
+        </WrapPanel>
+        <WrapPanel Grid.Row="2" ItemSpacing="8" LineSpacing="6">
+            <CheckBox IsChecked="{Binding ShowEqual}" Content="{loc:Tr Key=Sync_ShowEqual}" />
+            <CheckBox IsChecked="{Binding ShowToRight}" Content="{loc:Tr Key=Sync_ShowToRight}" />
+            <CheckBox IsChecked="{Binding ShowToLeft}" Content="{loc:Tr Key=Sync_ShowToLeft}" />
+            <CheckBox IsChecked="{Binding ShowDifferent}" Content="{loc:Tr Key=Sync_ShowDifferent}" />
+        </WrapPanel>
+        <StackPanel Grid.Row="3" Spacing="5" Margin="0,4,0,6">
+            <TextBlock Text="{Binding UnreadableStatus}" ToolTip.Tip="{Binding UnreadablePaths}"
+                       TextWrapping="Wrap" Foreground="{DynamicResource Tandem.ErrorForeground}"
+                       IsVisible="{Binding UnreadableStatus, Converter={x:Static converters:ObjectConverters.IsNotNull}}" />
+            <Grid ColumnDefinitions="2*,1.5*,70,1.5*" ColumnSpacing="8" Margin="10,0,10,0">
+                <TextBlock Text="{loc:Tr Key=Sync_Path}" Classes="secondary" />
+                <TextBlock Grid.Column="1" Text="{loc:Tr Key=Sync_Left}" Classes="secondary" />
+                <TextBlock Grid.Column="2" Text="{loc:Tr Key=Sync_Action}" Classes="secondary" />
+                <TextBlock Grid.Column="3" Text="{loc:Tr Key=Sync_Right}" Classes="secondary" />
+            </Grid>
+        </StackPanel>
+        <ListBox Grid.Row="4" x:Name="SyncRows" ItemsSource="{Binding Rows}" SelectionMode="Multiple"
+                 Background="{DynamicResource Tandem.ViewerBackground}"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+            <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:SyncRowViewModel">
+                    <Grid ColumnDefinitions="2*,1.5*,70,1.5*" ColumnSpacing="8">
+                        <TextBlock Text="{Binding RelativePath}" TextTrimming="CharacterEllipsis"
+                                   ToolTip.Tip="{Binding RelativePath}" />
+                        <TextBlock Grid.Column="1" Text="{Binding LeftText}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Grid.Column="2" Text="{Binding ActionText}" TextAlignment="Center"
+                                   AutomationProperties.Name="{Binding ActionDescription}" ToolTip.Tip="{Binding ActionDescription}" />
+                        <TextBlock Grid.Column="3" Text="{Binding RightText}" TextTrimming="CharacterEllipsis" />
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+        <Grid Grid.Row="5" ColumnDefinitions="*,Auto" ColumnSpacing="14" Margin="0,10,0,0">
+            <StackPanel>
+                <TextBlock Text="{Binding Status}" />
+                <TextBlock Text="{Binding TotalsText}" TextWrapping="Wrap" />
+            </StackPanel>
+            <Button Grid.Column="1" Command="{Binding SynchronizeCommand}" IsEnabled="{Binding CanSynchronize}"
+                    Content="{loc:Tr Key=Sync_Run}" VerticalAlignment="Center" />
+        </Grid>
+    </Grid>
+</Window>

@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Tandem.App.Resources;
 using Tandem.App.Services;
 using Tandem.Core.Listing;
+using Tandem.Core.Tools;
 using Tandem.Core.Vfs;
 
 namespace Tandem.App.ViewModels;
@@ -75,7 +76,29 @@ public sealed partial class EntryRowViewModel : ObservableObject
     public bool IsForeign => _displayPathOf is not null;
 
     /// <summary>The size for files; the word "Folder" for folders and links to folders; empty for "..".</summary>
-    public string SizeText => _sizeText ??= IsDirectoryLike ? Loc.Get("Panel_Folder") : SizeFormatter.Format(Entry!.Size);
+    public string SizeText => IsSizing ? Loc.Get("FolderSize_Computing") : FolderSize is { } size
+        ? size.Unreadable > 0 ? Loc.Format("FolderSize_AtLeast", SizeFormatter.Format(size.Bytes))
+            : SizeFormatter.Format(size.Bytes)
+        : _sizeText ??= IsDirectoryLike ? Loc.Get("Panel_Folder") : SizeFormatter.Format(Entry!.Size);
+
+    public FolderSize? FolderSize { get; private set; }
+    public bool IsSizing { get; private set; }
+
+    internal void ApplyFolderSize(FolderSize? size, bool sizing)
+    {
+        if (FolderSize == size && IsSizing == sizing) return;
+        if (FolderSize != size)
+        {
+            FolderSize = size;
+            OnPropertyChanged(nameof(FolderSize));
+        }
+        if (IsSizing != sizing)
+        {
+            IsSizing = sizing;
+            OnPropertyChanged(nameof(IsSizing));
+        }
+        OnPropertyChanged(nameof(SizeText));
+    }
 
     /// <summary>The modification time as short date and time in the current language; empty for "..".</summary>
     public string DateText => _dateText ??= Entry!.Modified.ToLocalTime().ToString("g", Loc.Culture);
@@ -126,7 +149,7 @@ public sealed partial class EntryRowViewModel : ObservableObject
     }
 
     /// <summary>The bytes the row adds to a selection's size: the size of a file, 0 for anything directory-like.</summary>
-    internal long SelectableBytes => IsDirectoryLike ? 0 : Entry!.Size;
+    internal long SelectableBytes => IsDirectoryLike ? FolderSize?.Bytes ?? 0 : Entry!.Size;
 
     /// <summary><see cref="Name"/> folded as the sorter folds it, for matching typed text.</summary>
     internal string FoldedName => _foldedName ??= EntrySorter.Fold(Name);

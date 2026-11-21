@@ -345,7 +345,8 @@ public sealed class ShellCommands : IDisposable
     {
         if (CursorEntry() is not { IsDirectoryLike: false } entry || await _windows.TryActivateEditorAsync(entry.Path))
             return;
-        if (entry.Path.ProviderId == VfsPath.LocalProviderId && _settings?.Current.ExternalEditor is { } program &&
+        var localCopy = _providers.For(entry.Path).Capabilities.HasFlag(ProviderCapabilities.LocalCopyEdit);
+        if (!localCopy && entry.Path.ProviderId == VfsPath.LocalProviderId && _settings?.Current.ExternalEditor is { } program &&
             _processes is not null)
         {
             await EditExternallyAsync(program, entry.Path.Path);
@@ -354,7 +355,9 @@ public sealed class ShellCommands : IDisposable
         EditorViewModel editor;
         try
         {
-            editor = await EditorViewModel.OpenAsync(_providers, entry.Path, CancellationToken.None, _nativeCopy);
+            editor = localCopy
+                ? await EditorViewModel.OpenRemoteAsync(_providers, _temp, entry.Path, _lifetime.Token)
+                : await EditorViewModel.OpenAsync(_providers, entry.Path, CancellationToken.None, _nativeCopy);
         }
         catch (EditorRefusedException e)
         {
@@ -367,8 +370,13 @@ public sealed class ShellCommands : IDisposable
             if (!_disposed) await TellAsync(Loc.Format("Shell_OpenFailed", entry.Name), e);
             return;
         }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { return; }
         // No await between this check and showing: an editor of the same file opened meanwhile is reused.
-        if (_disposed || _windows.TryActivateEditorFor(editor.Target)) return;
+        if (_disposed || _windows.TryActivateEditorFor(editor.Target))
+        {
+            await editor.ReleaseCopyAsync();
+            return;
+        }
         _windows.ShowEditor(editor);
     }
 

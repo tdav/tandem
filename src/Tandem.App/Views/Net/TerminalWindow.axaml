@@ -1,0 +1,17 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:net="using:Tandem.App.Views.Net"
+        xmlns:vm="using:Tandem.App.ViewModels.Net"
+        xmlns:r="using:Tandem.App.Resources"
+        x:Class="Tandem.App.Views.Net.TerminalWindow"
+        x:DataType="vm:TerminalViewModel"
+        Title="{Binding Title}" Width="840" Height="500" MinWidth="280" MinHeight="180">
+  <Grid RowDefinitions="*,Auto">
+    <net:TerminalControl x:Name="Terminal" />
+    <DockPanel Grid.Row="1" IsVisible="{Binding HasStatus}" Margin="8" LastChildFill="True">
+      <Button DockPanel.Dock="Right" IsVisible="{Binding CanReconnect}" Command="{Binding ReconnectCommand}"
+              Content="{r:Tr Key=Terminal_Reconnect}" />
+      <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" TextWrapping="Wrap" />
+    </DockPanel>
+  </Grid>
+</Window>

@@ -23,11 +23,46 @@ public sealed class SafeReplaceTests
         _mem.AllPaths.Where(p => p.StartsWith(directory, StringComparison.Ordinal));
 
     [Fact]
+    public async Task Concurrent_writers_cannot_share_a_part_or_remove_each_others_backup()
+    {
+        _mem.AddFile("/a/b.txt", "old");
+        var target = Mem("/a/b.txt");
+        var staging = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var first = SafeReplace.WriteAsync(_mem, target, replace: true, async part =>
+        {
+            await WriteText("first")(part);
+            staging.SetResult();
+            await release.Task.WaitAsync(Ct);
+        }, Ct);
+        await staging.Task.WaitAsync(Ct);
+        var secondStarted = false;
+        var second = SafeReplace.WriteAsync(_mem, target, replace: true, async part =>
+        {
+            secondStarted = true;
+            Assert.Equal("first", _mem.ReadAllText(target.Path));
+            await WriteText("second")(part);
+        }, Ct);
+        try
+        {
+            Assert.False(secondStarted);
+            Assert.Equal("old", _mem.ReadAllText(target.Path));
+        }
+        finally
+        {
+            release.TrySetResult();
+        }
+        await Task.WhenAll(first, second);
+        Assert.Equal("second", _mem.ReadAllText(target.Path));
+        Assert.Equal(["/a", "/a/b.txt"], PathsUnder("/a"));
+    }
+
+    [Fact]
     public async Task Write_puts_content_under_real_name_and_leaves_no_part()
     {
         _mem.AddDirectory("/a");
 
-        await SafeReplace.WriteAsync(_mem, Mem("/a/b.txt"), replace: false, WriteText("new"));
+        await SafeReplace.WriteAsync(_mem, Mem("/a/b.txt"), replace: false, WriteText("new"), Ct);
 
         Assert.Equal("new", _mem.ReadAllText("/a/b.txt"));
         Assert.Equal(["/a", "/a/b.txt"], PathsUnder("/a"));
@@ -45,7 +80,7 @@ public sealed class SafeReplaceTests
                 written = part;
                 await WriteText("half")(part);
                 throw new IOException("disk full");
-            }));
+            }, Ct));
 
         Assert.Equal("disk full", error.Message);
         Assert.Equal(Mem("/a/.b.txt.tandem-part"), written);
@@ -57,7 +92,7 @@ public sealed class SafeReplaceTests
     {
         _mem.AddFile("/a/b.txt", "old");
 
-        await SafeReplace.WriteAsync(_mem, Mem("/a/b.txt"), replace: true, WriteText("new"));
+        await SafeReplace.WriteAsync(_mem, Mem("/a/b.txt"), replace: true, WriteText("new"), Ct);
 
         Assert.Equal("new", _mem.ReadAllText("/a/b.txt"));
         Assert.False(_mem.Exists("/a/.b.txt.tandem-old"));
@@ -71,7 +106,7 @@ public sealed class SafeReplaceTests
         _mem.FailWriteAfter("/a/.b.txt.tandem-part", 2, () => new IOException("disk full"));
 
         await Assert.ThrowsAsync<IOException>(() =>
-            SafeReplace.WriteAsync(_mem, Mem("/a/b.txt"), replace: true, WriteText("the new content")));
+            SafeReplace.WriteAsync(_mem, Mem("/a/b.txt"), replace: true, WriteText("the new content"), Ct));
 
         Assert.Equal("old", _mem.ReadAllText("/a/b.txt"));
         Assert.Equal(["/a", "/a/b.txt"], PathsUnder("/a"));
@@ -85,7 +120,7 @@ public sealed class SafeReplaceTests
             () => new IOException("rename failed"));
 
         var error = await Assert.ThrowsAsync<IOException>(() =>
-            SafeReplace.WriteAsync(_mem, Mem("/a/b.txt"), replace: true, WriteText("new")));
+            SafeReplace.WriteAsync(_mem, Mem("/a/b.txt"), replace: true, WriteText("new"), Ct));
 
         Assert.Equal("rename failed", error.Message);
         Assert.Equal("old", _mem.ReadAllText("/a/b.txt"));
@@ -98,7 +133,7 @@ public sealed class SafeReplaceTests
         _mem.AddFile("/a/b.txt", "old");
         _mem.AddFile("/a/.b.txt.tandem-old", "left by an earlier crash");
 
-        await SafeReplace.WriteAsync(_mem, Mem("/a/b.txt"), replace: true, WriteText("new"));
+        await SafeReplace.WriteAsync(_mem, Mem("/a/b.txt"), replace: true, WriteText("new"), Ct);
 
         Assert.Equal("new", _mem.ReadAllText("/a/b.txt"));
         Assert.Equal(["/a", "/a/b.txt"], PathsUnder("/a"));
@@ -148,7 +183,7 @@ public sealed class SafeReplaceTests
         _mem.FailOn((op, p) => op == "Move" && p.Path == "/a/b.txt", () => new IOException("cannot set aside"));
 
         var error = await Assert.ThrowsAsync<IOException>(() =>
-            SafeReplace.WriteAsync(_mem, Mem("/a/b.txt"), replace: true, WriteText("new")));
+            SafeReplace.WriteAsync(_mem, Mem("/a/b.txt"), replace: true, WriteText("new"), Ct));
 
         Assert.Equal("cannot set aside", error.Message);
         Assert.Equal("old", _mem.ReadAllText("/a/b.txt"));
@@ -162,7 +197,7 @@ public sealed class SafeReplaceTests
 
         Assert.Throws<ArgumentException>(() => SafeReplace.PartPathFor(Mem("/")));
         await Assert.ThrowsAsync<ArgumentException>(
-            () => SafeReplace.WriteAsync(_mem, Mem("/"), replace: false, WriteText("new")));
+            () => SafeReplace.WriteAsync(_mem, Mem("/"), replace: false, WriteText("new"), Ct));
         await Assert.ThrowsAsync<ArgumentException>(
             () => SafeReplace.MoveIntoPlaceAsync(_mem, Mem("/new.txt"), Mem("/"), replace: true));
         await Assert.ThrowsAsync<ArgumentException>(

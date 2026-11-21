@@ -86,8 +86,8 @@ if [[ -f "$PLIST" ]]; then
     check_plist CFBundleExecutable Tandem.App
     check_plist CFBundlePackageType APPL
     check_plist CFBundleIconFile Tandem
-    check_plist CFBundleShortVersionString 0.2.0
-    check_plist CFBundleVersion 2
+    check_plist CFBundleShortVersionString 0.3.0
+    check_plist CFBundleVersion 3
     check_plist CFBundleInfoDictionaryVersion 6.0
     check_plist CFBundleDevelopmentRegion en
     check_plist LSMinimumSystemVersion 14.0
@@ -99,12 +99,21 @@ if [[ -f "$PLIST" ]]; then
     check_plist_type NSHighResolutionCapable bool
     check_plist NSPrincipalClass NSApplication
     check_plist LSApplicationCategoryType public.app-category.utilities
+    check_plist NSLocalNetworkUsageDescription 'Tandem connects to the FTP and SFTP servers you set up.'
     localizations="$(plutil -extract CFBundleLocalizations json -o - "$PLIST" 2>/dev/null || true)"
     if [[ "$localizations" == '["en","ru"]' ]]; then
         pass "Info.plist CFBundleLocalizations = [en, ru]"
     else
         fail "Info.plist CFBundleLocalizations: expected [\"en\",\"ru\"], got '${localizations:-<missing>}'"
     fi
+fi
+
+ru_plist="$CONTENTS/Resources/ru.lproj/InfoPlist.strings"
+ru_description="$(plutil -extract NSLocalNetworkUsageDescription raw -o - "$ru_plist" 2>/dev/null || true)"
+if [[ "$ru_description" == 'Tandem подключается к серверам FTP и SFTP, которые вы указали.' ]]; then
+    pass "Russian local network usage description present"
+else
+    fail "Russian local network usage description missing or incorrect"
 fi
 
 # --- Architecture ----------------------------------------------------------------------------------------------
@@ -141,8 +150,9 @@ else
     fail "Russian resources ru/Tandem.App.resources.dll missing"
 fi
 
-# Stage 2 libraries: archives (Tandem.Archives over SharpCompress) and the built-in editor (AvaloniaEdit).
-for lib in Tandem.Archives.dll SharpCompress.dll AvaloniaEdit.dll; do
+# Archive, editor, network and tool libraries.
+for lib in Tandem.Archives.dll SharpCompress.dll AvaloniaEdit.dll Tandem.Net.dll Renci.SshNet.dll \
+    FluentFTP.dll DiffPlex.dll System.IO.Hashing.dll XTerm.NET.dll BouncyCastle.Cryptography.dll; do
     if [[ -f "$CONTENTS/MacOS/$lib" ]]; then
         pass "library $lib present"
     else

@@ -1,0 +1,73 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:Tandem.App.Resources"
+        xmlns:vm="using:Tandem.App.ViewModels.Tools"
+        x:Class="Tandem.App.Views.Tools.MultiRenameWindow"
+        x:DataType="vm:MultiRenameViewModel"
+        Title="{loc:Tr Key=Rename_Title}"
+        Width="780" Height="600" MinWidth="620" MinHeight="480"
+        ShowInTaskbar="False" WindowStartupLocation="CenterOwner">
+    <Window.Styles>
+        <Style Selector="TextBlock.rename-error">
+            <Setter Property="Foreground" Value="{DynamicResource Tandem.ErrorForeground}" />
+        </Style>
+        <Style Selector="ListBoxItem">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+    </Window.Styles>
+    <Grid Margin="20" RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="12">
+        <Grid ColumnDefinitions="Auto,*,Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto"
+              ColumnSpacing="10" RowSpacing="8">
+            <TextBlock Text="{loc:Tr Key=Rename_NameTemplate}" VerticalAlignment="Center" />
+            <TextBox x:Name="NameField" Grid.Column="1" Text="{Binding NameTemplate}" />
+            <TextBlock Grid.Column="2" Text="{loc:Tr Key=Rename_ExtensionTemplate}" VerticalAlignment="Center" />
+            <TextBox Grid.Column="3" Text="{Binding ExtensionTemplate}" />
+            <TextBlock Grid.Row="1" Text="{loc:Tr Key=Rename_Search}" VerticalAlignment="Center" />
+            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Search}" />
+            <TextBlock Grid.Row="1" Grid.Column="2" Text="{loc:Tr Key=Rename_Replace}" VerticalAlignment="Center" />
+            <TextBox Grid.Row="1" Grid.Column="3" Text="{Binding Replace}" />
+            <CheckBox Grid.Row="2" Grid.ColumnSpan="2" Content="{loc:Tr Key=Rename_Regex}" IsChecked="{Binding UseRegex}" />
+            <CheckBox Grid.Row="2" Grid.Column="2" Grid.ColumnSpan="2" Content="{loc:Tr Key=Rename_MatchCase}" IsChecked="{Binding MatchCase}" />
+            <TextBlock Grid.Row="3" Text="{loc:Tr Key=Rename_Case}" VerticalAlignment="Center" />
+            <ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding CaseOptions}" SelectedItem="{Binding SelectedCase}">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:RenameCaseOption"><TextBlock Text="{Binding Label}" /></DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+            <StackPanel Grid.Row="4" Grid.ColumnSpan="4" Orientation="Horizontal" Spacing="6">
+                <TextBlock Text="{loc:Tr Key=Rename_CounterStart}" VerticalAlignment="Center" />
+                <NumericUpDown Width="74" FormatString="0" Value="{Binding CounterStart}" />
+                <TextBlock Text="{loc:Tr Key=Rename_CounterStep}" VerticalAlignment="Center" />
+                <NumericUpDown Width="74" FormatString="0" Value="{Binding CounterStep}" />
+                <TextBlock Text="{loc:Tr Key=Rename_CounterDigits}" VerticalAlignment="Center" />
+                <NumericUpDown Width="66" FormatString="0" Minimum="1" Maximum="255" Value="{Binding CounterDigits}" />
+            </StackPanel>
+        </Grid>
+        <TextBlock Grid.Row="1" Text="{loc:Tr Key=Rename_Tokens}" Classes="secondary" TextWrapping="Wrap" />
+        <StackPanel Grid.Row="2" Spacing="5">
+            <TextBlock Text="{Binding RuleError}" IsVisible="{Binding HasRuleError}" Classes="rename-error" />
+            <TextBlock Text="{Binding Summary}" />
+            <Grid ColumnDefinitions="*,*,150" ColumnSpacing="10" Margin="8,0">
+                <TextBlock Text="{loc:Tr Key=Rename_OldName}" FontWeight="SemiBold" />
+                <TextBlock Grid.Column="1" Text="{loc:Tr Key=Rename_NewName}" FontWeight="SemiBold" />
+                <TextBlock Grid.Column="2" Text="{loc:Tr Key=Rename_Status}" FontWeight="SemiBold" />
+            </Grid>
+        </StackPanel>
+        <ListBox Grid.Row="3" ItemsSource="{Binding Rows}">
+            <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:RenamePreviewRow">
+                    <Grid ColumnDefinitions="*,*,150" ColumnSpacing="10">
+                        <TextBlock Text="{Binding OldName}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Grid.Column="1" Text="{Binding NewName}" TextTrimming="CharacterEllipsis"
+                                   Classes.rename-error="{Binding HasError}" />
+                        <TextBlock Grid.Column="2" Text="{Binding StatusText}" Classes.rename-error="{Binding HasError}" />
+                    </Grid>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+            <Button Content="{loc:Tr Key=Button_Cancel}" Command="{Binding CancelCommand}" IsCancel="True" />
+            <Button Content="{loc:Tr Key=Rename_Apply}" Command="{Binding AcceptCommand}" IsDefault="True" />
+        </StackPanel>
+    </Grid>
+</Window>

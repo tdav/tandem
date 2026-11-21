@@ -10,12 +10,11 @@ namespace Tandem.App.ViewModels;
 
 /// <summary>
 /// The button bar at the top of the main window: the user's commands from the settings, each a program started with
-/// its arguments (see <see cref="ArgumentTemplate"/>) in the active panel's folder.
+/// its arguments (see <see cref="ArgumentTemplate"/>) in the active panel's local folder or the user's home.
 /// </summary>
 /// <remarks>
-/// Created and used on the UI thread. The buttons work only while the active panel shows a local folder (the
-/// programs get local paths); a command whose arguments use the other panel's folder is not started while that panel
-/// is not on the local disk, and the user is told. A program that cannot be started (or an application that
+/// Created and used on the UI thread. Each button is available when its arguments can be expanded using the
+/// two panels. A program that cannot be started (or an application that
 /// <c>open</c> cannot launch) is told to the user; once started it runs on its own: its output is dropped, its exit
 /// code not shown, and it is never killed (see <see cref="ProgramLauncher.Start"/>).
 /// </remarks>
@@ -26,7 +25,8 @@ public sealed partial class ButtonBarViewModel : ObservableObject, IDisposable
     private readonly IProcessRunner _processes;
     private readonly IDialogService _dialogs;
     private readonly Action<Exception> _reportFailure;
-    private PanelViewModel? _watched;
+    private PanelViewModel? _active;
+    private PanelViewModel? _passive;
     private bool _canRun;
     private bool _disposed;
 
@@ -41,7 +41,7 @@ public sealed partial class ButtonBarViewModel : ObservableObject, IDisposable
         Buttons = settings.Current.Buttons;
         settings.Changed += OnSettingsChanged;
         workspace.PropertyChanged += OnWorkspacePropertyChanged;
-        WatchActivePanel();
+        WatchPanels();
     }
 
     /// <summary>The buttons of the settings, in order; replaced (PropertyChanged) when the settings change them.</summary>
@@ -52,15 +52,22 @@ public sealed partial class ButtonBarViewModel : ObservableObject, IDisposable
     /// <summary>Whether there is any button; without one the bar offers to set them up.</summary>
     public bool HasButtons => Buttons.Count > 0;
 
-    /// <summary>Whether the active panel shows a folder on the local disk.</summary>
+    /// <summary>Whether any configured button can run.</summary>
     public bool CanRun
     {
         get => _canRun;
-        private set
-        {
-            if (!SetProperty(ref _canRun, value)) return;
-            RunCommand.NotifyCanExecuteChanged();
-        }
+        private set => SetProperty(ref _canRun, value);
+    }
+
+    /// <summary>Whether the panels supply the local paths the button needs.</summary>
+    public bool IsAvailable(UserButton button)
+    {
+        ArgumentNullException.ThrowIfNull(button);
+        if (_disposed || !_workspace.IsLoaded) return false;
+        var placeholders = ArgumentTemplate.PlaceholdersOf(button.Arguments);
+        return (ShellCommands.IsLocal(_workspace.ActivePanel) ||
+                !(placeholders.Contains('p') || placeholders.Contains('f') || placeholders.Contains('s'))) &&
+            (ShellCommands.IsLocal(_workspace.PassivePanel) || !placeholders.Contains('t'));
     }
 
     /// <summary>Starts <paramref name="button"/>'s program on the active panel; does nothing while it cannot run.
@@ -69,13 +76,19 @@ public sealed partial class ButtonBarViewModel : ObservableObject, IDisposable
     public async Task RunAsync(UserButton button)
     {
         ArgumentNullException.ThrowIfNull(button);
-        if (!CanRun || _workspace.ActivePanel is not { } panel) return;
+        if (!IsAvailable(button)) return;
+        var panel = _workspace.ActivePanel;
         var passive = _workspace.PassivePanel;
+        var local = ShellCommands.IsLocal(panel);
+        var entry = panel.CursorRow?.Entry;
         var context = new ArgumentTemplate.Context(
-            panel.CurrentPath.Path,
+            local ? panel.CurrentPath.Path : _workspace.HomeDirectory,
             ShellCommands.IsLocal(passive) ? passive.CurrentPath.Path : null,
-            panel.CursorRow is { IsParentLink: false, Entry: { } entry } ? entry.Path.Path : null,
-            panel.GetOperationTargets().Select(e => e.Path.Path).ToArray());
+            local ? entry?.Path.Path : null,
+            local ? panel.GetOperationTargets().Select(e => e.Path.Path).ToArray() : [])
+        {
+            CursorName = entry?.Name,
+        };
         var failureText = Loc.Format("UserCommand_StartFailed", button.Title);
         Task<string?> verdict;
         try
@@ -84,11 +97,6 @@ public sealed partial class ButtonBarViewModel : ObservableObject, IDisposable
             var spec = ProgramLauncher.Build(button.Program, arguments, context.CurrentPath,
                 _workspace.HomeDirectory);
             verdict = ProgramLauncher.Start(_processes, spec);
-        }
-        catch (ArgumentTemplate.OtherFolderUnavailableException)
-        {
-            await TellAsync(Loc.Format("UserCommand_OtherPanelNotLocal", button.Title), null);
-            return;
         }
         catch (Exception e) when (ProgramLauncher.IsStartFailure(e))
         {
@@ -108,39 +116,47 @@ public sealed partial class ButtonBarViewModel : ObservableObject, IDisposable
         _disposed = true;
         _settings.Changed -= OnSettingsChanged;
         _workspace.PropertyChanged -= OnWorkspacePropertyChanged;
-        if (_watched is not null) _watched.PropertyChanged -= OnPanelPropertyChanged;
-        _watched = null;
+        WatchPanels();
     }
 
-    private bool CanRunButton(UserButton? button) => button is not null && CanRun;
+    private bool CanRunButton(UserButton? button) => button is not null && IsAvailable(button);
 
     private void OnSettingsChanged(object? sender, EventArgs e)
     {
         var buttons = _settings.Current.Buttons;
-        if (!buttons.SequenceEqual(Buttons)) Buttons = buttons;
+        if (buttons.SequenceEqual(Buttons)) return;
+        Buttons = buttons;
+        UpdateAvailability();
     }
 
     private void OnWorkspacePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(WorkspaceViewModel.ActivePanel) or nameof(WorkspaceViewModel.ActiveSide))
-            WatchActivePanel();
+        if (e.PropertyName is nameof(WorkspaceViewModel.ActivePanel) or nameof(WorkspaceViewModel.PassivePanel))
+            WatchPanels();
     }
 
-    private void WatchActivePanel()
+    private void WatchPanels()
     {
-        var active = _workspace.IsLoaded ? _workspace.ActivePanel : null;
-        if (active != _watched)
-        {
-            if (_watched is not null) _watched.PropertyChanged -= OnPanelPropertyChanged;
-            _watched = active;
-            if (active is not null) active.PropertyChanged += OnPanelPropertyChanged;
-        }
-        CanRun = ShellCommands.IsLocal(active);
+        if (_active is not null) _active.PropertyChanged -= OnPanelPropertyChanged;
+        if (_passive is not null) _passive.PropertyChanged -= OnPanelPropertyChanged;
+        var loaded = !_disposed && _workspace.IsLoaded;
+        _active = loaded ? _workspace.ActivePanel : null;
+        _passive = loaded ? _workspace.PassivePanel : null;
+        if (_active is not null) _active.PropertyChanged += OnPanelPropertyChanged;
+        if (_passive is not null) _passive.PropertyChanged += OnPanelPropertyChanged;
+        UpdateAvailability();
     }
 
     private void OnPanelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(PanelViewModel.CurrentPath)) CanRun = ShellCommands.IsLocal(_watched);
+        if (e.PropertyName is nameof(PanelViewModel.CurrentPath) or nameof(PanelViewModel.CursorRow))
+            UpdateAvailability();
+    }
+
+    private void UpdateAvailability()
+    {
+        CanRun = Buttons.Any(IsAvailable);
+        RunCommand.NotifyCanExecuteChanged();
     }
 
     /// <summary>An application that the launcher could not start is told, with the launcher's words.</summary>

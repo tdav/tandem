@@ -3,6 +3,7 @@ using AvaloniaEdit.Document;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Tandem.App.Resources;
 using Tandem.App.Services;
+using Tandem.App.ViewModels.Net;
 using Tandem.Core.Operations;
 using Tandem.Core.Platform;
 using Tandem.Core.Viewing;
@@ -60,20 +61,25 @@ public sealed partial class EditorViewModel : ObservableObject
     private readonly INativeCopy? _nativeCopy;
     private readonly string _displayPath;
     private readonly VfsPath _target;
+    private readonly VfsPath _writeTarget;
+    private readonly RemoteEdit? _remote;
     private readonly UnixFileMode? _openedMode;
     private byte[] _bom;
     private bool _roundTrips;
     private (long Size, DateTimeOffset Modified) _onDisk;
     private Task<bool>? _saving;
+    private Task<bool>? _uploading;
     private int _changes;
 
     private EditorViewModel(ProviderRegistry providers, INativeCopy? nativeCopy, VfsPath file, string displayPath,
-        Loaded loaded, bool isReadOnly)
+        Loaded loaded, bool isReadOnly, RemoteEdit? remote = null)
     {
         _providers = providers;
         _nativeCopy = nativeCopy;
         _displayPath = displayPath;
-        _target = loaded.Target;
+        _remote = remote;
+        _target = remote?.Source ?? loaded.Target;
+        _writeTarget = loaded.Target;
         _openedMode = loaded.Mode;
         _bom = loaded.Bom;
         _roundTrips = loaded.RoundTrips;
@@ -111,11 +117,27 @@ public sealed partial class EditorViewModel : ObservableObject
             !provider.Capabilities.HasFlag(ProviderCapabilities.Write));
     }
 
+    public static async Task<EditorViewModel> OpenRemoteAsync(ProviderRegistry providers, TempFileStore temp,
+        VfsPath file, CancellationToken ct)
+    {
+        var remote = await Task.Run(() => RemoteEdit.DownloadAsync(providers, temp, file, MaxFileBytes, ct), ct);
+        try
+        {
+            var loaded = await Task.Run(() => LoadAsync(providers.For(remote.LocalCopy), remote.LocalCopy, ct), ct);
+            return new EditorViewModel(providers, null, file, providers.DisplayPath(file), loaded,
+                !providers.For(file).Capabilities.HasFlag(ProviderCapabilities.Write), remote);
+        }
+        catch
+        {
+            await Task.Run(remote.ReleaseAsync);
+            throw;
+        }
+    }
+
     /// <summary>The file opened (a link stays the link's path).</summary>
     public VfsPath File { get; }
 
-    /// <summary>The file really read and written: <see cref="File"/> with every link followed (see
-    /// <see cref="ResolveTargetAsync"/>).</summary>
+    /// <summary>The edited file with links resolved. For a temporary copy this is its original source path.</summary>
     public VfsPath Target => _target;
 
     /// <summary>The file <paramref name="file"/> really is on its provider, as the editor reads and writes it: every
@@ -133,7 +155,20 @@ public sealed partial class EditorViewModel : ObservableObject
     }
 
     /// <summary>The file's path as the user reads it, with " *" while there are unsaved changes.</summary>
-    public string Title => IsModified ? _displayPath + " *" : _displayPath;
+    public string Title
+    {
+        get
+        {
+            var title = HasPendingUpload ? Loc.Format("RemoteEdit_NotUploaded", _displayPath) : _displayPath;
+            return IsModified ? title + " *" : title;
+        }
+    }
+
+    public bool IsRemoteCopy => _remote is not null;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Title))]
+    public partial bool HasPendingUpload { get; private set; }
 
     /// <summary>The text; edit it through the editor control (or directly).</summary>
     public TextDocument Document { get; }
@@ -193,10 +228,13 @@ public sealed partial class EditorViewModel : ObservableObject
             Error = Loc.Get("Editor_ReadOnly");
             return false;
         }
+        if (_uploading is { } upload) await upload;
+        if (_remote is not null && HasPendingUpload && !IsModified)
+            return !await ConfirmAsync(EditorSaveQuestion.UploadToSource) || await UploadAsync();
         var changes = _changes;
         string? notice;
         var snapshot = Document.CreateSnapshot();
-        var (providers, target, nativeCopy) = (_providers, _target, _nativeCopy);
+        var (providers, target, nativeCopy) = (_providers, _writeTarget, _nativeCopy);
         try
         {
             var provider = providers.For(target);
@@ -241,8 +279,49 @@ public sealed partial class EditorViewModel : ObservableObject
         _roundTrips = true;
         Notice = notice;
         if (changes == _changes) Document.UndoStack.MarkAsOriginalFile();
+        if (_remote is not null)
+        {
+            HasPendingUpload = true;
+            if (await ConfirmAsync(EditorSaveQuestion.UploadToSource)) return await UploadAsync();
+        }
         return true;
     }
+
+    public async Task<bool> UploadAsync()
+    {
+        if (_uploading is { } running) return await running;
+        if (_remote is not { } remote || !HasPendingUpload) return true;
+        _uploading = UploadCoreAsync(remote);
+        try { return await _uploading; }
+        finally { _uploading = null; }
+    }
+
+    private async Task<bool> UploadCoreAsync(RemoteEdit remote)
+    {
+        var result = await Task.Run(() => remote.UploadAsync(false, CancellationToken.None));
+        if (result.Outcome == UploadOutcome.ChangedAtSource)
+        {
+            if (!await ConfirmAsync(EditorSaveQuestion.OverwriteChangedAtSource)) return false;
+            result = await Task.Run(() => remote.UploadAsync(true, CancellationToken.None));
+        }
+        if (result.Outcome == UploadOutcome.Uploaded)
+        {
+            HasPendingUpload = false;
+            Error = null;
+            return true;
+        }
+        var detail = result.Error is { } error ? OperationTexts.ForFailure(error) : Loc.Get("RemoteEdit_Changed");
+        Error = Loc.Format("RemoteEdit_UploadFailed", File.Name, detail);
+        return false;
+    }
+
+    internal async Task WaitForSaveAsync()
+    {
+        if (_saving is { } saving) await saving;
+        if (_uploading is { } uploading) await uploading;
+    }
+
+    internal Task ReleaseCopyAsync() => _remote is { } remote ? Task.Run(remote.ReleaseAsync) : Task.CompletedTask;
 
     private Task<bool> ConfirmAsync(EditorSaveQuestion question) =>
         ConfirmSave is { } confirm ? confirm(question) : Task.FromResult(false);

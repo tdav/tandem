@@ -324,7 +324,7 @@ public class ArchiveWindowTests : LanguageTestBase
             settings: AppSettings.Default with { Buttons = [copy] });
         await ArchiveApp.EnterAsync(app, "sample.zip");
 
-        // Active panel inside the zip: the buttons are off.
+        // This button needs local file paths from the active panel.
         Assert.False(app.Main.ButtonBar.CanRun);
         await app.Main.ButtonBar.RunAsync(copy);
         Assert.Empty(processes.Started);
@@ -334,12 +334,12 @@ public class ArchiveWindowTests : LanguageTestBase
         app.Main.Workspace.SwitchPanel();
         app.Pump();
         ArchiveApp.Cursor(app, app.Right, "sample.7z");
-        Assert.True(app.Main.ButtonBar.CanRun);
+        Assert.False(app.Main.ButtonBar.IsAvailable(copy));
 
         await app.Main.ButtonBar.RunAsync(copy);
 
         Assert.Empty(processes.Started);
-        Assert.Equal([Resources.Loc.Format("UserCommand_OtherPanelNotLocal", "Copy")], app.Dialogs.Messages);
+        Assert.Empty(app.Dialogs.Messages);
         Assert.Empty(app.Failures);
     }
 

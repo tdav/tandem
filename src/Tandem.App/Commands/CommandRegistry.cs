@@ -25,6 +25,9 @@ public sealed class CommandRegistry
     public bool CanExecute(string id) =>
         _commands.TryGetValue(id, out var command) && (command.CanExecute?.Invoke() ?? true);
 
+    /// <summary>Whether the command has a handler even if it is unavailable in the current panel.</summary>
+    public bool IsRegistered(string id) => _commands.ContainsKey(id);
+
     /// <summary>
     /// Runs the command and waits for its handler. Returns false without running it if the command does not exist,
     /// its check refuses, or the same command is still running. An exception from the handler propagates.

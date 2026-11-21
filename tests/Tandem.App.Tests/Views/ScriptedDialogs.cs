@@ -46,6 +46,7 @@ internal class ScriptedDialogs : IDialogService
     public Queue<bool> QuitAnswers { get; } = new();
     public List<int> QuitRequests { get; } = [];
     public Queue<SaveChangesAnswer> SaveChangesAnswers { get; } = new();
+    public Queue<SaveChangesAnswer> UploadBeforeCloseAnswers { get; } = new();
     /// <summary>The file name of each "save changes?" question.</summary>
     public List<string> SaveChangesRequests { get; } = [];
     /// <summary>The window each "save changes?" question was modal to (null: the main window).</summary>
@@ -193,6 +194,11 @@ internal class ScriptedDialogs : IDialogService
             ? answer
             : SaveChangesAnswer.Cancel);
     }
+
+    public virtual Task<SaveChangesAnswer> AskUploadBeforeCloseAsync(string fileName, Window? owner = null) =>
+        Task.FromResult(TryTake(UploadBeforeCloseAnswers, "uploadBeforeClose", out var answer)
+            ? answer
+            : SaveChangesAnswer.Cancel);
 
     /// <summary>Unscripted, it answers no (the dialog's default).</summary>
     public virtual Task<bool> ConfirmEditorSaveAsync(EditorSaveQuestion question, string fileName,

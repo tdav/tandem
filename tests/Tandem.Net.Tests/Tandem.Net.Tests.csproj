@@ -18,6 +18,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Tandem.Net\Tandem.Net.csproj" />
     <ProjectReference Include="..\..\src\Tandem.Core\Tandem.Core.csproj" />
+    <ProjectReference Include="..\..\src\Tandem.Archives\Tandem.Archives.csproj" />
   </ItemGroup>
 
   <ItemGroup>

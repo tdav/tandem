@@ -63,6 +63,11 @@ public sealed class DialogService : IDialogService
             ? answer
             : SaveChangesAnswer.Cancel;
 
+    public async Task<SaveChangesAnswer> AskUploadBeforeCloseAsync(string fileName, Window? owner = null) =>
+        await ShowAsync<object>(new UploadBeforeCloseDialog(fileName), owner: owner) is SaveChangesAnswer answer
+            ? answer
+            : SaveChangesAnswer.Cancel;
+
     public async Task<bool> ConfirmEditorSaveAsync(EditorSaveQuestion question, string fileName, string encoding,
         Window? owner = null) =>
         await ShowAsync<object>(new EditorSaveDialog(question, fileName, encoding), owner: owner) is true;

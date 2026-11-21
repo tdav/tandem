@@ -1534,14 +1534,355 @@ Folder</value>
   </data>
 
   <!-- stage3:tools-a begin (Rename_*, Checksum_*, FolderSize_*) -->
+  <data name="FolderSize_Computing" xml:space="preserve"><value>…</value></data>
+  <data name="FolderSize_AtLeast" xml:space="preserve"><value>≥ {0}</value></data>
+  <data name="ChecksumAlgorithm_Crc32" xml:space="preserve"><value>CRC32</value></data>
+  <data name="ChecksumAlgorithm_Md5" xml:space="preserve"><value>MD5</value></data>
+  <data name="ChecksumAlgorithm_Sha1" xml:space="preserve"><value>SHA-1</value></data>
+  <data name="ChecksumAlgorithm_Sha256" xml:space="preserve"><value>SHA-256</value></data>
+  <data name="VerifyStatus_Ok" xml:space="preserve"><value>Matches</value></data>
+  <data name="VerifyStatus_Mismatch" xml:space="preserve"><value>Mismatch</value></data>
+  <data name="VerifyStatus_Missing" xml:space="preserve"><value>File missing</value></data>
+  <data name="VerifyStatus_Unreadable" xml:space="preserve"><value>Could not read</value></data>
+  <data name="VerifyStatus_OutsideFolder" xml:space="preserve"><value>Outside the checksum folder</value></data>
+  <data name="Checksum_CreateTitle" xml:space="preserve"><value>Create checksums</value></data>
+  <data name="Checksum_ResultsTitle" xml:space="preserve"><value>Checksum results</value></data>
+  <data name="Checksum_Algorithm" xml:space="preserve"><value>Algorithm</value></data>
+  <data name="Checksum_FileName" xml:space="preserve"><value>Checksum file name</value></data>
+  <data name="Checksum_Create" xml:space="preserve"><value>Create</value></data>
+  <data name="Checksum_InvalidName" xml:space="preserve"><value>Enter a valid file name.</value></data>
+  <data name="Checksum_WrongExtension" xml:space="preserve"><value>Use the {0} extension for this algorithm.</value></data>
+  <data name="Checksum_DefaultName" xml:space="preserve"><value>checksums</value></data>
+  <data name="Checksum_VerifySummary" xml:space="preserve"><value>Matched: {0}. Mismatched: {1}. Missing: {2}.</value></data>
+  <data name="Checksum_UnreadableLines" xml:space="preserve"><value>Could not read these lines: {0}.</value></data>
+  <data name="Checksum_ResultRow" xml:space="preserve"><value>{0} — {1}</value></data>
+  <data name="Checksum_MismatchDetails" xml:space="preserve"><value>Expected: {0}. Actual: {1}.</value></data>
+  <data name="Rename_Title" xml:space="preserve"><value>Multi-rename</value></data>
+  <data name="Rename_NameTemplate" xml:space="preserve"><value>Name template</value></data>
+  <data name="Rename_ExtensionTemplate" xml:space="preserve"><value>Extension template</value></data>
+  <data name="Rename_Search" xml:space="preserve"><value>Find</value></data>
+  <data name="Rename_Replace" xml:space="preserve"><value>Replace with</value></data>
+  <data name="Rename_Regex" xml:space="preserve"><value>Regular expression</value></data>
+  <data name="Rename_MatchCase" xml:space="preserve"><value>Match case</value></data>
+  <data name="Rename_Case" xml:space="preserve"><value>Letter case</value></data>
+  <data name="Rename_CounterStart" xml:space="preserve"><value>Start</value></data>
+  <data name="Rename_CounterStep" xml:space="preserve"><value>Step</value></data>
+  <data name="Rename_CounterDigits" xml:space="preserve"><value>Digits</value></data>
+  <data name="Rename_Tokens" xml:space="preserve"><value>[N] Name · [N2-5] Name range · [E] Extension · [C] Counter · [Y]-[M]-[D] Date · [h]-[m]-[s] Time · [[] Opening bracket</value></data>
+  <data name="Rename_OldName" xml:space="preserve"><value>Old name</value></data>
+  <data name="Rename_NewName" xml:space="preserve"><value>New name</value></data>
+  <data name="Rename_Status" xml:space="preserve"><value>Status</value></data>
+  <data name="Rename_Apply" xml:space="preserve"><value>Rename</value></data>
+  <data name="Rename_Computing" xml:space="preserve"><value>Calculating preview…</value></data>
+  <data name="Rename_Summary" xml:space="preserve"><value>Will rename {0} of {1}. Blocked items: {2}.</value></data>
+  <data name="Rename_TemplateError" xml:space="preserve"><value>Invalid template at character {0}.</value></data>
+  <data name="Rename_RuleError" xml:space="preserve"><value>Check the search expression, replacement, and counter width.</value></data>
+  <data name="Rename_UndoPrompt" xml:space="preserve"><value>Restore the former names of {0} items?</value></data>
+  <data name="Rename_Undo" xml:space="preserve"><value>Restore Names</value></data>
+  <data name="RenameStatus_Unchanged" xml:space="preserve"><value>Unchanged</value></data>
+  <data name="RenameStatus_Ok" xml:space="preserve"><value>Ready</value></data>
+  <data name="RenameStatus_InvalidName" xml:space="preserve"><value>Invalid name</value></data>
+  <data name="RenameStatus_Duplicate" xml:space="preserve"><value>Duplicate name</value></data>
+  <data name="RenameStatus_NameTaken" xml:space="preserve"><value>Name taken</value></data>
+  <data name="CaseChange_None" xml:space="preserve"><value>Unchanged</value></data>
+  <data name="CaseChange_Lower" xml:space="preserve"><value>lowercase</value></data>
+  <data name="CaseChange_Upper" xml:space="preserve"><value>UPPERCASE</value></data>
+  <data name="CaseChange_FirstUpper" xml:space="preserve"><value>First letter uppercase</value></data>
+  <data name="CaseChange_EachWordUpper" xml:space="preserve"><value>Each Word Uppercase</value></data>
   <!-- stage3:tools-a end -->
   <!-- ======================================================== -->
   <!-- stage3:tools-b begin (CompareDirs_*, Compare_*, Sync_*) -->
+  <data name="CompareDirs_Equal" xml:space="preserve">
+    <value>The folders are identical.</value>
+  </data>
+  <data name="CompareDirs_Marked" xml:space="preserve">
+    <value>Marked {0} on the left and {1} on the right.</value>
+  </data>
+  <data name="Compare_Title" xml:space="preserve">
+    <value>Compare Files</value>
+  </data>
+  <data name="Compare_Mode" xml:space="preserve">
+    <value>Comparison mode</value>
+  </data>
+  <data name="Compare_Previous" xml:space="preserve">
+    <value>Previous difference</value>
+  </data>
+  <data name="Compare_Next" xml:space="preserve">
+    <value>Next difference</value>
+  </data>
+  <data name="Compare_LeftEncoding" xml:space="preserve">
+    <value>Encoding of the left file</value>
+  </data>
+  <data name="Compare_RightEncoding" xml:space="preserve">
+    <value>Encoding of the right file</value>
+  </data>
+  <data name="Compare_EncodingAuto" xml:space="preserve">
+    <value>Automatic encoding</value>
+  </data>
+  <data name="Compare_Working" xml:space="preserve">
+    <value>Comparing files…</value>
+  </data>
+  <data name="Compare_TooLargeForText" xml:space="preserve">
+    <value>The files are too large for text comparison.</value>
+  </data>
+  <data name="Compare_LineEndings" xml:space="preserve">
+    <value>Only line endings differ.</value>
+  </data>
+  <data name="Compare_Identical" xml:space="preserve">
+    <value>The files are identical.</value>
+  </data>
+  <data name="Compare_TextSummary" xml:space="preserve">
+    <value>Difference blocks: {0}</value>
+  </data>
+  <data name="Compare_ByteSummary" xml:space="preserve">
+    <value>Differing bytes: {0}</value>
+  </data>
+  <data name="Compare_DifferentSizes" xml:space="preserve">
+    <value>Different sizes ({0} and {1}). {2}</value>
+  </data>
+  <data name="Compare_Truncated" xml:space="preserve">
+    <value>Showing the first {0} ranges.</value>
+  </data>
+  <data name="Compare_BinaryRange" xml:space="preserve">
+    <value>Offset {0}, length {1} bytes</value>
+  </data>
+  <data name="Compare_ConflictButton" xml:space="preserve">
+    <value>Compare…</value>
+  </data>
+  <data name="CompareMode_Auto" xml:space="preserve">
+    <value>Automatic</value>
+  </data>
+  <data name="CompareMode_Text" xml:space="preserve">
+    <value>Text</value>
+  </data>
+  <data name="CompareMode_Binary" xml:space="preserve">
+    <value>Binary</value>
+  </data>
+  <data name="Sync_Title" xml:space="preserve">
+    <value>Synchronize Folders</value>
+  </data>
+  <data name="Sync_ByContent" xml:space="preserve">
+    <value>Compare by content</value>
+  </data>
+  <data name="Sync_Subfolders" xml:space="preserve">
+    <value>Include subfolders</value>
+  </data>
+  <data name="Sync_IncludeHidden" xml:space="preserve">
+    <value>Include hidden items</value>
+  </data>
+  <data name="Sync_Mask" xml:space="preserve">
+    <value>Mask</value>
+  </data>
+  <data name="Sync_Compare" xml:space="preserve">
+    <value>Compare</value>
+  </data>
+  <data name="Sync_Stop" xml:space="preserve">
+    <value>Stop</value>
+  </data>
+  <data name="Sync_Run" xml:space="preserve">
+    <value>Synchronize</value>
+  </data>
+  <data name="Sync_ShowEqual" xml:space="preserve">
+    <value>Equal</value>
+  </data>
+  <data name="Sync_ShowToRight" xml:space="preserve">
+    <value>To the right</value>
+  </data>
+  <data name="Sync_ShowToLeft" xml:space="preserve">
+    <value>To the left</value>
+  </data>
+  <data name="Sync_ShowDifferent" xml:space="preserve">
+    <value>Other differences</value>
+  </data>
+  <data name="Sync_Path" xml:space="preserve">
+    <value>Relative path</value>
+  </data>
+  <data name="Sync_Left" xml:space="preserve">
+    <value>Left</value>
+  </data>
+  <data name="Sync_Action" xml:space="preserve">
+    <value>Action</value>
+  </data>
+  <data name="Sync_Right" xml:space="preserve">
+    <value>Right</value>
+  </data>
+  <data name="Sync_Progress" xml:space="preserve">
+    <value>Scanned {0} folders and compared {1} items.</value>
+  </data>
+  <data name="Sync_Compared" xml:space="preserve">
+    <value>Items compared: {0}</value>
+  </data>
+  <data name="Sync_Unreadable" xml:space="preserve">
+    <value>Could not read {0} folders. Their contents were excluded from comparison.</value>
+  </data>
+  <data name="Sync_Stopped" xml:space="preserve">
+    <value>Comparison stopped.</value>
+  </data>
+  <data name="Sync_Overlapping" xml:space="preserve">
+    <value>Choose two different folders that are not inside one another.</value>
+  </data>
+  <data name="Sync_EntryDetails" xml:space="preserve">
+    <value>{0} · {1:g}</value>
+  </data>
+  <data name="Sync_Totals" xml:space="preserve">
+    <value>→ {0} ({1}) · ← {2} ({3}) · Delete {4} left, {5} right</value>
+  </data>
+  <data name="Sync_DeleteConfirmation" xml:space="preserve">
+    <value>Deletion: {0} on the left ({1}), {2} on the right ({3}).</value>
+  </data>
+  <data name="Sync_ToTrash" xml:space="preserve">
+    <value>to the Trash</value>
+  </data>
+  <data name="Sync_Permanent" xml:space="preserve">
+    <value>permanently</value>
+  </data>
+  <data name="Sync_Symbol_None" xml:space="preserve">
+    <value>=</value>
+  </data>
+  <data name="Sync_Symbol_CopyToRight" xml:space="preserve">
+    <value>→</value>
+  </data>
+  <data name="Sync_Symbol_CopyToLeft" xml:space="preserve">
+    <value>←</value>
+  </data>
+  <data name="Sync_Symbol_DeleteLeft" xml:space="preserve">
+    <value>✕ Left</value>
+  </data>
+  <data name="Sync_Symbol_DeleteRight" xml:space="preserve">
+    <value>✕ Right</value>
+  </data>
+  <data name="SyncAction_None" xml:space="preserve">
+    <value>Do nothing</value>
+  </data>
+  <data name="SyncAction_CopyToRight" xml:space="preserve">
+    <value>Copy to the right</value>
+  </data>
+  <data name="SyncAction_CopyToLeft" xml:space="preserve">
+    <value>Copy to the left</value>
+  </data>
+  <data name="SyncAction_DeleteLeft" xml:space="preserve">
+    <value>Delete on the left</value>
+  </data>
+  <data name="SyncAction_DeleteRight" xml:space="preserve">
+    <value>Delete on the right</value>
+  </data>
+  <data name="SyncState_Equal" xml:space="preserve">
+    <value>Equal</value>
+  </data>
+  <data name="SyncState_LeftNewer" xml:space="preserve">
+    <value>Newer on the left</value>
+  </data>
+  <data name="SyncState_RightNewer" xml:space="preserve">
+    <value>Newer on the right</value>
+  </data>
+  <data name="SyncState_Different" xml:space="preserve">
+    <value>Different</value>
+  </data>
+  <data name="SyncState_LeftOnly" xml:space="preserve">
+    <value>Left only</value>
+  </data>
+  <data name="SyncState_RightOnly" xml:space="preserve">
+    <value>Right only</value>
+  </data>
+  <data name="SyncState_KindMismatch" xml:space="preserve">
+    <value>Different types</value>
+  </data>
   <!-- stage3:tools-b end -->
   <!-- ======================================================== -->
   <!-- stage3:net begin (Net_*, Connection_*, RemoteEdit_*) -->
+  <data name="EditorSaveQuestion_UploadToSource" xml:space="preserve"><value>Upload “{0}” to the server?</value></data>
+  <data name="EditorSaveQuestion_OverwriteChangedAtSource" xml:space="preserve"><value>“{0}” changed on the server since you opened or uploaded it. Replace the server copy?</value></data>
+  <data name="Button_Upload" xml:space="preserve"><value>Upload</value></data>
+  <data name="Button_OverwriteOnServer" xml:space="preserve"><value>Replace on Server</value></data>
+  <data name="RemoteEdit_NotUploaded" xml:space="preserve"><value>{0} — not uploaded</value></data>
+  <data name="RemoteEdit_UploadFailed" xml:space="preserve"><value>Could not upload “{0}”. {1}</value></data>
+  <data name="RemoteEdit_Changed" xml:space="preserve"><value>The server copy changed during the upload.</value></data>
+  <data name="RemoteEdit_DiscardUpload" xml:space="preserve"><value>Close Without Uploading</value></data>
+  <data name="RemoteEdit_BeforeClose" xml:space="preserve"><value>Upload the saved changes to “{0}” before closing?</value></data>
+  <data name="Connection_ListTitle" xml:space="preserve"><value>Network connections</value></data>
+  <data name="Connection_Connect" xml:space="preserve"><value>Connect</value></data>
+  <data name="Connection_New" xml:space="preserve"><value>New…</value></data>
+  <data name="Connection_Edit" xml:space="preserve"><value>Edit…</value></data>
+  <data name="Connection_Close" xml:space="preserve"><value>Close</value></data>
+  <data name="Connection_EditTitle" xml:space="preserve"><value>Connection settings</value></data>
+  <data name="Connection_Name" xml:space="preserve"><value>Name</value></data>
+  <data name="Connection_Protocol" xml:space="preserve"><value>Protocol</value></data>
+  <data name="Connection_Host" xml:space="preserve"><value>Server</value></data>
+  <data name="Connection_Port" xml:space="preserve"><value>Port</value></data>
+  <data name="Connection_User" xml:space="preserve"><value>User name</value></data>
+  <data name="Connection_Auth" xml:space="preserve"><value>Authentication</value></data>
+  <data name="Connection_Key" xml:space="preserve"><value>Private key file</value></data>
+  <data name="Connection_Browse" xml:space="preserve"><value>Browse…</value></data>
+  <data name="Connection_Password" xml:space="preserve"><value>Password</value></data>
+  <data name="Connection_Passphrase" xml:space="preserve"><value>Key passphrase</value></data>
+  <data name="Connection_Remember" xml:space="preserve"><value>Save in Keychain</value></data>
+  <data name="Connection_InitialPath" xml:space="preserve"><value>Initial folder</value></data>
+  <data name="Connection_Passive" xml:space="preserve"><value>Passive mode</value></data>
+  <data name="Connection_FtpEncoding" xml:space="preserve"><value>File name encoding</value></data>
+  <data name="Connection_PlainFtpWarning" xml:space="preserve"><value>FTP sends passwords and files without encryption.</value></data>
+  <data name="Connection_HostRequired" xml:space="preserve"><value>Enter the server address.</value></data>
+  <data name="Connection_InvalidPort" xml:space="preserve"><value>Enter a port between 1 and 65535.</value></data>
+  <data name="Connection_KeyRequired" xml:space="preserve"><value>Choose a private key file.</value></data>
+  <data name="Connection_InvalidAuth" xml:space="preserve"><value>Choose an authentication method for this protocol.</value></data>
+  <data name="Connection_SaveFailed" xml:space="preserve"><value>Could not update the saved connections.</value></data>
+  <data name="Connection_SecretTitle" xml:space="preserve"><value>Connect to {0}</value></data>
+  <data name="Connection_SecretRefused" xml:space="preserve"><value>The server rejected the previous credentials.</value></data>
+  <data name="Connection_TrustHostKey" xml:space="preserve"><value>Trust this SSH host key?</value></data>
+  <data name="Connection_HostKeyChanged" xml:space="preserve"><value>The SSH host key changed</value></data>
+  <data name="Connection_HostKeyDetail" xml:space="preserve"><value>Server: {0}&#10;Algorithm: {1}&#10;Fingerprint: {2}</value></data>
+  <data name="Connection_HostKeyChangedDetail" xml:space="preserve"><value>Server: {0}&#10;Algorithm: {1}&#10;Saved fingerprint: {2}&#10;New fingerprint: {3}</value></data>
+  <data name="Connection_Trust" xml:space="preserve"><value>Trust</value></data>
+  <data name="Connection_TrustCertificate" xml:space="preserve"><value>Trust this TLS certificate?</value></data>
+  <data name="Connection_CertificateDetail" xml:space="preserve"><value>Server: {0}&#10;Subject: {1}&#10;Issuer: {2}&#10;SHA-256: {3}&#10;Valid from {4:g} to {5:g}&#10;Validation error: {6}</value></data>
+  <data name="Connection_DeleteTitle" xml:space="preserve"><value>Delete connection</value></data>
+  <data name="Connection_DeleteQuestion" xml:space="preserve"><value>Delete “{0}” and its saved credentials?</value></data>
+  <data name="NetProtocol_Ftp" xml:space="preserve"><value>FTP</value></data>
+  <data name="NetProtocol_FtpsExplicit" xml:space="preserve"><value>FTPS (explicit TLS)</value></data>
+  <data name="NetProtocol_FtpsImplicit" xml:space="preserve"><value>FTPS (implicit TLS)</value></data>
+  <data name="NetProtocol_Sftp" xml:space="preserve"><value>SFTP</value></data>
+  <data name="NetAuth_Password" xml:space="preserve"><value>Password</value></data>
+  <data name="NetAuth_PrivateKey" xml:space="preserve"><value>Private key</value></data>
+  <data name="NetAuth_Anonymous" xml:space="preserve"><value>Anonymous</value></data>
+  <data name="Net_Connecting" xml:space="preserve">
+    <value>Connecting to {0}…</value>
+  </data>
+  <data name="Net_AuthenticationFailed" xml:space="preserve">
+    <value>The server did not accept the user name, password or key.</value>
+  </data>
+  <data name="Net_TrustRefused" xml:space="preserve">
+    <value>The server key or certificate was not confirmed.</value>
+  </data>
+  <data name="Net_UnsupportedProtocol" xml:space="preserve">
+    <value>This connection protocol is unsupported.</value>
+  </data>
+  <data name="Net_ConnectionInUse" xml:space="preserve">
+    <value>An operation is using this connection. Wait for it to finish before disconnecting.</value>
+  </data>
+  <data name="Net_CouldNotLeaveConnection" xml:space="preserve">
+    <value>A tab could not return to a local folder. The connection is still open.</value>
+  </data>
+  <data name="Net_SecretSaveFailed" xml:space="preserve">
+    <value>The password or key passphrase could not be saved in the Keychain.</value>
+  </data>
+  <data name="Net_SidebarConnections" xml:space="preserve">
+    <value>Network Connections</value>
+  </data>
   <!-- stage3:net end -->
   <!-- ======================================================== -->
   <!-- stage3:net-ssh begin (Console_*, Terminal_*) -->
+  <data name="TerminalState_Connecting" xml:space="preserve"><value>Connecting…</value></data>
+  <data name="TerminalState_Connected" xml:space="preserve"><value>Connected</value></data>
+  <data name="TerminalState_Ended" xml:space="preserve"><value>Session ended</value></data>
+  <data name="TerminalState_Failed" xml:space="preserve"><value>Could not open the SSH console</value></data>
+  <data name="Terminal_Disconnected" xml:space="preserve"><value>Connection lost</value></data>
+  <data name="Terminal_AuthenticationFailed" xml:space="preserve"><value>Authentication failed</value></data>
+  <data name="Terminal_TrustRefused" xml:space="preserve"><value>The server’s host key was declined</value></data>
+  <data name="Terminal_Reconnect" xml:space="preserve"><value>Reconnect</value></data>
+  <data name="Terminal_CloseQuestion" xml:space="preserve"><value>Close the console?</value></data>
+  <data name="Terminal_CloseDetail" xml:space="preserve"><value>The session on the server will end.</value></data>
+  <data name="Terminal_CloseButton" xml:space="preserve"><value>Close console</value></data>
+  <data name="Terminal_Title" xml:space="preserve"><value>{0} — {1}</value></data>
+  <data name="Console_Choose" xml:space="preserve"><value>Choose an SSH connection</value></data>
+  <data name="Console_Open" xml:space="preserve"><value>Open console</value></data>
   <!-- stage3:net-ssh end -->
 </root>

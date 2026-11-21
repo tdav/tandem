@@ -129,7 +129,8 @@ internal sealed class TestApp : IAsyncDisposable
         Func<TimeSpan, CancellationToken, Task>? quickLookDelay = null,
         IReadOnlyList<IFileSystemProvider>? extraProviders = null, bool withMetadata = true,
         IProcessRunner? processes = null, IReadOnlyList<IFileMounter>? mounters = null,
-        AppSettings? settings = null, bool scriptedToolWindows = false)
+        AppSettings? settings = null, bool scriptedToolWindows = false,
+        Func<AppServices, string, AppServices>? configureServices = null)
     {
         fs ??= DefaultFileSystem();
         var stateDirectory = Path.Combine(Path.GetTempPath(), "tandem-window-tests-" + Guid.NewGuid().ToString("N"));
@@ -137,12 +138,12 @@ internal sealed class TestApp : IAsyncDisposable
         if (settings is not null) new JsonSettingsStore(stateDirectory).Save(settings);
 
         var app = new TestApp(fs, new FakeVolumeService(), stateDirectory);
-        app.Main = await Composition.StartAsync(
-            Services(fs, app.Volumes, app.LogFile, Path.Combine(stateDirectory, "tmp"), app.Dialogs, app.Trash,
-                trashCapable, removedCapabilities, app.Shell, app.QuickLook, withMetadata ? app.Metadata : null,
-                extraProviders, processes, mounters, quarantine: app.Quarantine,
-                toolWindows: scriptedToolWindows ? new ScriptedToolWindows() : new ToolWindows()),
-            stateDirectory, Home,
+        var services = Services(fs, app.Volumes, app.LogFile, Path.Combine(stateDirectory, "tmp"), app.Dialogs, app.Trash,
+            trashCapable, removedCapabilities, app.Shell, app.QuickLook, withMetadata ? app.Metadata : null,
+            extraProviders, processes, mounters, quarantine: app.Quarantine,
+            toolWindows: scriptedToolWindows ? new ScriptedToolWindows() : new ToolWindows());
+        if (configureServices is not null) services = configureServices(services, stateDirectory);
+        app.Main = await Composition.StartAsync(services, stateDirectory, Home,
             autosaveDelay: (_, ct) => Task.Delay(Timeout.Infinite, ct),
             progressWindowDelay: progressWindowDelay ?? ((_, ct) => Task.Delay(Timeout.Infinite, ct)),
             quickLookDelay: quickLookDelay ?? ((_, _) => Task.CompletedTask));
@@ -166,13 +167,19 @@ internal sealed class TestApp : IAsyncDisposable
         if (Main.Services.Windows is WindowService windows)
         {
             Dialogs.SaveChangesAnswers.Clear();
-            foreach (var _ in windows.Open) Dialogs.SaveChangesAnswers.Enqueue(SaveChangesAnswer.Discard);
+            Dialogs.UploadBeforeCloseAnswers.Clear();
+            foreach (var _ in windows.Open)
+            {
+                Dialogs.SaveChangesAnswers.Enqueue(SaveChangesAnswer.Discard);
+                Dialogs.UploadBeforeCloseAnswers.Enqueue(SaveChangesAnswer.Discard);
+            }
             await windows.CloseAllAsync();
         }
         // A tool window whose guard refuses would hold the main window open: the test left it so.
         var toolWindowsClosed = await Main.Services.ToolWindows.CloseAllAsync();
         if (toolWindowsClosed && Window is { } window) window.Close();
         Main.Dispose();
+        if (Main.Services.Net is { } connections) await connections.DisposeAsync();
         Main.Services.Dispose();
         await Task.Yield();
         try

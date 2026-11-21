@@ -65,6 +65,8 @@ public sealed class EditorSaveDialog : DialogWindow
         {
             EditorSaveQuestion.OverwriteChangedFile => "Button_OverwriteFile",
             EditorSaveQuestion.ReplaceUnsavableBytes => "Button_SaveWithReplacement",
+            EditorSaveQuestion.UploadToSource => "Button_Upload",
+            EditorSaveQuestion.OverwriteChangedAtSource => "Button_OverwriteOnServer",
             _ => "Button_SaveInUtf8",
         }), name: "Confirm");
         go.Click += (_, _) => Close(true);
@@ -72,6 +74,21 @@ public sealed class EditorSaveDialog : DialogWindow
         cancel.Click += (_, _) => Close(false);
         var message = Loc.Format("EditorSaveQuestion_" + question, fileName, encoding);
         SetContent(cancel, [Text(message, name: "Message")], go, cancel);
+    }
+}
+
+public sealed class UploadBeforeCloseDialog : DialogWindow
+{
+    public UploadBeforeCloseDialog(string fileName) : base(Loc.Format("EditorSave_Title", fileName))
+    {
+        var upload = MakeButton(Loc.Get("Button_Upload"), name: "Upload");
+        upload.Click += (_, _) => Close(SaveChangesAnswer.Save);
+        var discard = MakeButton(Loc.Get("RemoteEdit_DiscardUpload"), name: "DiscardUpload");
+        discard.Click += (_, _) => Close(SaveChangesAnswer.Discard);
+        var cancel = CancelButton(isDefault: true);
+        cancel.Click += (_, _) => Close(SaveChangesAnswer.Cancel);
+        SetContent(cancel, [Text(Loc.Format("RemoteEdit_BeforeClose", fileName), name: "Message")],
+            discard, cancel, upload);
     }
 }
 

@@ -216,6 +216,7 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        ResetFolderSizes();
         _loadCts?.Cancel();
         _mount?.Cts.Cancel();
         _mount = null;
@@ -348,6 +349,7 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
     private async Task<bool> LoadAsync(LoadKind kind, VfsPath path, string? focusName)
     {
         if (_disposed) return false;
+        if (kind == LoadKind.Navigate && path != CurrentPath) _folderSizeCts?.Cancel();
         _loadCts?.Cancel();
         var cts = new CancellationTokenSource();
         _loadCts = cts;
@@ -502,6 +504,7 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
         int cursor;
         if (kind == LoadKind.Navigate)
         {
+            if (!_hasPath || CurrentPath != path) ResetFolderSizes();
             CancelMount(); // the panel has moved on
             var oldWatch = _watch;
             _watch = listing.Watch;
@@ -525,6 +528,7 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
         }
 
         _entries = listing.Entries;
+        PruneFolderSizes(listing.Entries);
         _showingPreview = false;
         _rowsBeforePreview = [];
         Publish(rows, cursor);
@@ -559,6 +563,7 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
 
     private void Publish(IReadOnlyList<EntryRowViewModel> rows, int cursor)
     {
+        AttachFolderSizes(rows);
         AttachRows(rows);
         _rows.Replace(rows);
         _cursorIndex = rows.Count == 0 ? -1 : Math.Clamp(cursor, 0, rows.Count - 1);

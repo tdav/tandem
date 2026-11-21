@@ -12,7 +12,7 @@ namespace Tandem.App.Views.Dialogs;
 public sealed class ConflictDialog : DialogWindow
 {
     /// <param name="compare">When given, opens the comparison of the two files (the source, the existing file) modal
-    /// to this dialog. Not used yet: the "Compare…" button comes with the file comparison.</param>
+    /// to this dialog.</param>
     public ConflictDialog(ConflictDialogViewModel vm, Func<FileEntry, FileEntry, Window, Task>? compare = null)
         : base(vm.Title)
     {
@@ -25,10 +25,21 @@ public sealed class ConflictDialog : DialogWindow
                 isCancel: action == ConflictAction.Cancel, name: action.ToString());
             button.Click += (_, _) => Close(vm.Decide(action));
             return button;
-        }).ToArray();
+        }).ToList();
+        if (compare is not null && vm.Source.Kind == EntryKind.File && vm.Existing.Kind == EntryKind.File)
+        {
+            var compareButton = MakeButton(Loc.Get("Compare_ConflictButton"), name: "CompareFiles");
+            compareButton.Click += async (_, _) =>
+            {
+                compareButton.IsEnabled = false;
+                try { await compare(vm.Source, vm.Existing, this); }
+                finally { compareButton.IsEnabled = true; }
+            };
+            buttons.Insert(0, compareButton);
+        }
         SetContent(buttons.Single(b => b.IsDefault),
             [Text(vm.Message), Text(vm.SourceDetails, secondary: true), Text(vm.ExistingDetails, secondary: true), all],
-            buttons);
+            buttons.ToArray());
     }
 
     /// <summary>The comparison this dialog was given (<see cref="IDialogService.CompareFiles"/>), or null.</summary>

@@ -4,6 +4,7 @@
              xmlns:v="using:Tandem.App.Views"
              xmlns:loc="using:Tandem.App.Resources"
              xmlns:platform="using:Tandem.Core.Platform"
+             xmlns:net="using:Tandem.Net"
              x:Class="Tandem.App.Views.SidebarView"
              x:DataType="vm:MainViewModel">
     <Border Background="{DynamicResource Tandem.BarBackground}" BorderBrush="{DynamicResource Tandem.DividerBrush}"
@@ -36,6 +37,20 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
+                <StackPanel IsVisible="{Binding Net.HasConnections}">
+                    <TextBlock Classes="caption" Text="{loc:Tr Key=Net_SidebarConnections}" />
+                    <ItemsControl x:Name="ConnectionItems" ItemsSource="{Binding Net.Connections}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="net:ConnectionProfile">
+                                <Button Classes="flat" HorizontalAlignment="Stretch" ToolTip.Tip="{Binding Address}"
+                                        Command="{Binding $parent[v:SidebarView].((vm:MainViewModel)DataContext).Net.OpenSavedConnectionCommand}"
+                                        CommandParameter="{Binding}">
+                                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
             </StackPanel>
         </ScrollViewer>
     </Border>

@@ -303,7 +303,7 @@ public sealed class FileCommands : IDisposable
             {
                 ItemWritten = itemWritten,
             };
-        Start(operation, answer.RunImmediately, alsoChanged: alsoChanged);
+        _ = Start(operation, answer.RunImmediately, alsoChanged: alsoChanged);
         return true;
     }
 
@@ -399,7 +399,7 @@ public sealed class FileCommands : IDisposable
         var single = targets.Count == 1 ? targets[0].Name : null;
         if (!await _dialogs.ConfirmDeleteAsync(targets.Count, single, permanent: !toTrash)) return;
 
-        Start(new DeleteOperation(_providers, targets.Select(t => t.Path).ToArray(), toTrash, _trash, _interaction),
+        _ = Start(new DeleteOperation(_providers, targets.Select(t => t.Path).ToArray(), toTrash, _trash, _interaction),
             runImmediately: false);
     }
 
@@ -428,7 +428,7 @@ public sealed class FileCommands : IDisposable
                                             string.Equals(r.Name, newName, StringComparison.Ordinal));
         var operation = new MoveOperation(_providers, [entry.Path], directory, new CopyOptions(NewName: newName),
             _interaction, _nativeCopy);
-        Start(operation, runImmediately: true, afterRefresh: result =>
+        _ = Start(operation, runImmediately: true, afterRefresh: result =>
         {
             if (!nameTaken && result is { State: OperationState.Completed, Skipped.Count: 0 } &&
                 panel.CurrentPath == directory)
@@ -458,16 +458,19 @@ public sealed class FileCommands : IDisposable
     public void StartOperation(FileOperation operation, bool runImmediately, IReadOnlyList<VfsPath>? alsoChanged = null)
     {
         ArgumentNullException.ThrowIfNull(operation);
-        Start(operation, runImmediately, alsoChanged: alsoChanged);
+        _ = Start(operation, runImmediately, alsoChanged: alsoChanged);
     }
 
+    /// <summary>Runs a tool operation and waits for its affected panels to refresh.</summary>
+    internal Task StartOperationAndWaitAsync(FileOperation operation) => Start(operation, runImmediately: true);
+
     /// <param name="alsoChanged">Folders changed before the operation (a destination folder made for it).</param>
-    private void Start(FileOperation operation, bool runImmediately, Action<OperationResult?>? afterRefresh = null,
+    private Task Start(FileOperation operation, bool runImmediately, Action<OperationResult?>? afterRefresh = null,
         IReadOnlyList<VfsPath>? alsoChanged = null)
     {
         var completion = _queue.Enqueue(operation, runImmediately);
         _operations.Track(operation);
-        Tracked(FinishAsync(operation, completion, afterRefresh, alsoChanged ?? []));
+        return Tracked(FinishAsync(operation, completion, afterRefresh, alsoChanged ?? []));
     }
 
     /// <summary>After an operation, whatever its outcome: every tab showing a folder it changed is read again (marks

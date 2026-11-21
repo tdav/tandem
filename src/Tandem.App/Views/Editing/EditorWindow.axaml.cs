@@ -24,6 +24,7 @@ public partial class EditorWindow : Window
     private readonly IDialogService? _dialogs;
     private Task<bool>? _closing;
     private bool _closeConfirmed;
+    private bool _closeInProgress;
     private bool _closed;
 
     /// <summary>For the designer only.</summary>
@@ -74,20 +75,38 @@ public partial class EditorWindow : Window
     private async Task<bool> CloseCoreAsync()
     {
         if (_closed) return true;
-        if (Editor.IsModified && _dialogs is { } dialogs)
+        _closeInProgress = true;
+        TextEditor.SetCurrentValue(AvaloniaEdit.TextEditor.IsReadOnlyProperty, true);
+        try
         {
-            var answer = await dialogs.AskSaveChangesAsync(Editor.File.Name, this);
-            if (answer == SaveChangesAnswer.Cancel) return false;
-            if (answer == SaveChangesAnswer.Save && !await Editor.SaveAsync()) return false;
+            await Editor.WaitForSaveAsync();
+            if (Editor.IsModified && _dialogs is { } dialogs)
+            {
+                var answer = await dialogs.AskSaveChangesAsync(Editor.File.Name, this);
+                if (answer == SaveChangesAnswer.Cancel) return false;
+                if (answer == SaveChangesAnswer.Save && (!await Editor.SaveAsync() || Editor.IsModified)) return false;
+            }
+            if (Editor.HasPendingUpload && _dialogs is { } uploadDialogs)
+            {
+                var answer = await uploadDialogs.AskUploadBeforeCloseAsync(Editor.File.Name, this);
+                if (answer == SaveChangesAnswer.Cancel) return false;
+                if (answer == SaveChangesAnswer.Save && !await Editor.UploadAsync()) return false;
+            }
+            await Editor.ReleaseCopyAsync();
+            _closeConfirmed = true;
+            Close();
+            return true;
         }
-        _closeConfirmed = true;
-        Close();
-        return true;
+        finally
+        {
+            if (!_closed) TextEditor.SetCurrentValue(AvaloniaEdit.TextEditor.IsReadOnlyProperty, Editor.IsReadOnly);
+            _closeInProgress = false;
+        }
     }
 
     private void OnClosing(object? sender, WindowClosingEventArgs e)
     {
-        if (_closeConfirmed || !Editor.IsModified) return;
+        if (_closeConfirmed || (!Editor.IsModified && !Editor.IsRemoteCopy)) return;
         e.Cancel = true;
         Run(CloseAsync);
     }
@@ -102,7 +121,7 @@ public partial class EditorWindow : Window
         if (chord == SaveChord)
         {
             e.Handled = true;
-            Run(Editor.SaveAsync);
+            if (!_closeInProgress) Run(Editor.SaveAsync);
         }
         else if (chord == CloseChord || chord == EscapeChord && !TextEditor.SearchPanel.IsOpened)
         {

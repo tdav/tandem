@@ -40,9 +40,10 @@ dotnet publish "$PROJECT" \
     -o "$PUBLISH_DIR"
 
 step "Assembling $APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/ru.lproj"
 cp "$ROOT/build/Info.plist" "$APP/Contents/Info.plist"
 cp "$ROOT/build/Tandem.icns" "$APP/Contents/Resources/Tandem.icns"
+cp "$ROOT/build/ru.lproj/InfoPlist.strings" "$APP/Contents/Resources/ru.lproj/InfoPlist.strings"
 # ditto keeps permissions and symlinks; the trailing slashes copy the folder's contents.
 ditto "$PUBLISH_DIR/" "$APP/Contents/MacOS/"
 find "$APP" -name '*.pdb' -delete

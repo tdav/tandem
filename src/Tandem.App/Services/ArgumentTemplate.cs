@@ -26,7 +26,11 @@ public static class ArgumentTemplate
     /// <param name="CursorPath">The item under the cursor; null on "..", or in an empty folder.</param>
     /// <param name="Targets">The full paths of the items a command acts on.</param>
     public sealed record Context(string CurrentPath, string? OtherPath, string? CursorPath,
-        IReadOnlyList<string> Targets);
+        IReadOnlyList<string> Targets)
+    {
+        /// <summary>The item's name when it has no path on the local disk.</summary>
+        public string? CursorName { get; init; }
+    }
 
     /// <summary>The line uses <c>%t</c>, but <see cref="Context.OtherPath"/> is null.</summary>
     public sealed class OtherFolderUnavailableException()
@@ -48,6 +52,27 @@ public static class ArgumentTemplate
         }
         return arguments;
     }
+
+    /// <summary>The placeholders this template expands, after resolving quotes and escaped percent signs.</summary>
+    public static IReadOnlySet<char> PlaceholdersOf(string template)
+    {
+        ArgumentNullException.ThrowIfNull(template);
+        var placeholders = new HashSet<char>();
+        foreach (var token in Split(template))
+        {
+            for (var i = 0; i < token.Length; i++)
+            {
+                if (PlaceholderAt(token, i) is not { } placeholder) continue;
+                if (placeholder != '%') placeholders.Add(placeholder);
+                i++;
+            }
+        }
+        return placeholders;
+    }
+
+    private static char? PlaceholderAt(string token, int index) =>
+        token[index] == '%' && index + 1 < token.Length && token[index + 1] is '%' or 'p' or 't' or 'f' or 'n' or 's'
+            ? token[index + 1] : null;
 
     /// <summary>The arguments of the line before substitution: quotes and their escapes resolved.</summary>
     private static List<string> Split(string template)
@@ -94,24 +119,21 @@ public static class ArgumentTemplate
         var missing = false;
         for (var i = 0; i < token.Length; i++)
         {
-            if (token[i] != '%' || i + 1 == token.Length)
+            if (PlaceholderAt(token, i) is not { } placeholder)
             {
                 result.Append(token[i]);
                 continue;
             }
-            string? value;
-            switch (token[i + 1])
+            var value = placeholder switch
             {
-                case '%': value = "%"; break;
-                case 'p': value = context.CurrentPath; break;
-                case 't': value = context.OtherPath ?? throw new OtherFolderUnavailableException(); break;
-                case 'f': value = context.CursorPath; break;
-                case 'n': value = context.CursorPath is { } path ? NameOf(path) : null; break;
-                case 's': value = context.Targets.Count > 0 ? string.Join(' ', context.Targets) : null; break;
-                default:
-                    result.Append('%');
-                    continue;
-            }
+                '%' => "%",
+                'p' => context.CurrentPath,
+                't' => context.OtherPath ?? throw new OtherFolderUnavailableException(),
+                'f' => context.CursorPath,
+                'n' => context.CursorName ?? (context.CursorPath is { } path ? NameOf(path) : null),
+                's' => context.Targets.Count > 0 ? string.Join(' ', context.Targets) : null,
+                _ => throw new InvalidOperationException("Unknown argument placeholder."),
+            };
             if (value is null) missing = true;
             else result.Append(value);
             i++;

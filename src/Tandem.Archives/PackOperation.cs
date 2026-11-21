@@ -133,7 +133,7 @@ public sealed class PackOperation : FileOperation
 
         SetState(OperationState.Running);
         await SafeReplace.WriteAsync(target, _archiveFile, replace: false,
-            part => WriteArchiveAsync(target, part, items, bytes, errors, ct)).ConfigureAwait(false);
+            part => WriteArchiveAsync(target, part, items, bytes, errors, ct), ct).ConfigureAwait(false);
     }
 
     // ---- Scanning -----------------------------------------------------------------------------------------

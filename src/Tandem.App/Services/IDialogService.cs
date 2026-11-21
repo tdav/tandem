@@ -54,6 +54,8 @@ public enum EditorSaveQuestion
 
     /// <summary>The text has characters the file's encoding cannot hold: save in UTF-8 instead?</summary>
     SaveAsUtf8,
+    UploadToSource,
+    OverwriteChangedAtSource,
 }
 
 /// <summary>
@@ -106,6 +108,8 @@ public interface IDialogService
     /// keep the editor open (<see cref="SaveChangesAnswer.Cancel"/>, also when the dialog is closed otherwise).
     /// Modal to <paramref name="owner"/> (the editor's window) when given, else to the main window.</summary>
     Task<SaveChangesAnswer> AskSaveChangesAsync(string fileName, Window? owner = null);
+
+    Task<SaveChangesAnswer> AskUploadBeforeCloseAsync(string fileName, Window? owner = null);
 
     /// <summary>An editor's <paramref name="question"/> before saving <paramref name="fileName"/>, which is in
     /// <paramref name="encoding"/>: true to go on. "Cancel" is the default button; closing the dialog answers false.

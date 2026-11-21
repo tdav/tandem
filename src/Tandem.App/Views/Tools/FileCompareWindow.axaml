@@ -1,0 +1,42 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:Tandem.App.Resources"
+        xmlns:vm="using:Tandem.App.ViewModels.Tools"
+        x:Class="Tandem.App.Views.Tools.FileCompareWindow"
+        x:DataType="vm:FileCompareViewModel"
+        Title="{loc:Tr Key=Compare_Title}" Width="980" Height="625" MinWidth="580" MinHeight="350">
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="14">
+        <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="6">
+            <ComboBox x:Name="ModeBox" ItemsSource="{Binding ModeChoices}" SelectedItem="{Binding SelectedMode}"
+                      AutomationProperties.Name="{loc:Tr Key=Compare_Mode}"
+                      DisplayMemberBinding="{Binding Label, x:DataType=vm:CompareModeChoice}" />
+            <Button Content="{loc:Tr Key=Compare_Previous}" Click="Previous" />
+            <Button Content="{loc:Tr Key=Compare_Next}" Click="Next" />
+            <ProgressBar Width="82" IsIndeterminate="True" IsVisible="{Binding IsBusy}" />
+        </WrapPanel>
+        <Grid Grid.Row="1" ColumnDefinitions="*,*" Margin="0,10,0,6">
+            <Grid ColumnDefinitions="*,Auto" Margin="0,0,10,0">
+                <TextBlock Text="{Binding LeftTitle}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                <ComboBox Grid.Column="1" ItemsSource="{Binding EncodingChoices}"
+                          AutomationProperties.Name="{loc:Tr Key=Compare_LeftEncoding}"
+                          SelectedItem="{Binding SelectedLeftEncoding}"
+                          DisplayMemberBinding="{Binding Label, x:DataType=vm:CompareEncodingChoice}" />
+            </Grid>
+            <Grid Grid.Column="1" ColumnDefinitions="*,Auto" Margin="10,0,0,0">
+                <TextBlock Text="{Binding RightTitle}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                <ComboBox Grid.Column="1" ItemsSource="{Binding EncodingChoices}"
+                          AutomationProperties.Name="{loc:Tr Key=Compare_RightEncoding}"
+                          SelectedItem="{Binding SelectedRightEncoding}"
+                          DisplayMemberBinding="{Binding Label, x:DataType=vm:CompareEncodingChoice}" />
+            </Grid>
+        </Grid>
+        <ListBox Grid.Row="2" x:Name="ComparisonRows" ItemsSource="{Binding DisplayRows}"
+                 SelectedIndex="{Binding CurrentRow, Mode=TwoWay}"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                 Background="{DynamicResource Tandem.ViewerBackground}" />
+        <StackPanel Grid.Row="3" Margin="0,8,0,0">
+            <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" />
+            <TextBlock Text="{Binding Error}" TextWrapping="Wrap" Foreground="{DynamicResource Tandem.ErrorForeground}" />
+        </StackPanel>
+    </Grid>
+</Window>

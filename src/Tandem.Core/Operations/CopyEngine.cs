@@ -148,7 +148,7 @@ internal sealed class CopyEngine(CopyPlanner planner, ProviderRegistry providers
                 throw new VfsAccessDeniedException($"The target of the link '{source.Path.Path}' cannot be read.");
             if (replace)
                 await SafeReplace.WriteAsync(target, destination, replace: true,
-                    part => target.CreateSymlinkAsync(part, source.LinkTarget, io)).ConfigureAwait(false);
+                    part => target.CreateSymlinkAsync(part, source.LinkTarget, io), ct).ConfigureAwait(false);
             else
                 await target.CreateSymlinkAsync(destination, source.LinkTarget, io).ConfigureAwait(false);
         }
@@ -349,7 +349,7 @@ internal sealed class CopyEngine(CopyPlanner planner, ProviderRegistry providers
                 if (checkSize) await CheckSizeAsync(source.Path, part, target).ConfigureAwait(false);
 
                 await ApplyMetadataAsync(source, part, target, CancellationToken.None).ConfigureAwait(false);
-            }).ConfigureAwait(false);
+            }, ct).ConfigureAwait(false);
             // The platform copy left the Finder lock (and the like) off the part file so that it could be finished;
             // the file in place gets it now.
             if (native)

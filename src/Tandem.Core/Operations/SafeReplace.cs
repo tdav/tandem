@@ -1,3 +1,4 @@
+using Tandem.Core.Tools;
 using Tandem.Core.Vfs;
 
 namespace Tandem.Core.Operations;
@@ -11,6 +12,11 @@ namespace Tandem.Core.Operations;
 /// </summary>
 public static class SafeReplace
 {
+    // Copies, archive rewrites and editor uploads can run outside the same queue.
+    // Serialize use of their shared part and backup names, including case-only aliases.
+    private static readonly SemaphoreSlim[] DestinationGates = Enumerable.Range(0, 64)
+        .Select(_ => new SemaphoreSlim(1, 1)).ToArray();
+
     public const string PartSuffix = ".tandem-part";
     public const string BackupSuffix = ".tandem-old";
 
@@ -42,20 +48,26 @@ public static class SafeReplace
     /// propagates.</summary>
     /// <exception cref="ArgumentException"><paramref name="destination"/> is a root.</exception>
     public static async Task WriteAsync(IFileSystemProvider target, VfsPath destination, bool replace,
-        Func<VfsPath, Task> write)
+        Func<VfsPath, Task> write, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(write);
         var part = PartPathFor(destination);
+        var gate = GateFor(destination);
+        await gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             await write(part).ConfigureAwait(false);
-            await MoveIntoPlaceAsync(target, part, destination, replace).ConfigureAwait(false);
+            await CommitAsync(target, part, destination, replace).ConfigureAwait(false);
         }
         catch
         {
             await DeleteQuietlyAsync(part, target).ConfigureAwait(false);
             throw;
+        }
+        finally
+        {
+            gate.Release();
         }
     }
 
@@ -69,6 +81,23 @@ public static class SafeReplace
     {
         ArgumentNullException.ThrowIfNull(target);
         RequireNotRoot(destination);
+        var gate = GateFor(destination);
+        await gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            await CommitAsync(target, from, destination, replace).ConfigureAwait(false);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private static SemaphoreSlim GateFor(VfsPath path) =>
+        DestinationGates[StringComparer.OrdinalIgnoreCase.GetHashCode(NameKey.Of(path.Path)) & (DestinationGates.Length - 1)];
+
+    private static async Task CommitAsync(IFileSystemProvider target, VfsPath from, VfsPath destination, bool replace)
+    {
         var ct = CancellationToken.None;
         if (!replace)
         {

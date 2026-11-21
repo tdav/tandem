@@ -156,7 +156,8 @@ public sealed partial class ToolsCommands : IDisposable
     private void OnPanelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(PanelViewModel.CursorIndex) or nameof(PanelViewModel.SelectedCount)
-            or nameof(PanelViewModel.CurrentPath) or nameof(PanelViewModel.Error) or nameof(PanelViewModel.TotalCount))
+            or nameof(PanelViewModel.CurrentPath) or nameof(PanelViewModel.Error) or nameof(PanelViewModel.TotalCount)
+            or nameof(PanelViewModel.HasFolders) or nameof(PanelViewModel.IsSizing))
             UpdateAvailability();
     }
 

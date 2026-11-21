@@ -9,6 +9,15 @@ public class ArgumentTemplateTests
     private static readonly ArgumentTemplate.Context WithoutCursor = new("/cur", "/other", null, []);
 
     [Theory]
+    [InlineData("%p %%t", "p")]
+    [InlineData("", "")]
+    [InlineData("%s %t", "st")]
+    [InlineData("%\"n\" %q % %%%f", "fn")]
+    [InlineData("\"%s\" %s %p %n %f %t", "fnpst")]
+    public void Placeholders_of_a_template(string template, string expected) =>
+        Assert.Equal(expected, new string(ArgumentTemplate.PlaceholdersOf(template).Order().ToArray()));
+
+    [Theory]
     [InlineData("-a %p", true, new[] { "-a", "/cur" })]
     [InlineData("%s", true, new[] { "/cur/a", "/cur/b" })]
     [InlineData("--files=%s", true, new[] { "--files=/cur/a /cur/b" })]

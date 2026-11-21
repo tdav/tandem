@@ -513,7 +513,7 @@ public sealed class ZipEditingTests : IDisposable
             {
                 await using var stream = await archive.OpenWriteAsync(part, Ct);
                 await stream.WriteAsync("edited\n"u8.ToArray(), Ct);
-            });
+            }, Ct);
             await scope.CommitAsync(Ct);
         }
 

@@ -28,6 +28,10 @@
                     <SolidColorBrush x:Key="Tandem.ViewerBackground" Color="#FFFFFFFF" />
                     <SolidColorBrush x:Key="Tandem.ViewerForeground" Color="#FF18181B" />
                     <SolidColorBrush x:Key="Tandem.ViewerSelection" Color="#FFBFD7FF" />
+                    <SolidColorBrush x:Key="Tandem.DiffChangedBackground" Color="#FFFFF5D8" />
+                    <SolidColorBrush x:Key="Tandem.DiffAddedBackground" Color="#FFE7F5E9" />
+                    <SolidColorBrush x:Key="Tandem.DiffRemovedBackground" Color="#FFFCE8E8" />
+                    <SolidColorBrush x:Key="Tandem.DiffInlineBackground" Color="#FFF9D987" />
                     <!-- File colours: the palette colour rules name (AppSettings.ColorNames). -->
                     <SolidColorBrush x:Key="Tandem.FileColor.Red" Color="#FFC62828" />
                     <SolidColorBrush x:Key="Tandem.FileColor.Orange" Color="#FFC2570C" />
@@ -81,6 +85,10 @@
                     <SolidColorBrush x:Key="Tandem.ViewerBackground" Color="#FF1C1C1E" />
                     <SolidColorBrush x:Key="Tandem.ViewerForeground" Color="#FFE4E4E7" />
                     <SolidColorBrush x:Key="Tandem.ViewerSelection" Color="#FF264F78" />
+                    <SolidColorBrush x:Key="Tandem.DiffChangedBackground" Color="#FF43381F" />
+                    <SolidColorBrush x:Key="Tandem.DiffAddedBackground" Color="#FF1E3D2C" />
+                    <SolidColorBrush x:Key="Tandem.DiffRemovedBackground" Color="#FF49272C" />
+                    <SolidColorBrush x:Key="Tandem.DiffInlineBackground" Color="#FF63501C" />
                     <!-- File colours: the palette colour rules name (AppSettings.ColorNames). -->
                     <SolidColorBrush x:Key="Tandem.FileColor.Red" Color="#FFFF8A80" />
                     <SolidColorBrush x:Key="Tandem.FileColor.Orange" Color="#FFFFB74D" />

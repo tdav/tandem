@@ -40,16 +40,7 @@ public class MainViewModelTests : LanguageTestBase
         var panel = app.Main.Workspace.ActivePanel;
         panel.CursorIndex = panel.Rows.ToList().FindIndex(r => r.Name == "notes.zip");
 
-        // The stage 3 commands are registered by the tracks that build them; task 24 puts them back in this check.
-        string[] stage3 =
-        [
-            CommandIds.ToolsMultiRename, CommandIds.ToolsUndoRename, CommandIds.ToolsCompareDirs, CommandIds.ToolsSyncDirs,
-            CommandIds.ToolsCompareFiles, CommandIds.ToolsChecksumCreate, CommandIds.ToolsChecksumVerify,
-            CommandIds.ToolsFolderSize, CommandIds.ToolsFolderSizeAll, CommandIds.NetConnect, CommandIds.NetDisconnect,
-            CommandIds.NetConsole,
-        ];
-
-        Assert.All(CommandIds.All.Except(stage3), id => Assert.True(app.Main.Commands.CanExecute(id), id));
+        Assert.All(CommandIds.All, id => Assert.True(app.Main.Commands.IsRegistered(id), id));
     }
 
     [AvaloniaFact]

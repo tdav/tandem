@@ -52,6 +52,8 @@ public sealed class RemoteProvider : IFileSystemProvider, IHostedProvider, IAsyn
     /// <summary>Whether any connection is open (in use or free).</summary>
     public bool HasOpenConnections => _pool.HasOpenConnections;
 
+    internal bool SupportsModifiedTime => _pool.Features?.HasFlag(RemoteFeatures.SetModified) == true;
+
     /// <summary><see cref="ProviderCapabilities.Write"/> and <see cref="ProviderCapabilities.LocalCopyEdit"/>, plus
     /// <see cref="ProviderCapabilities.Symlinks"/> and <see cref="ProviderCapabilities.UnixPermissions"/> when the
     /// last connection declared <see cref="RemoteFeatures.Symlinks"/> and <see cref="RemoteFeatures.Modes"/>

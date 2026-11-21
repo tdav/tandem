@@ -22,6 +22,8 @@ public abstract class ProviderContractTests
     /// not); when false, <see cref="SetModified_is_visible_in_GetEntry"/> is skipped.</summary>
     protected virtual bool StoresModifiedTime => true;
 
+    protected virtual bool CanStoreModifiedTime(IFileSystemProvider provider) => StoresModifiedTime;
+
     private static void SkipUnless(IFileSystemProvider fs, ProviderCapabilities needed) =>
         Assert.SkipUnless(fs.Capabilities.HasFlag(needed), $"The provider does not offer {needed}.");
 
@@ -181,6 +183,7 @@ public abstract class ProviderContractTests
     {
         Assert.SkipUnless(StoresModifiedTime, "The provider does not store modified times.");
         var (fs, root) = await CreateAsync();
+        Assert.SkipUnless(CanStoreModifiedTime(fs), "The connected provider does not store modified times.");
         var path = root.Combine("f.txt");
         await WriteAsync(fs, path, "x");
         var stamp = new DateTimeOffset(2020, 1, 2, 3, 4, 5, TimeSpan.Zero);

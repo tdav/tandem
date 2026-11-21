@@ -7,6 +7,7 @@ using Tandem.App.Resources;
 using Tandem.App.Tests.Views;
 using Tandem.App.ViewModels;
 using Tandem.App.Views;
+using Tandem.Core.Search;
 using Tandem.Core.Settings;
 using Tandem.Core.Vfs;
 using Tandem.Core.Vfs.InMemory;
@@ -127,12 +128,13 @@ public class ButtonBarTests : LanguageTestBase
         await app.Right.NavigateToAsync(new VfsPath("remote", "/shared"));
         app.Left.Rows.Single(r => r.Name == "notes.txt").IsSelected = true;
         app.Left.Rows.Single(r => r.Name == "report.pdf").IsSelected = true;
-        Assert.True(app.Main.ButtonBar.CanRun);
+        Assert.False(app.Main.ButtonBar.CanRun);
+        Assert.False(app.Main.ButtonBar.RunCommand.CanExecute(copy));
 
         await app.Main.ButtonBar.RunAsync(copy);
 
         Assert.Empty(processes.Started);
-        Assert.Equal([Loc.Format("UserCommand_OtherPanelNotLocal", "Copy")], app.Dialogs.Messages);
+        Assert.Empty(app.Dialogs.Messages);
         Assert.Empty(app.Failures);
 
         // A command that does not use the other folder still runs.
@@ -145,7 +147,8 @@ public class ButtonBarTests : LanguageTestBase
     public async Task Buttons_cannot_run_on_a_non_local_panel()
     {
         var processes = new FakeProcessRunner();
-        await using var app = await StartAsync(processes, buttons: Zip);
+        var button = new UserButton("Show", "/bin/echo", "%f");
+        await using var app = await StartAsync(processes, buttons: button);
         var bar = app.Main.ButtonBar;
         var changes = new List<string?>();
         bar.PropertyChanged += (_, e) => changes.Add(e.PropertyName);
@@ -154,14 +157,68 @@ public class ButtonBarTests : LanguageTestBase
 
         Assert.False(bar.CanRun);
         Assert.Contains(nameof(ButtonBarViewModel.CanRun), changes);
-        Assert.False(bar.RunCommand.CanExecute(Zip));
-        await bar.RunAsync(Zip);
+        Assert.False(bar.RunCommand.CanExecute(button));
+        await bar.RunAsync(button);
         Assert.Empty(processes.Started);
 
         // The other panel is local: switching to it makes the buttons work again.
         app.Main.Workspace.SwitchPanel();
         Assert.True(bar.CanRun);
-        Assert.True(bar.RunCommand.CanExecute(Zip));
+        Assert.True(bar.RunCommand.CanExecute(button));
+    }
+
+    [AvaloniaFact]
+    public async Task Only_buttons_that_require_the_missing_disk_path_are_disabled()
+    {
+        var processes = new FakeProcessRunner();
+        var show = new UserButton("Show", "/bin/echo", "%n %%p");
+        var local = new UserButton("Local", "/bin/echo", "%p %f");
+        var destination = new UserButton("Destination", "/bin/echo", "%t");
+        await using var app = await StartAsync(processes, show: true, show, local, destination);
+        await app.Left.NavigateToAsync(new VfsPath("remote", "/shared"));
+        app.Left.CursorIndex = IndexOf(app.Left, "a.txt");
+        var bar = app.Main.ButtonBar;
+        var buttons = UserButtons(app.Find<ButtonBar>("ButtonBar")).ToDictionary(Title, StringComparer.Ordinal);
+        Assert.True(bar.IsAvailable(show));
+        Assert.False(buttons["Local"].IsEffectivelyEnabled);
+        Assert.True(buttons["Destination"].IsEffectivelyEnabled);
+
+        await bar.RunAsync(show);
+        var spec = Assert.Single(processes.Started);
+        Assert.Equal(["a.txt", "%p"], spec.Arguments);
+        Assert.Equal(TestApp.Home, spec.WorkingDirectory);
+
+        await app.Right.NavigateToAsync(new VfsPath("remote", "/shared"));
+        Assert.False(buttons["Destination"].IsEffectivelyEnabled);
+        Assert.True(buttons["Show"].IsEffectivelyEnabled);
+        Assert.True(bar.CanRun);
+    }
+
+    [AvaloniaFact]
+    public async Task Name_only_button_runs_inside_zip_and_in_search_results()
+    {
+        var processes = new FakeProcessRunner();
+        var name = new UserButton("Show name", "/bin/echo", "%n");
+        var path = new UserButton("Show path", "/bin/echo", "%f");
+        var settings = AppSettings.Default with { Buttons = [name, path] };
+        await using var app = await ArchiveApp.StartAsync(processes: processes, settings: settings);
+        await ArchiveApp.EnterAsync(app, "sample.zip");
+        ArchiveApp.Cursor(app, app.Left, "a.txt");
+        var bar = app.Main.ButtonBar;
+        Assert.False(bar.IsAvailable(path));
+        await bar.RunAsync(name);
+
+        var provider = Assert.IsType<SearchResultsProvider>(app.Main.Services.Providers.Get(SearchResultsProvider.ProviderId));
+        var results = provider.Add(VfsPath.Local(TestApp.Home), "Results", [VfsPath.Local(TestApp.Home + "/notes.txt")]);
+        await app.Left.NavigateToAsync(results, "notes.txt");
+        Assert.True(bar.IsAvailable(name));
+        Assert.False(bar.IsAvailable(path));
+        await bar.RunAsync(path);
+        await bar.RunAsync(name);
+        Assert.Equal(2, processes.Started.Count);
+        Assert.Equal(["a.txt"], processes.Started[0].Arguments);
+        Assert.Equal(["notes.txt"], processes.Started[1].Arguments);
+        Assert.All(processes.Started, launch => Assert.Equal(TestApp.Home, launch.WorkingDirectory));
     }
 
     [AvaloniaFact]

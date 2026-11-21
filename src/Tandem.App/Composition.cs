@@ -10,6 +10,12 @@ using Tandem.Core.Search;
 using Tandem.Core.Settings;
 using Tandem.Core.Vfs;
 using Tandem.Core.Vfs.Local;
+using Tandem.Net;
+using Tandem.Net.Connections;
+using Tandem.Net.Ftp;
+using Tandem.Net.Remote;
+using Tandem.Net.Sftp;
+using Tandem.Net.Ssh;
 using Tandem.Platform.Mac;
 
 namespace Tandem.App;
@@ -38,7 +44,11 @@ public sealed record AppServices(
     TempFileStore Temp,
     IWindowService Windows,
     IToolWindows ToolWindows,
-    IQuarantine? Quarantine = null) : IDisposable
+    IQuarantine? Quarantine = null,
+    NetConnections? Net = null,
+    INetDialogs? NetDialogs = null,
+    ISecretStore? Secrets = null,
+    SshConsoles? Consoles = null) : IDisposable
 {
     /// <summary>Disposes the services that hold resources (the volume watch) and empties <see cref="Temp"/>.</summary>
     public void Dispose()
@@ -62,12 +72,47 @@ public static class Composition
         providers.Register(new LocalFileSystemProvider(broker, new MacExclusiveRename()));
         var processes = new ProcessRunner();
         var dialogs = new DialogService();
+        var netDialogs = new NetDialogs(() => dialogs.Owner);
+        var secrets = new MacKeychainSecretStore();
+        var stateDirectory = Path.Combine(homeDirectory, "Library", "Application Support", "Tandem");
+        var net = new NetConnections(providers, new ConnectionStore(stateDirectory), new TrustStore(stateDirectory),
+            secrets, new DialogNetPrompts(netDialogs), CreateSessionFactories(), CreateKeyReader(providers, homeDirectory));
         return new AppServices(providers, new MacVolumeService(), new MacShellIntegration(processes),
             new MacQuickLook(processes), new MacFileMetadataService(broker), new MacTrash(broker),
             new MacNativeCopy(broker), processes, new OperationQueue(), broker, log, dialogs,
             new TempFileStore(TempFileStore.DefaultDirectory(homeDirectory)), new WindowService(dialogs, providers),
-            new ToolWindows(), new MacQuarantine(broker));
+            new ToolWindows(), new MacQuarantine(broker), net, netDialogs, secrets,
+            new SshConsoles(net, new SshShellTransportFactory()));
     }
+
+    public static IReadOnlyDictionary<NetProtocol, IRemoteSessionFactory> CreateSessionFactories()
+    {
+        var ftp = new FtpSessionFactory();
+        return new Dictionary<NetProtocol, IRemoteSessionFactory>
+        {
+            [NetProtocol.Ftp] = ftp,
+            [NetProtocol.FtpsExplicit] = ftp,
+            [NetProtocol.FtpsImplicit] = ftp,
+            [NetProtocol.Sftp] = new SftpSessionFactory(),
+        };
+    }
+
+    public static Func<string, CancellationToken, Task<byte[]>> CreateKeyReader(ProviderRegistry providers,
+        string homeDirectory) => async (path, ct) =>
+    {
+        var absolute = path switch
+        {
+            "~" => homeDirectory,
+            _ when path.StartsWith("~/", StringComparison.Ordinal) => Path.Join(homeDirectory, path[2..]),
+            _ when !Path.IsPathRooted(path) => Path.Join(homeDirectory, path),
+            _ => path,
+        };
+        var file = VfsPath.Local(absolute);
+        await using var input = await providers.For(file).OpenReadAsync(file, ct).ConfigureAwait(false);
+        using var output = new MemoryStream();
+        await input.CopyToAsync(output, ct).ConfigureAwait(false);
+        return output.ToArray();
+    };
 
     /// <summary>Where the app writes unexpected errors: <c>~/Library/Logs/Tandem/tandem.log</c>.</summary>
     public static string DefaultLogFile(string homeDirectory) =>
@@ -133,6 +178,7 @@ public static class Composition
         var state = await Task.Run(() =>
         {
             settings.Load();
+            services.Net?.Load();
             return store.Load(homeDirectory);
         });
         Loc.SetLanguage(state.Language);

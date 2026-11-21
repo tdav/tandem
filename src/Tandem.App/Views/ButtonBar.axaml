@@ -7,7 +7,7 @@
              xmlns:c="using:Tandem.App.Commands"
              x:Class="Tandem.App.Views.ButtonBar"
              x:DataType="vm:MainViewModel">
-    <!-- The user's commands, left to right; a button is off while the active panel is not on the local disk.
+    <!-- The user's commands, left to right; availability comes from each command's argument template.
          Without any, one button leads to the settings. -->
     <Border Background="{DynamicResource Tandem.BarBackground}" BorderBrush="{DynamicResource Tandem.DividerBrush}"
             BorderThickness="0,0,0,1">

@@ -199,6 +199,10 @@ internal static unsafe partial class ObjC
     [LibraryImport(LibObjC, EntryPoint = "objc_msgSend")]
     public static partial IntPtr Send(IntPtr receiver, IntPtr selector, IntPtr arg);
 
+    /// <summary><c>void (id, SEL, id, id)</c></summary>
+    [LibraryImport(LibObjC, EntryPoint = "objc_msgSend")]
+    public static partial void SendVoid(IntPtr receiver, IntPtr selector, IntPtr first, IntPtr second);
+
     /// <summary><c>void (id, SEL)</c></summary>
     [LibraryImport(LibObjC, EntryPoint = "objc_msgSend")]
     public static partial void SendVoid(IntPtr receiver, IntPtr selector);

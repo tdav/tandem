@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Reflection.PortableExecutable;
 using System.Text;
 using XTerm;
+using XTermTerminal = XTerm.Terminal;
 using XTerm.Buffer;
 using XTerm.Common;
 using XTerm.Input;
@@ -45,12 +46,12 @@ namespace Tandem.Net.Tests;
 /// </summary>
 public sealed class XTermNetProbeTests
 {
-    private static Terminal Create(int cols = 20, int rows = 5, int scrollback = 100) =>
+    private static XTermTerminal Create(int cols = 20, int rows = 5, int scrollback = 100) =>
         new(new TerminalOptions { Cols = cols, Rows = rows, Scrollback = scrollback });
 
-    private static void Feed(Terminal terminal, string text) => terminal.Write(Encoding.UTF8.GetBytes(text));
+    private static void Feed(XTermTerminal terminal, string text) => terminal.Write(Encoding.UTF8.GetBytes(text));
 
-    private static BufferLine ScreenLine(Terminal terminal, int row) =>
+    private static BufferLine ScreenLine(XTermTerminal terminal, int row) =>
         terminal.Buffer.Lines[terminal.Buffer.YDisp + row] ?? throw new InvalidOperationException($"no row {row}");
 
     [Fact]
@@ -224,7 +225,7 @@ public sealed class XTermNetProbeTests
     [Fact]
     public void Package_is_pure_managed()
     {
-        var assembly = typeof(Terminal).Assembly;
+        var assembly = typeof(XTermTerminal).Assembly;
         var output = AppContext.BaseDirectory;
 
         Assert.Equal(Path.Combine(output, "XTerm.NET.dll"), assembly.Location);

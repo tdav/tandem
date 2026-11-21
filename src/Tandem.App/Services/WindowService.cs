@@ -120,6 +120,14 @@ public sealed class WindowService(IDialogService dialogs, ProviderRegistry provi
         {
             target = await EditorViewModel.ResolveTargetAsync(_providers, path, CancellationToken.None);
         }
+        catch (VfsConnectionLostException)
+        {
+            if (_open.OfType<EditorWindow>()
+                    .FirstOrDefault(window => window.Editor.IsRemoteCopy && window.Editor.File == path) is not { } opened)
+                return false;
+            Activate(opened);
+            return true;
+        }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             return false; // opening it will tell why
