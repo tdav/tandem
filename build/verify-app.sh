@@ -86,8 +86,8 @@ if [[ -f "$PLIST" ]]; then
     check_plist CFBundleExecutable Tandem.App
     check_plist CFBundlePackageType APPL
     check_plist CFBundleIconFile Tandem
-    check_plist CFBundleShortVersionString 0.1.0
-    check_plist CFBundleVersion 1
+    check_plist CFBundleShortVersionString 0.2.0
+    check_plist CFBundleVersion 2
     check_plist CFBundleInfoDictionaryVersion 6.0
     check_plist CFBundleDevelopmentRegion en
     check_plist LSMinimumSystemVersion 14.0
@@ -140,6 +140,15 @@ if [[ -f "$CONTENTS/MacOS/ru/Tandem.App.resources.dll" ]]; then
 else
     fail "Russian resources ru/Tandem.App.resources.dll missing"
 fi
+
+# Stage 2 libraries: archives (Tandem.Archives over SharpCompress) and the built-in editor (AvaloniaEdit).
+for lib in Tandem.Archives.dll SharpCompress.dll AvaloniaEdit.dll; do
+    if [[ -f "$CONTENTS/MacOS/$lib" ]]; then
+        pass "library $lib present"
+    else
+        fail "library $lib missing from Contents/MacOS"
+    fi
+done
 
 unwanted="$(find "$APP" \( -name '*.pdb' -o -name '*.Tests.dll' -o -name 'xunit*' -o -name 'testhost*' \
     -o -name 'Microsoft.TestPlatform*' -o -name 'Microsoft.VisualStudio.TestPlatform*' \) -print)"
