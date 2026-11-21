@@ -60,6 +60,20 @@ public class OperationTextsTests : LanguageTestBase
     }
 
     [Fact]
+    public void Connection_lost_error_has_its_own_words()
+    {
+        var error = new VfsConnectionLostException("Connection reset by peer");
+
+        Assert.Equal("The connection was lost while working with /dst/a.txt.", OperationTexts.ForError(Item, error));
+        Assert.Equal("the connection was lost.", OperationTexts.ForFailure(error));
+        Assert.NotEqual(Loc.Get("OperationFailed_IO"), OperationTexts.ForFailure(error));
+        Loc.SetLanguage("ru");
+        Assert.Equal("Связь потеряна при работе с /dst/a.txt.", OperationTexts.ForError(Item, error));
+        Assert.Equal("связь потеряна.", OperationTexts.ForFailure(error));
+        Assert.NotEqual(Loc.Format("OperationError_IO", Item.Path), OperationTexts.ForError(Item, error));
+    }
+
+    [Fact]
     public void Name_an_archive_cannot_store_has_its_own_words()
     {
         var error = new ArchiveEntryNameException("a:b.txt", "x");

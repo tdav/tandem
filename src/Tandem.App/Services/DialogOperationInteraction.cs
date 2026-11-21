@@ -44,7 +44,8 @@ public sealed class DialogOperationInteraction : IOperationInteraction
     public Task<ErrorAction> ResolveErrorAsync(VfsPath item, Exception error, CancellationToken ct) =>
         AskAsync(ct, ErrorAction.Abort, async token =>
         {
-            var action = await _dialogs.AskErrorAsync(item, OperationTexts.ForError(item, error), error.Message, token);
+            var action = await _dialogs.AskErrorAsync(item, OperationTexts.ForError(item, error), error.Message,
+                connectionLost: error is VfsConnectionLostException, token);
             // A dialog closed by its token (operation cancelled, window closing) answers Abort too; that is not
             // the user's choice, so the failure must still be reported.
             if (action == ErrorAction.Abort && !token.IsCancellationRequested) _userAborts.AddOrUpdate(error, error);

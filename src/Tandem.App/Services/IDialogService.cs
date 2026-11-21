@@ -81,8 +81,11 @@ public interface IDialogService
     Task<ConflictDecision> AskConflictAsync(FileEntry source, FileEntry existing, CancellationToken ct);
 
     /// <summary>An item failed: <paramref name="message"/> says what happened in words, <paramref name="detail"/>
-    /// is the system's own message. <paramref name="ct"/> as for <see cref="AskConflictAsync"/>.</summary>
-    Task<ErrorAction> AskErrorAsync(VfsPath item, string message, string? detail, CancellationToken ct);
+    /// is the system's own message. With <paramref name="connectionLost"/> (the source lost its connection) the
+    /// retry button reads "Reconnect and Retry"; the answer is still <see cref="ErrorAction.Retry"/>.
+    /// <paramref name="ct"/> as for <see cref="AskConflictAsync"/>.</summary>
+    Task<ErrorAction> AskErrorAsync(VfsPath item, string message, string? detail, bool connectionLost,
+        CancellationToken ct);
 
     /// <summary>The items an operation left alone, and why.</summary>
     Task ShowSummaryAsync(IReadOnlyList<SkippedItem> skipped);

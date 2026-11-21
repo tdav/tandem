@@ -1,11 +1,20 @@
 namespace Tandem.Core.Vfs;
 
 [Flags]
-public enum ProviderCapabilities { None = 0, Write = 1, Trash = 2, UnixPermissions = 4, Symlinks = 8, Watch = 16 }
+public enum ProviderCapabilities
+{
+    None = 0, Write = 1, Trash = 2, UnixPermissions = 4, Symlinks = 8, Watch = 16,
+
+    /// <summary>The source is far away: a file is edited in a temporary copy on the disk and returned to the source
+    /// after asking.</summary>
+    LocalCopyEdit = 32,
+}
 
 /// <summary>
 /// A source of files (local disk, archive, network, memory). Panels and the operations engine talk only
-/// to this interface. Failures are reported as <see cref="VfsException"/> or another <see cref="IOException"/>.
+/// to this interface. Failures are reported as <see cref="VfsException"/> or another <see cref="IOException"/>; a
+/// source that lost its connection throws <see cref="VfsConnectionLostException"/> and tries to connect again on the
+/// next call.
 /// </summary>
 public interface IFileSystemProvider
 {

@@ -36,7 +36,7 @@ internal class ScriptedDialogs : IDialogService
     public List<(int Count, string? SingleName, bool Permanent)> DeleteRequests { get; } = [];
     public List<(bool Select, string Initial)> MaskRequests { get; } = [];
     public List<(FileEntry Source, FileEntry Existing)> ConflictRequests { get; } = [];
-    public List<(VfsPath Item, string Message, string? Detail)> ErrorRequests { get; } = [];
+    public List<(VfsPath Item, string Message, string? Detail, bool ConnectionLost)> ErrorRequests { get; } = [];
     public List<IReadOnlyList<SkippedItem>> Summaries { get; } = [];
     public List<string> Messages { get; } = [];
     public List<(string Text, string? Detail)> MessagesWithDetail { get; } = [];
@@ -158,9 +158,10 @@ internal class ScriptedDialogs : IDialogService
             : new ConflictDecision(ConflictAction.Cancel, false));
     }
 
-    public virtual Task<ErrorAction> AskErrorAsync(VfsPath item, string message, string? detail, CancellationToken ct)
+    public virtual Task<ErrorAction> AskErrorAsync(VfsPath item, string message, string? detail, bool connectionLost,
+        CancellationToken ct)
     {
-        Record("error", () => ErrorRequests.Add((item, message, detail)));
+        Record("error", () => ErrorRequests.Add((item, message, detail, connectionLost)));
         return Task.FromResult(TryTake(ErrorAnswers, "error", out var answer) ? answer : ErrorAction.Abort);
     }
 

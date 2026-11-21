@@ -380,7 +380,7 @@ public class ArchiveWindowTests : LanguageTestBase
 
         Assert.Equal([("encrypted.zip", false)], app.Dialogs.PasswordRequests);
         Assert.Equal([true], app.Dialogs.PasswordsOnUiThread);
-        var (item, message, _) = Assert.Single(app.Dialogs.ErrorRequests);
+        var (item, message, _, _) = Assert.Single(app.Dialogs.ErrorRequests);
         Assert.Equal("a.txt", item.Name);
         Assert.Equal(OperationTexts.ForError(item,
             new ArchivePasswordRequiredException(VfsPath.Local("/home/encrypted.zip"), false)), message);

@@ -14,6 +14,21 @@ public static class SafeReplace
     public const string PartSuffix = ".tandem-part";
     public const string BackupSuffix = ".tandem-old";
 
+    /// <summary>The suffix of the temporary name a group rename gives an item: <c>.{guid}.tandem-rename</c>.</summary>
+    public const string RenameSuffix = ".tandem-rename";
+
+    /// <summary>True for a name of the form <c>.{…}.tandem-part</c>, <c>.{…}.tandem-old</c> or
+    /// <c>.{…}.tandem-rename</c>: what an interrupted operation left behind, not a file of the user's.</summary>
+    public static bool IsServiceName(string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        if (!name.StartsWith('.')) return false;
+        foreach (var suffix in (ReadOnlySpan<string>)[PartSuffix, BackupSuffix, RenameSuffix])
+            if (name.Length > suffix.Length + 1 && name.EndsWith(suffix, StringComparison.Ordinal))
+                return true;
+        return false;
+    }
+
     /// <summary><c>.{name}.tandem-part</c> next to <paramref name="destination"/>.</summary>
     /// <exception cref="ArgumentException"><paramref name="destination"/> is a root, which has no name or
     /// parent.</exception>

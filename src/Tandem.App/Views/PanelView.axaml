@@ -128,6 +128,10 @@
                 <Button x:Name="OpenAccessSettings" DockPanel.Dock="Right" Classes="flat"
                         Content="{loc:Tr Key=Shell_OpenAccessSettings}" IsVisible="{Binding IsAccessDenied}"
                         Command="{Binding OpenAccessSettingsCommand}" />
+                <!-- The panel's source lost its connection: read the folder again, which connects again. -->
+                <Button x:Name="Reconnect" DockPanel.Dock="Right" Classes="flat"
+                        Content="{loc:Tr Key=Panel_Reconnect}" IsVisible="{Binding IsConnectionLost}"
+                        Command="{Binding ReconnectCommand}" />
                 <TextBlock x:Name="Status" Text="{Binding StatusLine}" Classes.error="{Binding HasError}"
                            VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
             </DockPanel>

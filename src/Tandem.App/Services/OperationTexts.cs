@@ -28,6 +28,7 @@ public static class OperationTexts
         ArgumentNullException.ThrowIfNull(error);
         return error switch
         {
+            VfsConnectionLostException => "ConnectionLost",
             VfsAccessDeniedException or UnauthorizedAccessException => "AccessDenied",
             VfsNotFoundException or FileNotFoundException or DirectoryNotFoundException => "NotFound",
             VfsAlreadyExistsException => "AlreadyExists",

@@ -40,8 +40,9 @@ public sealed class DialogService : IDialogService
             ? decision
             : new ConflictDecision(ConflictAction.Cancel, false);
 
-    public async Task<ErrorAction> AskErrorAsync(VfsPath item, string message, string? detail, CancellationToken ct) =>
-        await ShowAsync<object>(new ErrorDialog(new ErrorDialogViewModel(item, message, detail)), ct) is
+    public async Task<ErrorAction> AskErrorAsync(VfsPath item, string message, string? detail, bool connectionLost,
+        CancellationToken ct) =>
+        await ShowAsync<object>(new ErrorDialog(new ErrorDialogViewModel(item, message, detail, connectionLost)), ct) is
             ErrorAction action
             ? action
             : ErrorAction.Abort;

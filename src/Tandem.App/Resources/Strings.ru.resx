@@ -73,6 +73,12 @@
   <data name="Panel_Error_Other" xml:space="preserve">
     <value>Не удалось открыть папку {0}</value>
   </data>
+  <data name="Panel_ConnectionLost" xml:space="preserve">
+    <value>Связь потеряна при чтении папки {0}</value>
+  </data>
+  <data name="Panel_Reconnect" xml:space="preserve">
+    <value>Переподключиться</value>
+  </data>
   <data name="Panel_NotAFolder" xml:space="preserve">
     <value>«{0}» — не папка и не открывается как папка.</value>
   </data>
@@ -98,6 +104,9 @@
   </data>
   <data name="Button_Retry" xml:space="preserve">
     <value>Повторить</value>
+  </data>
+  <data name="Button_ReconnectAndRetry" xml:space="preserve">
+    <value>Переподключиться и повторить</value>
   </data>
   <data name="Button_Overwrite" xml:space="preserve">
     <value>Заменить</value>
@@ -187,6 +196,15 @@
   </data>
   <data name="SkipReason_NameNotStorable" xml:space="preserve">
     <value>Пропущено: архив не может сохранить это имя (в нём есть «:» или «\»)</value>
+  </data>
+  <data name="SkipReason_ChangedSinceCompared" xml:space="preserve">
+    <value>изменён после сравнения</value>
+  </data>
+  <data name="SkipReason_NameTaken" xml:space="preserve">
+    <value>имя уже занято</value>
+  </data>
+  <data name="SkipReason_LinkSkipped" xml:space="preserve">
+    <value>символическая ссылка пропущена</value>
   </data>
 
   <!-- Tandem.Core.Operations.OperationKind (names of operations, not buttons) -->
@@ -651,6 +669,9 @@
   <data name="OperationError_Other" xml:space="preserve">
     <value>Не удалось обработать {0}.</value>
   </data>
+  <data name="OperationError_ConnectionLost" xml:space="preserve">
+    <value>Связь потеряна при работе с {0}.</value>
+  </data>
   <data name="Summary_Title" xml:space="preserve">
     <value>Некоторые объекты пропущены</value>
   </data>
@@ -718,6 +739,9 @@
   </data>
   <data name="OperationFailed_Other" xml:space="preserve">
     <value>произошла непредвиденная ошибка.</value>
+  </data>
+  <data name="OperationFailed_ConnectionLost" xml:space="preserve">
+    <value>связь потеряна.</value>
   </data>
 
   <!-- Context menus of the panels (ContextMenuModel) -->
@@ -1355,6 +1379,18 @@
   </data>
   <data name="OperationKind_Unpack" xml:space="preserve">
     <value>Распаковка</value>
+  </data>
+  <data name="OperationKind_Rename" xml:space="preserve">
+    <value>Переименование</value>
+  </data>
+  <data name="OperationKind_Sync" xml:space="preserve">
+    <value>Синхронизация</value>
+  </data>
+  <data name="OperationKind_ChecksumCreate" xml:space="preserve">
+    <value>Подсчёт контрольных сумм</value>
+  </data>
+  <data name="OperationKind_ChecksumVerify" xml:space="preserve">
+    <value>Проверка контрольных сумм</value>
   </data>
   <data name="RejectionReason_DestinationExists" xml:space="preserve">
     <value>Файл архива уже существует</value>

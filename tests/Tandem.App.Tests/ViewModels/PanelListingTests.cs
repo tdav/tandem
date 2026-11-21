@@ -1,7 +1,10 @@
 using System.Collections.Specialized;
 using System.Diagnostics;
 using Avalonia.Headless.XUnit;
+using CommunityToolkit.Mvvm.Input;
+using Tandem.App.Tests.Views;
 using Tandem.App.ViewModels;
+using Tandem.Core.Tests.Vfs;
 using Tandem.Core.Listing;
 using Tandem.Core.Vfs;
 using Tandem.Core.Vfs.InMemory;
@@ -352,6 +355,74 @@ public class PanelListingTests : IDisposable
         await WaitUntil(() => panel.CurrentPath == Mem("/a") && !panel.IsLoading);
         Assert.Equal(["..", "keep.txt"], Names(panel));
         Assert.Null(panel.Error);
+    }
+
+    // ---- Lost connection ---------------------------------------------------------------------------------
+
+    private DroppingProvider Remote()
+    {
+        var remote = new DroppingProvider("net");
+        remote.Inner.AddFile("/d/a.txt");
+        remote.Inner.AddFile("/d/sub/b.txt");
+        _providers.Register(remote);
+        return remote;
+    }
+
+    private static VfsPath Net(string path) => new("net", path);
+
+    [AvaloniaFact]
+    public async Task Lost_connection_shows_connection_error_and_keeps_the_path()
+    {
+        var remote = Remote();
+        var panel = CreatePanel();
+        await panel.NavigateToAsync(Net("/d"));
+        remote.Connected = false;
+
+        await panel.NavigateToAsync(Net("/d/sub"));
+
+        Assert.Equal(Net("/d"), panel.CurrentPath);
+        Assert.Equal(["..", "sub", "a.txt"], Names(panel));
+        Assert.Equal(PanelErrorKind.ConnectionLost, panel.ErrorKind);
+        Assert.Equal("The connection was lost while reading the folder /d/sub", panel.Error);
+        Assert.False(panel.IsLoading);
+    }
+
+    [AvaloniaFact]
+    public async Task Refresh_after_lost_connection_does_not_climb_to_the_parent()
+    {
+        var remote = Remote();
+        var panel = CreatePanel();
+        await panel.NavigateToAsync(Net("/d/sub"));
+        remote.Connected = false;
+
+        await panel.RefreshAsync();
+
+        Assert.Equal(Net("/d/sub"), panel.CurrentPath);
+        Assert.Equal(["..", "b.txt"], Names(panel));
+        Assert.Equal(PanelErrorKind.ConnectionLost, panel.ErrorKind);
+        Assert.Equal("The connection was lost while reading the folder /d/sub", panel.Error);
+    }
+
+    [AvaloniaFact]
+    public async Task Reconnect_command_reloads_the_folder_when_the_provider_is_back()
+    {
+        var remote = new DroppingProvider("net");
+        remote.Inner.AddFile("/d/a.txt");
+        await using var app = await TestApp.StartAsync(show: false, extraProviders: [remote]);
+        await app.Left.NavigateToAsync(Net("/d"));
+        remote.Connected = false;
+        await app.Left.RefreshAsync();
+        Assert.True(app.Main.Left.IsConnectionLost);
+        Assert.False(app.Main.Right.IsConnectionLost);
+
+        remote.Inner.AddFile("/d/new.txt");
+        remote.Connected = true;
+        await ((IAsyncRelayCommand)app.Main.Left.ReconnectCommand).ExecuteAsync(null);
+
+        Assert.False(app.Main.Left.IsConnectionLost);
+        Assert.Null(app.Left.ErrorKind);
+        Assert.Equal(Net("/d"), app.Left.CurrentPath);
+        Assert.Equal(["..", "a.txt", "new.txt"], Names(app.Left));
     }
 
     [AvaloniaFact]

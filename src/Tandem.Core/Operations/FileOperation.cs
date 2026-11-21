@@ -5,8 +5,10 @@ using Tandem.Core.Vfs;
 namespace Tandem.Core.Operations;
 
 /// <summary>What an operation does. <see cref="Unpack"/> is a copy out of an archive (<c>CopyOperation</c> under
-/// that name); <see cref="Pack"/> writes a new archive of the sources.</summary>
-public enum OperationKind { Copy, Move, Delete, Pack, Unpack }
+/// that name); <see cref="Pack"/> writes a new archive of the sources. <see cref="Rename"/> renames a group of items,
+/// <see cref="Sync"/> synchronizes two folders, <see cref="ChecksumCreate"/> and <see cref="ChecksumVerify"/> write
+/// and check a checksum file.</summary>
+public enum OperationKind { Copy, Move, Delete, Pack, Unpack, Rename, Sync, ChecksumCreate, ChecksumVerify }
 
 /// <summary>
 /// A long-running file operation (copy, move, delete, pack, unpack). It runs once, on the thread pool; state and progress may

@@ -16,6 +16,64 @@ public class InMemoryContractTests : ProviderContractTests
     private static VfsPath Mem(string path) => new("mem", path);
 
     [Fact]
+    public async Task Contract_suite_skips_the_modified_time_fact_for_a_provider_that_does_not_store_it()
+    {
+        var suite = new TimelessContractTests();
+        string? skipped = null;
+
+        // Caught by hand: the assertion library passes a skip through Assert.ThrowsAsync and Record.ExceptionAsync,
+        // which would skip this test too.
+        try
+        {
+            await suite.SetModified_is_visible_in_GetEntry();
+        }
+        catch (Xunit.Sdk.SkipException e)
+        {
+            skipped = e.Message;
+        }
+
+        Assert.NotNull(skipped);
+        Assert.Contains("does not store modified times", skipped, StringComparison.Ordinal);
+    }
+
+    /// <summary>The contract over a source that keeps no modified time, as an FTP server without <c>MFMT</c>.</summary>
+    public sealed class TimelessContractTests : ProviderContractTests
+    {
+        protected override bool StoresModifiedTime => false;
+
+        protected override Task<(IFileSystemProvider fs, VfsPath root)> CreateAsync()
+        {
+            var fs = new InMemoryFileSystem();
+            fs.AddDirectory("/work");
+            return Task.FromResult<(IFileSystemProvider, VfsPath)>((new TimelessProvider(fs), new VfsPath("mem", "/work")));
+        }
+    }
+
+    /// <summary>Passes every call through, except that setting the modified time does nothing.</summary>
+    private sealed class TimelessProvider(InMemoryFileSystem inner) : IFileSystemProvider
+    {
+        public string Id => inner.Id;
+        public ProviderCapabilities Capabilities => inner.Capabilities;
+        public IAsyncEnumerable<FileEntry> EnumerateAsync(VfsPath directory, CancellationToken ct) =>
+            inner.EnumerateAsync(directory, ct);
+        public Task<FileEntry?> GetEntryAsync(VfsPath path, CancellationToken ct) => inner.GetEntryAsync(path, ct);
+        public Task<Stream> OpenReadAsync(VfsPath path, CancellationToken ct) => inner.OpenReadAsync(path, ct);
+        public Task<Stream> OpenWriteAsync(VfsPath path, CancellationToken ct) => inner.OpenWriteAsync(path, ct);
+        public Task CreateDirectoryAsync(VfsPath path, CancellationToken ct) => inner.CreateDirectoryAsync(path, ct);
+        public Task DeleteAsync(VfsPath path, bool recursive, CancellationToken ct) =>
+            inner.DeleteAsync(path, recursive, ct);
+        public Task MoveAsync(VfsPath source, VfsPath destination, CancellationToken ct) =>
+            inner.MoveAsync(source, destination, ct);
+        public Task CreateSymlinkAsync(VfsPath path, string target, CancellationToken ct) =>
+            inner.CreateSymlinkAsync(path, target, ct);
+        public Task SetModifiedAsync(VfsPath path, DateTimeOffset modified, CancellationToken ct) => Task.CompletedTask;
+        public Task SetModeAsync(VfsPath path, UnixFileMode mode, CancellationToken ct) => inner.SetModeAsync(path, mode, ct);
+        public Task<bool> IsSameEntryAsync(VfsPath a, VfsPath b, CancellationToken ct) => inner.IsSameEntryAsync(a, b, ct);
+        public Task<string> GetVolumeKeyAsync(VfsPath path, CancellationToken ct) => inner.GetVolumeKeyAsync(path, ct);
+        public IDisposable? Watch(VfsPath directory, Action changed) => inner.Watch(directory, changed);
+    }
+
+    [Fact]
     public void Defaults_to_mem_id_and_all_capabilities_but_trash()
     {
         var fs = new InMemoryFileSystem();

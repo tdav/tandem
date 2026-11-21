@@ -19,6 +19,8 @@
   <ItemGroup>
     <!-- Shared source: the counting stream of any declared size from the Core tests. -->
     <Compile Include="..\Tandem.Core.Tests\Viewing\SparseStream.cs" Link="ViewModels\SparseStream.cs" />
+    <!-- Shared source: a remote source whose connection can be lost, from the Core tests. -->
+    <Compile Include="..\Tandem.Core.Tests\Vfs\DroppingProvider.cs" Link="ViewModels\DroppingProvider.cs" />
     <!-- The archive fixtures and their loader (skips a test whose external fixture is absent). -->
     <Compile Include="..\Tandem.Archives.Tests\Fixture.cs" Link="Views\Fixture.cs" />
   </ItemGroup>

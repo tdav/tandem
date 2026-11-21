@@ -204,6 +204,32 @@ public class DialogWindowTests : LanguageTestBase
     }
 
     [AvaloniaFact]
+    public async Task Error_dialog_for_lost_connection_labels_retry_as_reconnect()
+    {
+        var (owner, service) = Start();
+        var asking = service.AskErrorAsync(VfsPath.Local("/a"), "lost", "reset", connectionLost: true,
+            CancellationToken.None);
+        var dialog = Dialog<ErrorDialog>(owner);
+
+        Assert.Equal(["Reconnect and Retry", Loc.Enum(ErrorAction.Skip), Loc.Enum(ErrorAction.SkipAll),
+                Loc.Enum(ErrorAction.Abort)],
+            ActionButtons(dialog).Select(b => b.Content as string));
+        Assert.True(ActionButtons(dialog).Single(b => b.Name == nameof(ErrorAction.Retry)).IsDefault);
+        Press(dialog, Key.Enter);
+
+        Assert.Equal(ErrorAction.Retry, await Finish(asking));
+
+        var plain = service.AskErrorAsync(VfsPath.Local("/a"), "failed", null, connectionLost: false,
+            CancellationToken.None);
+        var other = Dialog<ErrorDialog>(owner);
+        Assert.Equal(Loc.Enum(ErrorAction.Retry),
+            ActionButtons(other).Single(b => b.Name == nameof(ErrorAction.Retry)).Content);
+        Press(other, Key.Escape);
+        Assert.Equal(ErrorAction.Abort, await Finish(plain));
+        owner.Close();
+    }
+
+    [AvaloniaFact]
     public async Task Without_a_visible_owner_questions_are_cancelled_without_a_window()
     {
         var service = new DialogService();
@@ -211,6 +237,6 @@ public class DialogWindowTests : LanguageTestBase
         Assert.Null(await service.AskCopyMoveAsync(new CopyMoveRequest(false, 1, "a", "/d")));
         Assert.False(await service.ConfirmDeleteAsync(1, "a", permanent: false));
         Assert.Equal(ErrorAction.Abort, await service.AskErrorAsync(VfsPath.Local("/a"), "m", null,
-            CancellationToken.None));
+            connectionLost: false, CancellationToken.None));
     }
 }

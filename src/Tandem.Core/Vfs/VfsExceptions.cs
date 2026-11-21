@@ -24,3 +24,11 @@ public class VfsAlreadyExistsException : VfsException
     public VfsAlreadyExistsException(string message) : base(message) { }
     public VfsAlreadyExistsException(string message, Exception? inner) : base(message, inner) { }
 }
+
+/// <summary>The connection to the source was lost or could not be made. Repeating the same call tries to connect
+/// again.</summary>
+public class VfsConnectionLostException : VfsException
+{
+    public VfsConnectionLostException(string message) : base(message) { }
+    public VfsConnectionLostException(string message, Exception? inner) : base(message, inner) { }
+}

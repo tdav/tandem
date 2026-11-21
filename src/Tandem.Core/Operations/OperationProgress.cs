@@ -31,6 +31,15 @@ public enum SkipReason
     /// <summary>The destination (an archive) cannot store the item's name as it is: writing it would change the
     /// name, so the item was left out.</summary>
     NameNotStorable,
+
+    /// <summary>The item changed after it was compared (or after it was renamed), so it was left untouched.</summary>
+    ChangedSinceCompared,
+
+    /// <summary>The name the item needed is already taken by another item, so it was left untouched.</summary>
+    NameTaken,
+
+    /// <summary>The item is a symbolic link: the tool neither follows links nor processes them.</summary>
+    LinkSkipped,
 }
 
 /// <summary>An item the operation left alone, and why. <paramref name="Detail"/> is the underlying error message,

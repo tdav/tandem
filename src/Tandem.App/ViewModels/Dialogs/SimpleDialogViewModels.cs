@@ -97,7 +97,7 @@ public sealed partial class ConflictDialogViewModel(FileEntry source, FileEntry 
 }
 
 /// <summary>An item failed: what happened in words, the system's message, and retry / skip / skip all / abort.</summary>
-public sealed class ErrorDialogViewModel(VfsPath item, string message, string? detail)
+public sealed class ErrorDialogViewModel(VfsPath item, string message, string? detail, bool connectionLost = false)
 {
     public string Title => Loc.Get("OperationError_Title");
 
@@ -106,6 +106,13 @@ public sealed class ErrorDialogViewModel(VfsPath item, string message, string? d
     public string? Detail => string.IsNullOrWhiteSpace(detail) ? null : detail;
 
     public VfsPath Item => item;
+
+    /// <summary>The source lost its connection: retrying connects again first.</summary>
+    public bool ConnectionLost => connectionLost;
+
+    /// <summary>The text of an action's button: Retry reads "Reconnect and Retry" when the connection was lost.</summary>
+    public string Label(ErrorAction action) =>
+        action == ErrorAction.Retry && connectionLost ? Loc.Get("Button_ReconnectAndRetry") : Loc.Enum(action);
 
     /// <summary>The buttons in order; Retry is the default, Abort is Esc.</summary>
     public IReadOnlyList<ErrorAction> Actions { get; } =

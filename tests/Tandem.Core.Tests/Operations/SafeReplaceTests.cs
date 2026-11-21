@@ -176,5 +176,17 @@ public sealed class SafeReplaceTests
         Assert.Equal(Mem("/a/.b.txt.tandem-part"), SafeReplace.PartPathFor(Mem("/a/b.txt")));
         Assert.Equal(".tandem-part", SafeReplace.PartSuffix);
         Assert.Equal(".tandem-old", SafeReplace.BackupSuffix);
+        Assert.Equal(".tandem-rename", SafeReplace.RenameSuffix);
     }
+
+    [Theory]
+    [InlineData(".a.txt.tandem-part", true)]
+    [InlineData(".a.tandem-old", true)]
+    [InlineData(".0f8fad5bd9cb469fa16570867728950e.tandem-rename", true)]
+    [InlineData("a.tandem-part", false)] // no leading dot: the user's own file
+    [InlineData(".tandem-part", false)] // no name inside
+    [InlineData(".a.txt.tandem-part.bak", false)]
+    [InlineData("notes.txt", false)]
+    public void Service_names_are_recognised(string name, bool expected) =>
+        Assert.Equal(expected, SafeReplace.IsServiceName(name));
 }

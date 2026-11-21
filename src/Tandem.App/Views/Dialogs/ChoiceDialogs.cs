@@ -111,14 +111,15 @@ public sealed class ConflictDialog : DialogWindow
     }
 }
 
-/// <summary>An item failed: retry, skip, skip all or abort; closing the window aborts.</summary>
+/// <summary>An item failed: retry (reconnect and retry, when the connection was lost), skip, skip all or abort;
+/// closing the window aborts.</summary>
 public sealed class ErrorDialog : DialogWindow
 {
     public ErrorDialog(ErrorDialogViewModel vm) : base(vm.Title)
     {
         var buttons = vm.Actions.Select(action =>
         {
-            var button = MakeButton(Loc.Enum(action), isDefault: action == ErrorAction.Retry,
+            var button = MakeButton(vm.Label(action), isDefault: action == ErrorAction.Retry,
                 isCancel: action == ErrorAction.Abort, name: action.ToString());
             button.Click += (_, _) => Close(action);
             return button;

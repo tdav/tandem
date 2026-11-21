@@ -6,7 +6,7 @@ using Tandem.Core.Vfs;
 namespace Tandem.App.ViewModels;
 
 /// <summary>Why the panel could not show a folder, so the view can offer the fitting action.</summary>
-public enum PanelErrorKind { AccessDenied, NotFound, Other }
+public enum PanelErrorKind { AccessDenied, NotFound, Other, ConnectionLost }
 
 /// <summary>
 /// One file panel: the listing of a folder, sorted, with a cursor, moving in and out of folders (and of files that open
@@ -190,7 +190,8 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
     public HostLocation? Up => _hasPath ? UpOf(CurrentPath) : null;
 
     /// <summary>Reads the folder again, keeping the cursor and the selection on the same names. If the folder no
-    /// longer exists, moves to its nearest existing ancestor.</summary>
+    /// longer exists, moves to its nearest existing ancestor; if the source lost its connection, stays on the folder
+    /// and reports <see cref="PanelErrorKind.ConnectionLost"/> (refreshing again reconnects).</summary>
     public async Task RefreshAsync()
     {
         if (!_hasPath) return;
@@ -613,6 +614,7 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
 
     private static PanelErrorKind KindOf(Exception e) => e switch
     {
+        VfsConnectionLostException => PanelErrorKind.ConnectionLost,
         VfsAccessDeniedException or UnauthorizedAccessException => PanelErrorKind.AccessDenied,
         VfsNotFoundException or DirectoryNotFoundException or FileNotFoundException => PanelErrorKind.NotFound,
         _ => PanelErrorKind.Other,
@@ -621,7 +623,8 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
     private void SetError(PanelErrorKind kind, VfsPath path)
     {
         ErrorKind = kind;
-        Error = Loc.Format($"Panel_Error_{kind}", DisplayPathOf(path));
+        var key = kind == PanelErrorKind.ConnectionLost ? "Panel_ConnectionLost" : $"Panel_Error_{kind}";
+        Error = Loc.Format(key, DisplayPathOf(path));
     }
 
     /// <summary><see cref="ProviderRegistry.DisplayPath"/>; the path itself when its provider is not

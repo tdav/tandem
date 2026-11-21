@@ -78,6 +78,12 @@
     <value>Cannot open the folder {0}</value>
     <comment>{0} folder path</comment>
   </data>
+  <data name="Panel_ConnectionLost" xml:space="preserve">
+    <value>The connection was lost while reading the folder {0}</value>
+  </data>
+  <data name="Panel_Reconnect" xml:space="preserve">
+    <value>Reconnect</value>
+  </data>
   <data name="Panel_NotAFolder" xml:space="preserve">
     <value>“{0}” is not a folder and does not open as one.</value>
     <comment>{0} file name</comment>
@@ -104,6 +110,9 @@
   </data>
   <data name="Button_Retry" xml:space="preserve">
     <value>Retry</value>
+  </data>
+  <data name="Button_ReconnectAndRetry" xml:space="preserve">
+    <value>Reconnect and Retry</value>
   </data>
   <data name="Button_Overwrite" xml:space="preserve">
     <value>Overwrite</value>
@@ -196,6 +205,15 @@
   </data>
   <data name="SkipReason_NameNotStorable" xml:space="preserve">
     <value>Skipped: an archive cannot store this name (it contains “:” or “\”)</value>
+  </data>
+  <data name="SkipReason_ChangedSinceCompared" xml:space="preserve">
+    <value>changed after the comparison</value>
+  </data>
+  <data name="SkipReason_NameTaken" xml:space="preserve">
+    <value>name already taken</value>
+  </data>
+  <data name="SkipReason_LinkSkipped" xml:space="preserve">
+    <value>symbolic link skipped</value>
   </data>
 
   <!-- Tandem.Core.Operations.OperationKind (names of operations, not buttons) -->
@@ -660,6 +678,9 @@ Details were written to {1}.</value>
   <data name="OperationError_Other" xml:space="preserve">
     <value>{0} could not be processed.</value>
   </data>
+  <data name="OperationError_ConnectionLost" xml:space="preserve">
+    <value>The connection was lost while working with {0}.</value>
+  </data>
   <data name="Summary_Title" xml:space="preserve">
     <value>Some Items Were Skipped</value>
   </data>
@@ -727,6 +748,9 @@ Details were written to {1}.</value>
   </data>
   <data name="OperationFailed_Other" xml:space="preserve">
     <value>an unexpected error occurred.</value>
+  </data>
+  <data name="OperationFailed_ConnectionLost" xml:space="preserve">
+    <value>the connection was lost.</value>
   </data>
 
   <!-- Context menus of the panels (ContextMenuModel) -->
@@ -1364,6 +1388,18 @@ Folder</value>
   </data>
   <data name="OperationKind_Unpack" xml:space="preserve">
     <value>Unpacking</value>
+  </data>
+  <data name="OperationKind_Rename" xml:space="preserve">
+    <value>Renaming</value>
+  </data>
+  <data name="OperationKind_Sync" xml:space="preserve">
+    <value>Synchronizing</value>
+  </data>
+  <data name="OperationKind_ChecksumCreate" xml:space="preserve">
+    <value>Creating checksums</value>
+  </data>
+  <data name="OperationKind_ChecksumVerify" xml:space="preserve">
+    <value>Verifying checksums</value>
   </data>
   <data name="RejectionReason_DestinationExists" xml:space="preserve">
     <value>The archive file already exists</value>

@@ -46,7 +46,7 @@ public class DialogOperationInteractionTests : LanguageTestBase
         }
 
         public override Task<ErrorAction> AskErrorAsync(VfsPath item, string message, string? detail,
-            CancellationToken ct)
+            bool connectionLost, CancellationToken ct)
         {
             AllOnUiThread &= Dispatcher.UIThread.CheckAccess();
             if (ThrowOnError is { } error) throw error;
@@ -170,6 +170,7 @@ public class DialogOperationInteractionTests : LanguageTestBase
         { new IOException("raw", 28), "OperationError_DiskFull" },
         { new IOException("raw"), "OperationError_IO" },
         { new InvalidOperationException("raw"), "OperationError_Other" },
+        { new VfsConnectionLostException("raw"), "OperationError_ConnectionLost" },
     };
 
     [AvaloniaTheory]
@@ -188,6 +189,39 @@ public class DialogOperationInteractionTests : LanguageTestBase
         Assert.Equal(Loc.Format(key, "/d/a.txt"), message);
         Assert.Equal("raw", detail);
         Assert.True(dialogs.AllOnUiThread);
+    }
+
+    [AvaloniaFact]
+    public async Task Connection_lost_error_is_asked_as_reconnect()
+    {
+        var dialogs = new ScriptedDialogs();
+        dialogs.ErrorAnswers.Enqueue(ErrorAction.Retry);
+        var interaction = new DialogOperationInteraction(dialogs);
+
+        var action = await Task.Run(() => interaction.ResolveErrorAsync(VfsPath.Local("/d/a.txt"),
+            new VfsConnectionLostException("reset by peer"), CancellationToken.None));
+
+        Assert.Equal(ErrorAction.Retry, action);
+        var request = Assert.Single(dialogs.ErrorRequests);
+        Assert.True(request.ConnectionLost);
+        Assert.Equal(Loc.Format("OperationError_ConnectionLost", "/d/a.txt"), request.Message);
+        Assert.Equal("reset by peer", request.Detail);
+    }
+
+    [AvaloniaFact]
+    public async Task Other_io_error_is_not_asked_as_reconnect()
+    {
+        var dialogs = new ScriptedDialogs();
+        dialogs.ErrorAnswers.Enqueue(ErrorAction.Skip);
+        dialogs.ErrorAnswers.Enqueue(ErrorAction.Skip);
+        var interaction = new DialogOperationInteraction(dialogs);
+
+        await Task.Run(() => interaction.ResolveErrorAsync(VfsPath.Local("/a"), new IOException("x"),
+            CancellationToken.None));
+        await Task.Run(() => interaction.ResolveErrorAsync(VfsPath.Local("/b"), new VfsNotFoundException("y"),
+            CancellationToken.None));
+
+        Assert.Equal([false, false], dialogs.ErrorRequests.Select(r => r.ConnectionLost));
     }
 
     [AvaloniaFact]
@@ -222,7 +256,7 @@ public class DialogOperationInteractionTests : LanguageTestBase
         public TaskCompletionSource Returned { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public override async Task<ErrorAction> AskErrorAsync(VfsPath item, string message, string? detail,
-            CancellationToken ct)
+            bool connectionLost, CancellationToken ct)
         {
             Shown.TrySetResult();
             try

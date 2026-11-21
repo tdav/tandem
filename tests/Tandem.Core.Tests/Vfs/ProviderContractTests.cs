@@ -7,7 +7,8 @@ namespace Tandem.Core.Tests.Vfs;
 /// Behaviour every <see cref="IFileSystemProvider"/> must share. Derived classes supply a provider and an
 /// empty, writable directory inside it; the tests arrange and assert only through the interface. The facts about
 /// links and permissions are skipped for a provider that lacks <see cref="ProviderCapabilities.Symlinks"/> or
-/// <see cref="ProviderCapabilities.UnixPermissions"/>, and only then.
+/// <see cref="ProviderCapabilities.UnixPermissions"/>, and only then; the fact about modified times is skipped when
+/// <see cref="StoresModifiedTime"/> is false.
 /// </summary>
 public abstract class ProviderContractTests
 {
@@ -16,6 +17,10 @@ public abstract class ProviderContractTests
 
     /// <summary>The step in which the provider stores times (a zip: two seconds); zero means exactly.</summary>
     protected virtual TimeSpan TimeResolution => TimeSpan.Zero;
+
+    /// <summary>Whether the provider keeps the modified time it is given (an FTP server without <c>MFMT</c> does
+    /// not); when false, <see cref="SetModified_is_visible_in_GetEntry"/> is skipped.</summary>
+    protected virtual bool StoresModifiedTime => true;
 
     private static void SkipUnless(IFileSystemProvider fs, ProviderCapabilities needed) =>
         Assert.SkipUnless(fs.Capabilities.HasFlag(needed), $"The provider does not offer {needed}.");
@@ -174,6 +179,7 @@ public abstract class ProviderContractTests
     [Fact]
     public async Task SetModified_is_visible_in_GetEntry()
     {
+        Assert.SkipUnless(StoresModifiedTime, "The provider does not store modified times.");
         var (fs, root) = await CreateAsync();
         var path = root.Combine("f.txt");
         await WriteAsync(fs, path, "x");

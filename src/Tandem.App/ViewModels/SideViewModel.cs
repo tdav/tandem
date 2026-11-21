@@ -34,6 +34,7 @@ public sealed partial class SideViewModel : ObservableObject
         {
             if (tab is not null) CloseTab(tab);
         });
+        ReconnectCommand = new AsyncRelayCommand(() => _panel?.RefreshAsync() ?? Task.CompletedTask);
         tabs.PropertyChanged += OnTabsPropertyChanged;
     }
 
@@ -119,6 +120,12 @@ public sealed partial class SideViewModel : ObservableObject
     public bool IsAccessDenied =>
         Message is null && _panel?.ErrorKind == PanelErrorKind.AccessDenied &&
         (_panel.CurrentPath == default || _panel.CurrentPath.ProviderId == VfsPath.LocalProviderId);
+
+    /// <summary>The panel's source lost its connection: the status row offers <see cref="ReconnectCommand"/>.</summary>
+    public bool IsConnectionLost => Message is null && _panel?.ErrorKind == PanelErrorKind.ConnectionLost;
+
+    /// <summary>The reconnect button: reads the folder again, which makes the source connect again (as Cmd+R).</summary>
+    public IRelayCommand ReconnectCommand { get; }
 
     public string NameSortMark => SortMark(SortColumn.Name);
     public string ExtensionSortMark => SortMark(SortColumn.Extension);
@@ -434,6 +441,7 @@ public sealed partial class SideViewModel : ObservableObject
         OnPropertyChanged(nameof(StatusLine));
         OnPropertyChanged(nameof(HasError));
         OnPropertyChanged(nameof(IsAccessDenied));
+        OnPropertyChanged(nameof(IsConnectionLost));
     }
 
     private void RaiseSortChanged()
