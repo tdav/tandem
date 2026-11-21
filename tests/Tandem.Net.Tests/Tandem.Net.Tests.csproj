@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Tandem.Net\Tandem.Net.csproj" />
+    <ProjectReference Include="..\..\src\Tandem.Core\Tandem.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Tandem.Core.Tests\Operations\ScriptedInteraction.cs" Link="Operations\ScriptedInteraction.cs" />
+    <Compile Include="..\Tandem.Core.Tests\Vfs\TempDir.cs" Link="Vfs\TempDir.cs" />
+    <Compile Include="..\Tandem.Core.Tests\Vfs\ProviderContractTests.cs" Link="Vfs\ProviderContractTests.cs" />
+    <Compile Include="..\Tandem.Core.Tests\Platform\FakeSecretStore.cs" Link="Platform\FakeSecretStore.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Fixtures\**" Exclude="Fixtures\**\*.sh;Fixtures\**\README.md" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
