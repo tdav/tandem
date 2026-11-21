@@ -2,6 +2,7 @@ using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Tandem.App.Resources;
 using Tandem.App.Services;
+using Tandem.Archives;
 using Tandem.Core.Vfs;
 
 namespace Tandem.App.ViewModels.Viewing;
@@ -19,6 +20,9 @@ namespace Tandem.App.ViewModels.Viewing;
 /// replaced or dropped is disposed (its stream closed, its temporary copy released).</para>
 /// <para>The cursor coming back to the entry shown, with the same size and modified time, keeps what is shown; a
 /// changed file, and a file that could not be opened, are opened again.</para>
+/// <para>Once a file could not be opened for want of an archive's password (the user declined, or no answer fitted),
+/// later files of the same provider open without asking (<see cref="ArchivePasswordQuestions"/>) until the panel shows
+/// another folder: resting the cursor on each encrypted file does not ask again and again.</para>
 /// <para>The replaced side is not touched: its tabs, folder, cursor and selection are as they were when the panel
 /// closes. It closes on a second <see cref="Toggle"/>, on <see cref="Close"/> (the window closing), and when the
 /// active panel changes (another side or another tab).</para>
@@ -37,6 +41,7 @@ public sealed partial class QuickViewViewModel : ObservableObject, IDisposable
     private PanelViewModel? _panel;
     private CancellationTokenSource? _show;
     private ShownEntry? _shown;
+    private (string ProviderId, VfsPath Folder)? _passwordDeclined;
     private bool _disposed;
 
     /// <param name="delay">Waits <see cref="FollowDelay"/> before following the cursor; <see cref="Task.Delay(TimeSpan,
@@ -175,8 +180,13 @@ public sealed partial class QuickViewViewModel : ObservableObject, IDisposable
             }
 
             ViewerViewModel viewer;
+            var folder = _panel!.CurrentPath;
+            if (_passwordDeclined is { } declined && declined.Folder != folder) _passwordDeclined = null;
             try
             {
+                using var quiet = _passwordDeclined?.ProviderId == entry.Path.ProviderId
+                    ? ArchivePasswordQuestions.Suppress()
+                    : null;
                 var opening = ViewerViewModel.OpenAsync(_providers, _temp, entry.Path, show.Token);
                 await ShowLoadingWhileSlowAsync(opening, entry, show);
                 viewer = await opening;
@@ -187,6 +197,8 @@ public sealed partial class QuickViewViewModel : ObservableObject, IDisposable
             }
             catch (Exception failure)
             {
+                if (failure is ArchivePasswordRequiredException)
+                    _passwordDeclined = (entry.Path.ProviderId, folder);
                 if (_show != show) return;
                 if (failure is not (IOException or UnauthorizedAccessException)) _reportFailure?.Invoke(failure);
                 // Not remembered as shown: coming back to the file, or a refresh, tries it again.

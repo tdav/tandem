@@ -174,7 +174,8 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
     /// (one question at a time for the whole archive, again after a wrong answer); the password that fits is kept
     /// for later reads.</summary>
     /// <exception cref="ArchivePasswordRequiredException">The entry is encrypted and no password fitted: none was
-    /// given, the user declined (now or earlier in the batch the caller holds, which then does not ask again), or
+    /// given, the user declined (now or earlier in the batch the caller holds, which then does not ask again), the
+    /// caller suppressed questions (<see cref="ArchivePasswordQuestions"/>), or
     /// <see cref="ArchiveMounts.MaxPasswordAttempts"/> answers were wrong.</exception>
     public async Task<Stream> OpenReadAsync(VfsPath path, CancellationToken ct)
     {
@@ -199,7 +200,8 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
         {
             return await OpenEntryAsync(snapshot, node, password, ct).ConfigureAwait(false);
         }
-        catch (ArchivePasswordRequiredException) when (_prompt is not null && !DeclinedInHeldBatch())
+        catch (ArchivePasswordRequiredException) when (_prompt is not null && !DeclinedInHeldBatch() &&
+                                                       !ArchivePasswordQuestions.AreSuppressed)
         {
             return await OpenAskingAsync(snapshot, node, password, ct).ConfigureAwait(false);
         }

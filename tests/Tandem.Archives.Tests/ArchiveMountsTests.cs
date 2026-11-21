@@ -369,6 +369,27 @@ public sealed class ArchiveMountsTests : IDisposable
         Assert.Equal(2, _prompt.Questions.Count);
     }
 
+    [Fact]
+    public async Task Read_with_questions_suppressed_fails_without_asking_and_uses_a_known_password()
+    {
+        var archive = AddFixture("encrypted.zip");
+        var root = await _mounts.MountAsync(archive, Ct);
+
+        using (ArchivePasswordQuestions.Suppress())
+        {
+            Assert.True(ArchivePasswordQuestions.AreSuppressed);
+            await Assert.ThrowsAsync<ArchivePasswordRequiredException>(() => ReadAsync(root.Combine("a.txt")));
+        }
+        Assert.False(ArchivePasswordQuestions.AreSuppressed);
+        Assert.Empty(_prompt.Questions);
+
+        _prompt.Answer("secret");
+        Assert.Equal("a"u8.ToArray(), await ReadAsync(root.Combine("a.txt"))); // asks again outside
+        using (ArchivePasswordQuestions.Suppress())
+            Assert.Equal("привет\n"u8.ToArray(), await ReadAsync(root.Combine("привет.txt"))); // the known one fits
+        Assert.Single(_prompt.Questions);
+    }
+
     // ---- Passwords at the first read (encrypted entries) ------------------------------------------------
 
     [Fact]

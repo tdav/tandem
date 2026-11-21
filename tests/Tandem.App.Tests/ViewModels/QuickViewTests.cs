@@ -555,4 +555,30 @@ public class QuickViewTests : LanguageTestBase
         Assert.False(app.Main.Left.ShowsQuickView);
         Assert.False(app.Main.Right.ShowsQuickView);
     }
+
+    [AvaloniaFact]
+    public async Task Declined_archive_password_is_not_asked_again_until_the_folder_changes()
+    {
+        await using var app = await ArchiveApp.StartAsync();
+        await ArchiveApp.EnterAsync(app, "encrypted.zip");
+        app.Dialogs.PasswordAnswers.Enqueue(null);
+
+        var quickView = await OpenAsync(app, "a.txt");
+        Assert.Equal([("encrypted.zip", false)], app.Dialogs.PasswordRequests);
+        Cursor(app.Left, "привет.txt");
+        await quickView.IdleAsync();
+
+        Assert.Single(app.Dialogs.PasswordRequests); // the decline holds for this folder
+        Assert.Null(quickView.Viewer);
+        Assert.Equal(Loc.Format("QuickView_OpenFailed", "привет.txt",
+            Loc.Get("OperationFailed_PasswordRequired")), quickView.Message);
+
+        await app.Left.NavigateToAsync(app.Left.CurrentPath.Combine("docs"));
+        app.Dialogs.PasswordAnswers.Enqueue("secret");
+        Cursor(app.Left, "readme.txt");
+        await quickView.IdleAsync();
+
+        Assert.Equal(2, app.Dialogs.PasswordRequests.Count); // another folder: asked again
+        Assert.Equal(["hello"], quickView.Viewer?.Lines);
+    }
 }
