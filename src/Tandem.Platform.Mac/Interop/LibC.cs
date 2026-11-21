@@ -54,6 +54,22 @@ internal static unsafe partial class LibC
     [LibraryImport(LibSystem, SetLastError = true)]
     public static partial int copyfile_state_set(IntPtr state, uint flag, void* src);
 
+    // sys/xattr.h
+    public const int XATTR_NOFOLLOW = 0x0001;
+    public const int ENOATTR = 93;
+
+    /// <summary><c>ssize_t getxattr(const char *path, const char *name, void *value, size_t size, u_int32_t position,
+    /// int options)</c></summary>
+    [LibraryImport(LibSystem, StringMarshalling = StringMarshalling.Utf8, SetLastError = true)]
+    public static partial nint getxattr(string path, string name, byte[]? value, nuint size, uint position,
+        int options);
+
+    /// <summary><c>int setxattr(const char *path, const char *name, const void *value, size_t size,
+    /// u_int32_t position, int options)</c></summary>
+    [LibraryImport(LibSystem, StringMarshalling = StringMarshalling.Utf8, SetLastError = true)]
+    public static partial int setxattr(string path, string name, byte[] value, nuint size, uint position,
+        int options);
+
     // sys/stat.h: st_flags settable by the owner
     public const uint UF_IMMUTABLE = 0x00000002;
     public const uint UF_APPEND = 0x00000004;

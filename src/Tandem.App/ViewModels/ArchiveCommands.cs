@@ -315,8 +315,12 @@ public sealed class ArchiveCommands : IDisposable
             IReadOnlyList<VfsPath> alsoChanged = create || answer.SeparateFolders
                 ? [destination.Parent ?? destination, destination]
                 : [];
-            _files.StartOperation(new CopyOperation(Providers, entries, target, new CopyOptions(), _interaction,
-                _services.NativeCopy, kind: OperationKind.Unpack), answer.RunImmediately, alsoChanged);
+            var unpack = new CopyOperation(Providers, entries, target, new CopyOptions(), _interaction,
+                _services.NativeCopy, kind: OperationKind.Unpack)
+            {
+                ItemWritten = _files.Quarantine?.ForSources(entries), // the archive's mark goes with what leaves it
+            };
+            _files.StartOperation(unpack, answer.RunImmediately, alsoChanged);
         }
     }
 

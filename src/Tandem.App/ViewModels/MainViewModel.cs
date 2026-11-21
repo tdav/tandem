@@ -97,12 +97,15 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Interaction = new DialogOperationInteraction(services.Dialogs, e => services.Log.Write(e, "dialog"));
         Operations = new OperationsViewModel(services.Operations, progressWindowDelay);
         RegisterCommands();
+        var quarantine = services.Quarantine is { } mark
+            ? new QuarantineCarrier(services.Providers, mark, services.Log)
+            : null;
         Files = new FileCommands(workspace, services.Providers, services.Operations, services.Dialogs, services.Trash,
-            services.NativeCopy, Commands, Operations, Interaction, ReportFailure);
+            services.NativeCopy, Commands, Operations, Interaction, ReportFailure, quarantine);
         Drops = new DropHandler(workspace, Files);
         Shell = new ShellCommands(workspace, services.Shell, services.QuickLook, services.Dialogs, services.Windows,
             Commands, services.Providers, services.Metadata, services.Temp, ReportFailure, quickLookDelay,
-            services.NativeCopy, settings, services.Processes);
+            services.NativeCopy, settings, services.Processes, quarantine);
         ButtonBar = new ButtonBarViewModel(workspace, settings, services.Processes, services.Dialogs, ReportFailure);
         CommandLine = new CommandLineViewModel(workspace, services.Processes, workspace.HomeDirectory);
         ArchiveMounts = archiveMounts;

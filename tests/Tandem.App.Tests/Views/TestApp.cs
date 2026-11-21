@@ -50,6 +50,9 @@ internal sealed class TestApp : IAsyncDisposable
     /// <summary>Tags and owners kept in memory; never touches real files.</summary>
     public FakeMetadata Metadata { get; } = new();
 
+    /// <summary>Quarantine marks kept in memory, by path; never touches real files.</summary>
+    public FakeQuarantine Quarantine { get; } = new();
+
     public FakeVolumeService Volumes { get; }
     public string StateDirectory { get; }
     public MainViewModel Main { get; private set; } = null!;
@@ -90,7 +93,8 @@ internal sealed class TestApp : IAsyncDisposable
         ProviderCapabilities removedCapabilities = ProviderCapabilities.None, IShellIntegration? shell = null,
         IQuickLook? quickLook = null, IFileMetadataService? metadata = null,
         IReadOnlyList<IFileSystemProvider>? extraProviders = null, IProcessRunner? processes = null,
-        IReadOnlyList<IFileMounter>? mounters = null, IWindowService? windows = null)
+        IReadOnlyList<IFileMounter>? mounters = null, IWindowService? windows = null,
+        IQuarantine? quarantine = null)
     {
         dialogs ??= new ScriptedDialogs();
         var providers = new ProviderRegistry();
@@ -105,7 +109,7 @@ internal sealed class TestApp : IAsyncDisposable
             trash ?? platform,
             new InMemoryNativeCopy(fs), processes ?? platform, new OperationQueue(), new UnrestrictedAccessBroker(),
             new ErrorLog(logFile), dialogs, new TempFileStore(tempDirectory),
-            windows ?? new WindowService(dialogs, providers));
+            windows ?? new WindowService(dialogs, providers), quarantine);
     }
 
     /// <param name="progressWindowDelay">How long before the progress window appears; never, when null.</param>
@@ -128,7 +132,7 @@ internal sealed class TestApp : IAsyncDisposable
         app.Main = await Composition.StartAsync(
             Services(fs, app.Volumes, app.LogFile, Path.Combine(stateDirectory, "tmp"), app.Dialogs, app.Trash,
                 trashCapable, removedCapabilities, app.Shell, app.QuickLook, withMetadata ? app.Metadata : null,
-                extraProviders, processes, mounters),
+                extraProviders, processes, mounters, quarantine: app.Quarantine),
             stateDirectory, Home,
             autosaveDelay: (_, ct) => Task.Delay(Timeout.Infinite, ct),
             progressWindowDelay: progressWindowDelay ?? ((_, ct) => Task.Delay(Timeout.Infinite, ct)),
@@ -487,4 +491,56 @@ internal sealed class FakePlatform : IShellIntegration, IQuickLook, IFileMetadat
     public Task CopyFileMetadataAsync(string sourcePath, string destinationPath, CancellationToken ct) =>
         throw NotHere();
     public IRunningProcess Start(ProcessSpec spec) => throw NotHere();
+}
+
+/// <summary>Quarantine marks in memory, by path, with every call recorded. <see cref="SetFailure"/>, when set, is
+/// thrown by every <see cref="Set"/>.</summary>
+internal sealed class FakeQuarantine : IQuarantine
+{
+    private readonly Lock _lock = new();
+    private readonly Dictionary<string, byte[]> _marks = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _given = new(StringComparer.Ordinal);
+    private readonly List<string> _reads = [];
+
+    public Exception? SetFailure { get; set; }
+
+    public IReadOnlyList<string> Reads
+    {
+        get { lock (_lock) return _reads.ToList(); }
+    }
+
+    /// <summary>Every path with a mark, but those given with <see cref="Add"/>.</summary>
+    public IReadOnlyDictionary<string, string> Written
+    {
+        get
+        {
+            lock (_lock)
+                return _marks.Where(m => !_given.Contains(m.Key))
+                    .ToDictionary(m => m.Key, m => System.Text.Encoding.UTF8.GetString(m.Value), StringComparer.Ordinal);
+        }
+    }
+
+    public void Add(string path, string value)
+    {
+        lock (_lock)
+        {
+            _marks[path] = System.Text.Encoding.UTF8.GetBytes(value);
+            _given.Add(path);
+        }
+    }
+
+    public byte[]? Get(string path)
+    {
+        lock (_lock)
+        {
+            _reads.Add(path);
+            return _marks.GetValueOrDefault(path);
+        }
+    }
+
+    public void Set(string path, byte[] value)
+    {
+        if (SetFailure is { } failure) throw failure;
+        lock (_lock) _marks[path] = value.ToArray();
+    }
 }

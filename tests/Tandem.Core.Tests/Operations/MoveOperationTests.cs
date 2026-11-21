@@ -47,6 +47,25 @@ public sealed class MoveOperationTests
         Assert.DoesNotContain(_mem.AllPaths, p => p.EndsWith(".tandem-part", StringComparison.Ordinal) ||
                                                   p.EndsWith(".tandem-old", StringComparison.Ordinal));
 
+    [Fact]
+    public async Task ItemWritten_hears_items_copied_across_volumes_and_not_renames()
+    {
+        SeparateVolumes();
+        _mem.AddFile("/src/a.txt", "a");
+        _mem.AddFile("/src/dir/b.txt", "b");
+        _mem.AddFile("/dst/stay/c.txt", "c");
+        var heard = new List<string>();
+        var move = new MoveOperation(_providers, [Mem("/src/a.txt"), Mem("/src/dir")], Mem("/dst"),
+            new CopyOptions(), _interaction) { ItemWritten = path => heard.Add(path.Path) };
+        var rename = new MoveOperation(_providers, [Mem("/dst/stay/c.txt")], Mem("/dst"), new CopyOptions(),
+            _interaction) { ItemWritten = path => heard.Add("rename " + path.Path) };
+
+        Assert.Equal(OperationState.Completed, (await move.RunAsync()).State);
+        Assert.Equal(OperationState.Completed, (await rename.RunAsync()).State);
+
+        Assert.Equal(["/dst/a.txt", "/dst/dir", "/dst/dir/b.txt"], heard.Order(StringComparer.Ordinal));
+    }
+
     // ---- Same volume: rename ------------------------------------------------------------------------
 
     [Fact]

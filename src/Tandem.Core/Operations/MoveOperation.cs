@@ -41,6 +41,10 @@ public sealed class MoveOperation(ProviderRegistry providers, IReadOnlyList<VfsP
 
     public override VfsPath? Destination => _destinationDirectory;
 
+    /// <summary>Hears each file and each folder the move copied (as <see cref="CopyOperation.ItemWritten"/>); an
+    /// item moved by a rename keeps what it had and is not told.</summary>
+    public Action<VfsPath>? ItemWritten { get; init; }
+
     /// <summary>"{provider id}:{volume key}" for every source and the destination directory, without duplicates.</summary>
     public override async Task<IReadOnlyCollection<string>> GetVolumeKeysAsync(CancellationToken ct)
     {
@@ -67,7 +71,8 @@ public sealed class MoveOperation(ProviderRegistry providers, IReadOnlyList<VfsP
     private async Task MoveAsync(CopyPlanner planner, BatchScope batch, DeferredDeletions deferred,
         CancellationToken ct)
     {
-        var engine = new CopyEngine(planner, _providers, this, _interaction, _nativeCopy, checkSize: true);
+        var engine = new CopyEngine(planner, _providers, this, _interaction, _nativeCopy, checkSize: true,
+            ItemWritten);
         var destination = await planner.ResolveDestinationDirectoryAsync(_destinationDirectory, ct).ConfigureAwait(false);
         var targets = CopyPlanner.ResolveTargets(_sources, destination, _options.NewName);
         var defer = batch.Covers(destination);

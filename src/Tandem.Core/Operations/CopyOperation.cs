@@ -44,6 +44,11 @@ public sealed class CopyOperation(ProviderRegistry providers, IReadOnlyList<VfsP
 
     public override VfsPath? Destination => _destinationDirectory;
 
+    /// <summary>Hears each file and each folder the copy wrote (a folder it created, not one merged into; not links)
+    /// with the path it is in place at, on the operation's flow, right after that item. What it throws ends the
+    /// operation.</summary>
+    public Action<VfsPath>? ItemWritten { get; init; }
+
     /// <summary>"{provider id}:{volume key}" for every source and the destination directory, without duplicates.</summary>
     public override async Task<IReadOnlyCollection<string>> GetVolumeKeysAsync(CancellationToken ct)
     {
@@ -62,7 +67,7 @@ public sealed class CopyOperation(ProviderRegistry providers, IReadOnlyList<VfsP
     private async Task CopyAsync(BatchScope batch, CancellationToken ct)
     {
         var planner = new CopyPlanner(_providers, this, new ItemErrors(this, _interaction), _options.VerifyContent);
-        var engine = new CopyEngine(planner, _providers, this, _interaction, _nativeCopy);
+        var engine = new CopyEngine(planner, _providers, this, _interaction, _nativeCopy, itemWritten: ItemWritten);
         var destination = await planner.ResolveDestinationDirectoryAsync(_destinationDirectory, ct).ConfigureAwait(false);
         var targets = CopyPlanner.ResolveTargets(_sources, destination, _options.NewName);
         await planner.RejectTargetsOntoThemselvesAsync(targets, ct).ConfigureAwait(false);

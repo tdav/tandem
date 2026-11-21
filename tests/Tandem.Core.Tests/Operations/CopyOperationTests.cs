@@ -46,6 +46,37 @@ public sealed class CopyOperationTests
     }
 
     [Fact]
+    public async Task ItemWritten_hears_each_file_and_created_folder_in_place_but_not_merged_folders_or_skips()
+    {
+        _mem.AddFile("/src/a.txt", "a");
+        _mem.AddFile("/src/tree/inner.txt", "inner");
+        _mem.AddDirectory("/src/tree/empty");
+        _mem.AddFile("/src/merged/m.txt", "m");
+        _mem.AddFile("/src/kept.txt", "new");
+        _mem.AddDirectory("/dst/merged");
+        _mem.AddFile("/dst/kept.txt", "old");
+        await _mem.CreateSymlinkAsync(Mem("/src/link"), "/src/a.txt", Ct);
+        _interaction.OnConflict(ConflictAction.Skip);
+        var heard = new List<string>();
+        var copy = new CopyOperation(_providers,
+            [Mem("/src/a.txt"), Mem("/src/tree"), Mem("/src/merged"), Mem("/src/kept.txt"), Mem("/src/link")],
+            Mem("/dst"), new CopyOptions(), _interaction)
+        {
+            ItemWritten = path =>
+            {
+                Assert.True(_mem.Exists(path.Path)); // in place under its final name
+                heard.Add(path.Path);
+            },
+        };
+
+        var result = await copy.RunAsync();
+
+        Assert.Equal(OperationState.Completed, result.State);
+        Assert.Equal(["/dst/a.txt", "/dst/merged/m.txt", "/dst/tree", "/dst/tree/empty", "/dst/tree/inner.txt"],
+            heard.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
     public async Task Copies_file_with_content_and_mtime()
     {
         _mem.AddFile("/src/a.txt", "hello", OldTime);

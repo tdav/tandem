@@ -27,8 +27,11 @@ internal enum CopyOutcome { Copied, DirectoryCreated, DirectoryMerged, Skipped }
 /// <paramref name="checkSize"/> (used by move), a written file whose size differs from the source's, both read
 /// afresh once it is written, is an item error too, raised before the file is moved into place.</para>
 /// </summary>
+/// <para><paramref name="itemWritten"/>, when given, hears each file and each folder the engine wrote — a folder it
+/// created, not one it merged into — with the path it is in place at, right after that item (links are not told).</para>
 internal sealed class CopyEngine(CopyPlanner planner, ProviderRegistry providers, FileOperation operation,
-    IOperationInteraction interaction, INativeCopy? nativeCopy, bool checkSize = false)
+    IOperationInteraction interaction, INativeCopy? nativeCopy, bool checkSize = false,
+    Action<VfsPath>? itemWritten = null)
 {
     private const int BufferSize = 1024 * 1024;
 
@@ -64,6 +67,9 @@ internal sealed class CopyEngine(CopyPlanner planner, ProviderRegistry providers
                 (outcomes[i], writtenTo) = await CopyItemAsync(item, ct).ConfigureAwait(false);
                 if (outcomes[i] == CopyOutcome.Skipped && item.Source.Kind == EntryKind.Directory)
                     skippedDirectory = item.Source.Path;
+                if (outcomes[i] is CopyOutcome.Copied or CopyOutcome.DirectoryCreated &&
+                    item.Source.Kind != EntryKind.Symlink)
+                    itemWritten?.Invoke(writtenTo);
             }
             if (itemDone is not null) await itemDone(item, outcomes[i], writtenTo).ConfigureAwait(false);
         }

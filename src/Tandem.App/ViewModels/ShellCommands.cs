@@ -55,6 +55,7 @@ public sealed class ShellCommands : IDisposable
     private readonly ProviderRegistry _providers;
     private readonly IFileMetadataService? _metadata;
     private readonly TempFileStore _temp;
+    private readonly QuarantineCarrier? _quarantine;
     private readonly Action<Exception> _reportFailure;
     private readonly Func<TimeSpan, CancellationToken, Task> _delay;
     private readonly List<PanelViewModel> _watched = [];
@@ -76,8 +77,9 @@ public sealed class ShellCommands : IDisposable
         IDialogService dialogs, IWindowService windows, CommandRegistry commands, ProviderRegistry providers, IFileMetadataService? metadata,
         TempFileStore temp, Action<Exception> reportFailure,
         Func<TimeSpan, CancellationToken, Task>? quickLookDelay = null, INativeCopy? nativeCopy = null,
-        SettingsService? settings = null, IProcessRunner? processes = null)
+        SettingsService? settings = null, IProcessRunner? processes = null, QuarantineCarrier? quarantine = null)
     {
+        _quarantine = quarantine;
         _nativeCopy = nativeCopy;
         _settings = settings;
         _processes = processes;
@@ -287,8 +289,13 @@ public sealed class ShellCommands : IDisposable
         string copy;
         try
         {
-            var (temp, provider) = (_temp, _providers.For(entry.Path));
-            copy = await Task.Run(() => temp.MaterializeAsync(provider, entry.Path, null, CancellationToken.None));
+            var (temp, provider, quarantine) = (_temp, _providers.For(entry.Path), _quarantine);
+            copy = await Task.Run(async () =>
+            {
+                var made = await temp.MaterializeAsync(provider, entry.Path, null, CancellationToken.None);
+                quarantine?.MarkCopy(entry.Path, made); // what came from a downloaded archive stays marked
+                return made;
+            });
         }
         catch (IOException e)
         {

@@ -39,6 +39,10 @@ public sealed class FileCommands : IDisposable
     private readonly IOperationInteraction _interaction;
     private readonly Action<Exception> _reportFailure;
     private readonly List<Task> _pending = [];
+
+    /// <summary>Marks what copies and moves take out of an archive with the archive's quarantine mark; null when the
+    /// platform keeps no such mark. Unpacking uses it too.</summary>
+    public QuarantineCarrier? Quarantine { get; }
     private readonly List<PanelViewModel> _watched = [];
     private bool[] _available = [];
     private InlineRenameViewModel? _rename;
@@ -53,8 +57,10 @@ public sealed class FileCommands : IDisposable
 
     public FileCommands(WorkspaceViewModel workspace, ProviderRegistry providers, OperationQueue queue,
         IDialogService dialogs, ITrash? trash, INativeCopy? nativeCopy, CommandRegistry commands,
-        OperationsViewModel operations, IOperationInteraction interaction, Action<Exception> reportFailure)
+        OperationsViewModel operations, IOperationInteraction interaction, Action<Exception> reportFailure,
+        QuarantineCarrier? quarantine = null)
     {
+        Quarantine = quarantine;
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
         _providers = providers ?? throw new ArgumentNullException(nameof(providers));
         _queue = queue ?? throw new ArgumentNullException(nameof(queue));
@@ -287,9 +293,16 @@ public sealed class FileCommands : IDisposable
             : [];
 
         var options = new CopyOptions(answer.VerifyContent, target.NewName);
+        var itemWritten = Quarantine?.ForSources(sources);
         FileOperation operation = move
             ? new MoveOperation(_providers, sources, target.Directory, options, _interaction, _nativeCopy)
-            : new CopyOperation(_providers, sources, target.Directory, options, _interaction, _nativeCopy);
+            {
+                ItemWritten = itemWritten,
+            }
+            : new CopyOperation(_providers, sources, target.Directory, options, _interaction, _nativeCopy)
+            {
+                ItemWritten = itemWritten,
+            };
         Start(operation, answer.RunImmediately, alsoChanged: alsoChanged);
         return true;
     }
