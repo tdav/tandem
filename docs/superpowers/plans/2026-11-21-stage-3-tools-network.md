@@ -28,13 +28,14 @@
 - Название, иконки и оформление Total Commander не используются.
 - Код, не являющийся разметкой, пишется через тест: сначала падающий тест, затем реализация.
 - API Avalonia 12, SSH.NET 2026, FluentFTP 55, DiffPlex сверять с документацией (Context7, сайты проектов) и с самой сборкой, а не по памяти.
+- Исполнитель задачи останавливается на её коммите: рабочие копии создаёт, ветви сливает и приложение устанавливает и запускает ведущий (контролёр), не исполнитель. Исполнитель не запускает окно приложения (`open dist/Tandem.app`); пробный запуск внутри `build/verify-app.sh` разрешён.
 - Коммит после каждой задачи; сообщение на английском, заканчивается строкой `Co-Authored-By` той модели, которая сделала коммит (для Opus 5.5 — `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`). Не пушить.
 
 Новые для этапа 3:
 
 - Новые пакеты (и только они): `SSH.NET` 2026.0.1, `FluentFTP` 55.1.0 и `XTerm.NET` 3.0.3 (разбор управляющих последовательностей терминала; чисто управляемый, без зависимостей) — только в `Tandem.Net`; `System.IO.Hashing` 11.0.0 и `DiffPlex` 1.9.0 — только в `Tandem.Core` (оба чисто управляемые, без кода платформы). Библиотеки приходят только через `dotnet restore` объявленных пакетов (вместе с их зависимостями); ничего другого не скачивается — ни образов серверов, ни программ, ни тестовых данных.
 - Новый проект `src/Tandem.Net` зависит только от `Tandem.Core`, SSH.NET, FluentFTP и XTerm.NET; `Tandem.App` ссылается на него. Новый тестовый проект `tests/Tandem.Net.Tests`.
-- **Серверы — источники, как архивы.** В `PanelViewModel`, `SideViewModel`, `FileCommands`, `ShellCommands`, `Tandem.Core/Operations` нет проверок «это сервер», имён типов из `Tandem.Net` и строк `"net:"`: только `ProviderCapabilities`, `IHostedProvider`, `VfsConnectionLostException` и прочие типы ядра. Знать о подключениях могут только `NetCommands`, диалоги подключений, окно консоли и `Composition`.
+- **Серверы — источники, как архивы.** В `PanelViewModel`, `SideViewModel`, `FileCommands`, `ShellCommands`, `Tandem.Core/Operations` нет проверок «это сервер», имён типов из `Tandem.Net` и строк `"net:"`: только `ProviderCapabilities`, `IHostedProvider`, `VfsConnectionLostException` и прочие типы ядра. Знать о подключениях могут только файлы `ViewModels/Net/**`, `Views/Net/**`, `Services/INetDialogs.cs`, `NetDialogs.cs`, `DialogNetPrompts.cs`, `ToolWindows.Console.cs`, `ITerminalClipboard.cs`, `SidebarView.axaml(.cs)` и `Composition.cs` (этот же список — в проверке `grep` задачи 24).
 - **Тесты не трогают систему.** Запрещено: менять системные настройки (в том числе включать «Удалённый вход»), использовать Docker, скачивать что-либо, обращаться к настоящей связке ключей, к настоящей домашней папке и `~/Library`, к адресам вне `127.0.0.1`. Сетевые тесты слушают только `127.0.0.1` на порту, выданном системой (порт 0). Всё, что тест пишет на диск, лежит во временной папке (`TempDir`). Проверки с настоящим сервером и настоящей связкой ключей включаются только переменными окружения (раздел «Что проверяется автоматически») и без них сообщают `Skipped` с причиной.
 - Пароли и ключевые фразы: только в связке ключей (через `ISecretStore`) и в памяти на время работы. Никогда — в `connections.json`, `settings.json`, `state.json`, журнале, временной папке, тексте исключений, заголовках окон и строке пути (`sftp://user@host/…` без пароля).
 - Все передачи по FTP — двоичные (`TYPE I`). Подключение FTPS никогда молча не понижается до открытого FTP. Ключ узла SFTP и сертификат FTPS, не прошедший системную проверку, подтверждает пользователь; подтверждённые отпечатки хранятся в `known-hosts.json` (не секрет).
@@ -62,11 +63,13 @@
 | Фаза | Где | Задачи | Правило |
 |---|---|---|---|
 | A. Подготовка | ветка `main`, по порядку | 1 → 2 → 3 | Создаёт всё общее: договоры ядра, пакеты и проекты, идентификаторы команд, сочетания, меню, ключи ресурсов, заготовки классов. После неё общие файлы заморожены |
-| B. Направления | три рабочие копии от `main` после задачи 3 | **tools-a:** 4 → 5, 6, 7 · **tools-b:** 8, 9 → 10, 11 → 12 → 13 · **net:** 14 → {15 → 16} ∥ {17} ∥ {18 → 19 → 20 → 21} ∥ {27, 28 → 29} → 22, 23 | Направления не зависят друг от друга и не трогают чужие файлы |
+| B. Направления | три рабочие копии от `main` после задачи 3 | **tools-a:** 4 → 5 → 6 → 7 · **tools-b:** 8 → 9 → 10 → 11 → 12 → 13 · **net:** 14 → {15 → 16} ∥ {17} ∥ {18 → 19 → 20 → 21} ∥ {27} → 22 → 23 → 28 → 29 | Направления не зависят друг от друга и не трогают чужие файлы. Внутри одной рабочей копии задачи идут строго по очереди (у них общий раздел ресурсов) |
 | C. Совместная работа | `main` после слияния трёх направлений | 24, 25 | Сквозные сценарии «архив → сервер», «синхронизация диск ↔ сервер», «F4 на сервере» |
 | D. Завершение | `main` | 26 | Tandem.app 0.3.0, список приёмки, README |
 
-Направление **net** внутри себя делится ещё на три ветви, которые после задачи 14 можно вести одновременно: **net-ftp** (15, 16), **net-sftp** (17), **net-app** (18, 19, 20, 21). Задачи 15, 18 и 19 от задачи 14 не зависят и могут начаться сразу после фазы A. Четвёртая ветвь — **net-ssh** (SSH-консоль: 27, 28, 29): задача 27 зависит только от фазы A, задача 28 — от 17 и 20, задача 29 — от 21, 27 и 28; ветвь не задерживает остальные и сливается в `net` последней.
+Направление **net** внутри себя делится ещё на три ветви, которые после задачи 14 можно вести одновременно: **net-ftp** (15, 16), **net-sftp** (17), **net-app** (18, 19, 20, 21). Задачи 15, 18 и 19 от задачи 14 не зависят и могут начаться сразу после фазы A. Четвёртая ветвь — **net-ssh**: в ней одна задача 27 (ядро эмулятора терминала), она зависит только от фазы A и идёт одновременно со всеми. Когда ведущий слил net-ftp, net-sftp, net-app и net-ssh в `net`, на ветке `net` по очереди идут задачи 22 → 23 → 28 → 29 (сборка сети, проверки на настоящем сервере, сеанс оболочки SSH, окно консоли): задаче 28 нужны и 17, и 20, которые до слияния лежат в разных ветвях, а задача 29 правит `Composition.cs` после задачи 22.
+
+Одновременно, таким образом, идут не больше шести рабочих копий: tools-a, tools-b, net-ftp, net-sftp, net-app, net-ssh. Параллельно выполняются только задачи **разных** рабочих копий; у каждой рабочей копии, которая пишет строки интерфейса, свой раздел ресурсов (tools-a, tools-b, net — для net-app и задач на ветке `net`, net-ssh — для задач 27–29: задача 27 строк не добавляет, а 28 и 29 идут уже после net-app, поэтому раздел у них отдельный лишь для порядка).
 
 Зависимости каждой задачи указаны в её заголовке строкой **Направление / Зависит от**.
 
@@ -76,14 +79,15 @@
 |---|---|---|---|
 | `src/Tandem.Core/Tools/Rename/**`, `Tools/Checksums/**`, `Tools/FolderSizeCalculator.cs` | да | — | — |
 | `src/Tandem.Core/Tools/Compare/**`, `Tools/Sync/**` | — | да | — |
-| `src/Tandem.Net/**`, `tests/Tandem.Net.Tests/**`, `src/Tandem.Platform.Mac/**` | — | — | да |
+| `src/Tandem.Net/**`, `tests/Tandem.Net.Tests/**`, `src/Tandem.Platform.Mac/**`, `tests/Tandem.Platform.Mac.Tests/**` | — | — | да |
 | `ViewModels/Tools/ToolsCommands.Rename.cs`, `.Checksums.cs`, `.FolderSizes.cs`; `Services/ToolWindows.Rename.cs`, `.Checksums.cs` | да | — | — |
 | `ViewModels/Tools/ToolsCommands.CompareDirs.cs`, `.CompareFiles.cs`, `.Sync.cs`; `Services/ToolWindows.Compare.cs`, `.Sync.cs` | — | да | — |
 | `PanelViewModel*.cs`, `EntryRowViewModel.cs` | да (задача 7) | — | — |
 | `Views/Dialogs/ConflictDialog.cs` (диалог конфликта; задача 3 выносит его в свой файл), `App.axaml` | — | да (задача 10) | — |
-| `ViewModels/Net/**`, `Views/Net/**`, `Services/INetDialogs.cs`, `NetDialogs.cs`, `ShellCommands.cs`, `Editing/**`, `SidebarView.axaml*`, `Composition.cs` (в том числе запись `AppServices`), `IDialogService.cs`, `DialogService.cs`, `Views/Dialogs/ChoiceDialogs.cs`, `tests/…/Views/TestApp.cs`, `ScriptedDialogs.cs`, `Tandem.App.Tests.csproj` | — | — | да |
-| `src/Tandem.Net/Terminal/**`, `src/Tandem.Net/Ssh/**`, `ViewModels/Net/Terminal*.cs`, `ConsolePickViewModel.cs`, `NetCommands.Console.cs`, `Views/Net/Terminal*`, `Services/ToolWindows.Console.cs`, `ITerminalClipboard.cs` | — | — | да (только ветвь net-ssh) |
-| `Resources/Strings.resx`, `Strings.ru.resx` | свой раздел | свой раздел | свой раздел (у net-ssh — отдельный) |
+| `ViewModels/Net/**`, `Views/Net/**`, `Services/INetDialogs.cs`, `NetDialogs.cs`, `ShellCommands.cs`, `ViewModels/Editing/**`, `Views/Editing/**`, `Services/WindowService.cs`, `SidebarView.axaml*`, `Composition.cs` (в том числе запись `AppServices`), `IDialogService.cs`, `DialogService.cs`, `Views/Dialogs/ChoiceDialogs.cs`, `tests/…/Views/TestApp.cs`, `ScriptedDialogs.cs`, `Tandem.App.Tests.csproj` | — | — | да |
+| `src/Tandem.Net/Terminal/**`, `src/Tandem.Net/Ssh/**`, `ViewModels/Net/Terminal*.cs`, `ConsolePickViewModel.cs`, `NetCommands.Console.cs`, `Views/Net/Terminal*`, `Services/ToolWindows.Console.cs`, `ITerminalClipboard.cs`; после задачи 22 — также `Composition.cs`, `tests/…/Views/TestApp.cs`, `Tandem.App.Tests.csproj` | — | — | да (только задачи 27–29) |
+| `tests/Tandem.App.Tests/**` — **только новые файлы** своего направления (существующие тестовые файлы в фазе B не правятся; исключения — `TestApp.cs`, `ScriptedDialogs.cs`, `Tandem.App.Tests.csproj` у net) | да | да | да |
+| `Resources/Strings.resx`, `Strings.ru.resx` | свой раздел | свой раздел | свой раздел (у задач 27–29 — отдельный) |
 
 **Общие файлы с правилом «только добавлять».** Единственные файлы, которые в фазе B правят все направления, — два файла ресурсов. Задача 3 ставит в конце каждого из них четыре раздела, разделённые неизменяемыми строками-комментариями:
 
@@ -101,9 +105,11 @@
   <!-- stage3:net-ssh end -->
 ```
 
-Направление добавляет ключи только между своими `begin` и `end`, только со своими приставками, и не трогает ни одной строки вне своего раздела. Всё остальное общее (`CommandIds`, `KeyMap`, `MainMenu`, `MainViewModel`, `IToolWindows`, `ToolsCommands.cs`, `ToolWindows.cs`, `Directory.Packages.props`, `Tandem.slnx`, перечисления `OperationKind` и `SkipReason`, `OperationTexts`, тесты полного списка команд и сочетаний) после задачи 3 **в фазе B не меняется никем**. Если направлению не хватает чего-то в замороженном файле — остановиться и доложить, а не править.
+Правило одно: **направление добавляет ключи только между своими `begin` и `end`** и не трогает ни одной строки вне своего раздела. Приставки в скобках — обычные имена ключей направления; кроме них в своём разделе разрешены: ключи `<ИмяПеречисления>_<Значение>` для перечислений, которые направление само создаёт и показывает через `Loc.Enum` (`RenameStatus_*`, `CaseChange_*`, `ChecksumAlgorithm_*`, `VerifyStatus_*`, `CompareMode_*`, `SyncState_*`, `SyncAction_*`, `NetProtocol_*`, `NetAuth_*`, `TerminalState_*` и т. п.), и ключи, имя которых задаёт существующий код: `EditorSaveQuestion_UploadToSource`, `EditorSaveQuestion_OverwriteChangedAtSource` и подписи их кнопок `Button_Upload`, `Button_OverwriteOnServer` (задача 19; диалог редактора собирает ключ как `"EditorSaveQuestion_" + значение`). Существующая теория `CoreEnums` в `LocalizationTests` в фазе B не дополняется: полноту подписей своих перечислений каждое направление проверяет в своём новом тестовом файле (`Every_member_of_<перечисление>_has_text_in_both_languages`). Любой знак, который видит пользователь («…», «≥», «→»), — тоже строка ресурсов.
 
-**Слияние.** Направления сливаются в `main` по одному (tools-a, tools-b, net; порядок не важен); после каждого слияния — `dotnet build Tandem.slnx` без предупреждений и `dotnet test Tandem.slnx` полностью. Конфликт слияния в любом файле, кроме двух файлов ресурсов, означает нарушение таблицы выше: разобраться, какое направление вышло за свои файлы.
+Всё остальное общее после задачи 3 **в фазе B не меняется никем**: `CommandIds`, `KeyMap`, `MainMenu`, `MainViewModel`, `SideViewModel`, `FileCommands`, `IToolWindows`, `ToolsCommands.cs`, `ToolWindows.cs`, `NetCommands.cs` — кроме направления net, `ViewModels/Dialogs/SimpleDialogViewModels.cs`, `Directory.Packages.props`, `Tandem.slnx`, перечисления `OperationKind`, `SkipReason` и `RejectionReason`, `SafeReplace`, `NameKey`, `OperationTexts`, общие тестовые подделки и наборы (`ProviderContractTests.cs`, `DroppingProvider.cs`, `FakeSecretStore.cs`, `ScriptedToolWindows.cs`), все существующие тестовые файлы, включая тесты полного списка команд и сочетаний. Если направлению не хватает чего-то в замороженном файле — остановиться и доложить, а не править.
+
+**Слияние** выполняет ведущий, не исполнители задач. Направления сливаются в `main` по одному (tools-a, tools-b, net; порядок не важен); после каждого слияния — `dotnet build Tandem.slnx` без предупреждений и `dotnet test Tandem.slnx` полностью. Конфликт слияния в любом файле, кроме двух файлов ресурсов, означает нарушение таблицы выше: разобраться, какое направление вышло за свои файлы.
 
 ## Сочетания по умолчанию, закреплённые за направлениями
 
@@ -191,8 +197,8 @@ docs/checklists/stage-3.md
 **Направление:** подготовка (main). **Зависит от:** —.
 
 **Files:**
-- Create: `src/Tandem.Core/Platform/ISecretStore.cs`, `tests/Tandem.Core.Tests/Platform/FakeSecretStore.cs`, `tests/Tandem.Core.Tests/Vfs/DroppingProvider.cs` (связать в `Tandem.App.Tests.csproj`, как уже связаны другие общие подделки)
-- Modify: `src/Tandem.Core/Vfs/IFileSystemProvider.cs` (`ProviderCapabilities`), `Vfs/VfsExceptions.cs`, `Operations/FileOperation.cs` (`OperationKind`), `Operations/OperationProgress.cs` (`SkipReason`), `src/Tandem.App/Services/OperationTexts.cs`, `IDialogService.cs`, `DialogService.cs`, `DialogOperationInteraction.cs`, `Views/Dialogs/ChoiceDialogs.cs` (диалог ошибки), `ViewModels/PanelViewModel.cs` (`PanelErrorKind`, перевод ошибки), `SideViewModel.cs`, `Views/PanelView.axaml`, оба файла ресурсов, `tests/Tandem.App.Tests/Views/ScriptedDialogs.cs`
+- Create: `src/Tandem.Core/Platform/ISecretStore.cs`, `src/Tandem.Core/Tools/NameKey.cs`, `tests/Tandem.Core.Tests/Tools/NameKeyTests.cs`, `tests/Tandem.Core.Tests/Platform/FakeSecretStore.cs`, `tests/Tandem.Core.Tests/Vfs/DroppingProvider.cs` (связать в `Tandem.App.Tests.csproj`, как уже связаны другие общие подделки)
+- Modify: `src/Tandem.Core/Vfs/IFileSystemProvider.cs` (`ProviderCapabilities`), `Vfs/VfsExceptions.cs`, `Operations/FileOperation.cs` (`OperationKind`), `Operations/OperationProgress.cs` (`SkipReason`), `Operations/SafeReplace.cs` (служебные имена), `tests/Tandem.Core.Tests/Vfs/ProviderContractTests.cs` (`StoresModifiedTime`), `tests/Tandem.App.Tests/Tandem.App.Tests.csproj` (связать `DroppingProvider.cs`), `src/Tandem.App/Services/OperationTexts.cs`, `IDialogService.cs`, `DialogService.cs`, `DialogOperationInteraction.cs`, `Views/Dialogs/ChoiceDialogs.cs` (диалог ошибки), `ViewModels/PanelViewModel.cs` (`PanelErrorKind`, перевод ошибки), `SideViewModel.cs`, `Views/PanelView.axaml`, оба файла ресурсов, `tests/Tandem.App.Tests/Views/ScriptedDialogs.cs`
 - Test: `tests/Tandem.Core.Tests/Operations/ConnectionLostTests.cs`, `tests/Tandem.App.Tests/Services/OperationTextsTests.cs`, `ViewModels/DialogOperationInteractionTests.cs`, `ViewModels/PanelListingTests.cs`, `Views/DialogWindowTests.cs`, `LocalizationTests.cs`
 
 **Interfaces:**
@@ -220,7 +226,20 @@ namespace Tandem.Core.Operations;
 public enum OperationKind { Copy, Move, Delete, Pack, Unpack, Rename, Sync, ChecksumCreate, ChecksumVerify }
 public enum SkipReason { /* прежние шесть */ …,
     ChangedSinceCompared,   // элемент изменился после сравнения или после переименования: не тронут
-    NameTaken }             // нужное имя уже занято другим элементом: не тронут
+    NameTaken,              // нужное имя уже занято другим элементом: не тронут
+    LinkSkipped }           // символическая ссылка: инструмент по ссылкам не ходит и её не обрабатывает
+public static class SafeReplace {   // добавить к существующему
+    public const string RenameSuffix = ".tandem-rename";              // служебное имя группового переименования: .{guid}.tandem-rename
+    /// Имя вида ".…​.tandem-part", ".…​.tandem-old" или ".…​.tandem-rename": остаток прерванной операции, а не файл пользователя.
+    public static bool IsServiceName(string name);
+}
+
+namespace Tandem.Core.Tools;
+/// Одно место для вопроса «одно ли это имя». Форма Юникода не важна нигде; регистр — см. методы.
+public static class NameKey {
+    public static string Of(string name);                             // Normalize(FormC); ключи сравниваются Ordinal: регистр важен (сравнение папок, синхронизация)
+    public static bool SameOnMacDisk(string a, string b);             // FormC + OrdinalIgnoreCase: как на диске macOS (занятость имени при переименовании)
+}
 
 namespace Tandem.App.Services;
 public interface IDialogService {   // изменён один метод
@@ -231,12 +250,14 @@ public enum PanelErrorKind { AccessDenied, NotFound, Other, ConnectionLost }
 public sealed partial class SideViewModel { public bool IsConnectionLost { get; } public IRelayCommand ReconnectCommand { get; } }
 ```
 
-Тестовые подделки: `FakeSecretStore` (словарь в памяти; `Calls` — журнал вызовов; `Fail` — исключение для следующих вызовов) и `DroppingProvider` — обёртка над `InMemoryFileSystem` с другим `Id`: при `Connected == false` каждый вызов бросает `VfsConnectionLostException`; `ReconnectOnNextCall` возвращает связь при следующем вызове; `DropAfterBytes` обрывает открытый поток записи или чтения после указанного числа байтов; `Capabilities` задаются (по умолчанию — как у обёрнутого источника).
+Тестовые подделки: `FakeSecretStore` (словарь в памяти; `Calls` — журнал вызовов; `Fail` — исключение для следующих вызовов) и `DroppingProvider` — обёртка над `InMemoryFileSystem` с другим `Id`: при `Connected == false` каждый вызов бросает `VfsConnectionLostException`; `ReconnectOnNextCall` возвращает связь при следующем вызове; `Reads` — список путей, открытых на чтение; `DropAfterBytes` обрывает открытый поток записи или чтения после указанного числа байтов; `Capabilities` задаются (по умолчанию — как у обёрнутого источника).
 
 Решения:
 - `OperationTexts.KindOf`: `VfsConnectionLostException` → `"ConnectionLost"` (ветка стоит выше `IOException`). Тексты: `OperationError_ConnectionLost` («Связь потеряна при работе с {0}.» / «The connection was lost while working with {0}.»), `OperationFailed_ConnectionLost`.
 - `DialogOperationInteraction` передаёт в диалог `connectionLost: error is VfsConnectionLostException`. Диалог ошибки тогда подписывает кнопку повтора `Button_ReconnectAndRetry` («Переподключиться и повторить» / «Reconnect and Retry»); остальные кнопки прежние. Повтор — это обычный `ErrorAction.Retry`: движок не меняется, заново подключается сам источник.
 - Панель: `VfsConnectionLostException` при чтении папки → `PanelErrorKind.ConnectionLost`, текст `Panel_ConnectionLost`. Панель остаётся на своём пути (обновление при этой ошибке **не** поднимается к предкам, в отличие от `NotFound`). `SideViewModel.IsConnectionLost` показывает в `PanelView` кнопку `Panel_Reconnect` («Переподключиться»), которая вызывает `Panel.RefreshAsync()`; Cmd+R делает то же.
+- `ProviderContractTests` получает `protected virtual bool StoresModifiedTime => true`; факт `SetModified_is_visible_in_GetEntry` при `false` пропускается с причиной (сервер FTP без `MFMT` время не хранит). Существующие наследники не меняются.
+- Подпись `SkipReason_LinkSkipped` — «символическая ссылка пропущена» / «symbolic link skipped».
 - Подписи новых значений перечислений (`OperationKind_Rename` «Переименование», `OperationKind_Sync` «Синхронизация», `OperationKind_ChecksumCreate` «Подсчёт контрольных сумм», `OperationKind_ChecksumVerify` «Проверка контрольных сумм», `SkipReason_ChangedSinceCompared` «изменён после сравнения», `SkipReason_NameTaken` «имя уже занято») — в обоих языках.
 
 - [ ] **Step 1:** Run `dotnet test Tandem.slnx` на чистом `main` → все тесты PASS; записать их число в отчёт задачи (точка отсчёта этапа).
@@ -257,6 +278,13 @@ public async Task Reconnect_command_reloads_the_folder_when_the_provider_is_back
 // ConnectionLostTests (Core: CopyOperation в DroppingProvider, ScriptedInteraction отвечает Retry)
 public async Task Copy_retried_after_lost_connection_completes_and_leaves_no_part_file()   // RF1 на уровне движка
 public async Task Copy_aborted_after_lost_connection_keeps_the_old_destination_file()       // прежнее содержимое под настоящим именем
+// NameKeyTests
+public void Composed_and_decomposed_spellings_have_one_key_and_letter_case_has_two()
+public void SameOnMacDisk_ignores_case_and_normalization()
+// SafeReplaceTests
+[Theory] public void Service_names_are_recognised(string name, bool expected)   // ".a.txt.tandem-part", ".a.tandem-old", ".0f…​.tandem-rename" → true; "a.tandem-part" (без точки в начале), "notes.txt" → false
+// контракт: в InMemoryContractTests добавить наследника с StoresModifiedTime == false поверх источника, который не хранит время, —
+public async Task Contract_suite_skips_the_modified_time_fact_for_a_provider_that_does_not_store_it()
 // LocalizationTests: новые значения OperationKind и SkipReason покрыты существующей теорией CoreEnums
 ```
 
@@ -304,14 +332,14 @@ public void Encrypted_key_without_or_with_wrong_passphrase_fails_recognisably() 
 public async Task Connect_to_a_closed_local_port_fails_within_the_timeout()   // 127.0.0.1, порт свободный и закрытый; тип исключения записать
 public async Task Connect_to_a_listener_that_hangs_up_fails_recognisably()    // TcpListener на 127.0.0.1 принимает и закрывает
 public async Task Connect_honours_cancellation()
-public void Api_shape_compiles()   // не выполняется против сервера: метод, который ссылается на SftpClient.ConnectAsync, ListDirectoryAsync,
+// не тест: статический класс SshNetApiShape в том же файле, который никто не вызывает, — его компилирует сборка. Он ссылается на SftpClient.ConnectAsync, ListDirectoryAsync,
                                    // OpenAsync, CreateDirectoryAsync, DeleteFileAsync, DeleteDirectoryAsync, RenameFileAsync, GetAttributesAsync,
                                    // SetAttributes, HostKeyReceived (FingerPrintSHA256, HostKeyName), KeepAliveInterval, OperationTimeout;
                                    // записать: чем получить сведения о самой ссылке (lstat), чем — о её цели, есть ли открытые чтение цели ссылки
                                    // и создание ссылки, умеет ли поток SftpFileStream CanSeek
 // SshNetProbeTests (для консоли)
-public void Shell_api_shape_compiles()   // SshClient.CreateShellStream(тип терминала, столбцы, строки, …) и смена размера окна открытого канала
-                                         // (записать точное имя вызова); если смены размера нет — записать в отчёт, задача 28 остановится
+public void Shell_stream_can_be_resized()   // отражением: у типа потока оболочки SSH.NET есть открытый метод смены размера окна (имя записать в комментарии);
+                                            // SshClient.CreateShellStream(тип терминала, столбцы, строки, …) — в SshNetApiShape; если смены размера нет — записать в отчёт, задача 28 остановится
 // XTermNetProbeTests (XTerm.NET 3.0.3; записать в комментариях, какими вызовами это делается)
 public void Feeds_bytes_and_exposes_cells_with_text_colours_and_attributes()
 public void Tracks_cursor_alternate_screen_scroll_region_and_scrollback()
@@ -319,17 +347,18 @@ public void Handles_utf8_split_across_writes_and_wide_characters()
 public void Reports_title_changes_and_terminal_replies()                      // OSC 0/2; ответ на ESC[6n
 public void Exposes_application_cursor_keys_and_bracketed_paste_modes()
 public void Resizes()
-public void Package_is_pure_managed()   // в папке пакета нет runtimes/ и native/; нет зависимостей
+public void Package_is_pure_managed()   // по выводу сборки теста, а не по ~/.nuget: рядом со сборкой XTerm.NET нет папки runtimes/ с её файлами,
+                                        // сборка не ссылается на другие сборки, кроме системных
 // FluentFtpProbeTests
 public async Task Connect_to_a_closed_local_port_fails_within_the_timeout()   // тип исключения записать
-public void Api_shape_compiles()   // AsyncFtpClient: Connect, GetListing, GetObjectInfo, OpenRead, OpenWrite, GetReply, Rename, DeleteFile,
+// не тест: статический класс FluentFtpApiShape (как SshNetApiShape) — AsyncFtpClient: Connect, GetListing, GetObjectInfo, OpenRead, OpenWrite, GetReply, Rename, DeleteFile,
                                    // DeleteDirectory, CreateDirectory, SetModifiedTime, Chmod; FtpConfig: EncryptionMode, DataConnectionType,
                                    // ConnectTimeout, ReadTimeout, DataConnectionConnectTimeout, DataConnectionReadTimeout, ValidateCertificate
 ```
 
 - [ ] **Step 2:** Run `dotnet test tests/Tandem.Net.Tests` → FAIL (проекта нет).
 - [ ] **Step 3:** Добавить пакеты и проекты, создать образцы ключей, написать пробы по документации версий из заголовка плана. **Если пакет не восстанавливается под `net11.0`, тянет код платформы, которого нет для `osx-arm64`, или проба показывает, что библиотека не умеет нужного (асинхронные вызовы с отменой, чтение ключа OpenSSH ed25519, выравнивание строк бок о бок), — остановиться и доложить, не подменяя библиотеку.** Для XTerm.NET (пакет собран под `net10.0`, выпущен в ноябре 2026 г., лицензия MIT): если он не восстанавливается, тянет код платформы или не проходит свои пробы — записать в отчёт и остановиться; консоль тогда делается на собственном эмуляторе (см. задачу 27), остальной этап от этого не зависит. Исключения из правила: если SSH.NET не даёт открыто прочитать цель ссылки или создать ссылку — записать это в отчёт, задача 17 тогда объявляет SFTP без возможности `Symlinks`; если второй тест времени DiffPlex не укладывается — записать, задача 9 тогда ограничивает текстовое сравнение числом строк.
-- [ ] **Step 4:** Run `dotnet build Tandem.slnx && dotnet test Tandem.slnx` → 0 предупреждений, всё PASS. Run `ls ~/.nuget/packages | grep -i -E "ssh.net|fluentftp|diffplex|system.io.hashing|xterm.net"` → пять пакетов; версии совпадают с планом.
+- [ ] **Step 4:** Run `dotnet build Tandem.slnx && dotnet test Tandem.slnx` → 0 предупреждений, всё PASS. Run `ls ~/.nuget/packages | grep -i -E "ssh.net|fluentftp|diffplex|system.io.hashing|xterm.net"` → пять пакетов; версии совпадают с планом; `ls ~/.nuget/packages/xterm.net/3.0.3` не показывает `runtimes` и `native` (разовая проверка в командной строке, не тест).
 - [ ] **Step 5:** Commit: `feat(net): Tandem.Net project, stage 3 packages and library probes`.
 
 ---
@@ -341,10 +370,10 @@ public void Api_shape_compiles()   // AsyncFtpClient: Connect, GetListing, GetOb
 **Направление:** подготовка (main). **Зависит от:** 1, 2.
 
 **Files:**
-- Modify (ещё): `src/Tandem.App/App.axaml` (цвета консоли)
+- Modify (ещё): `src/Tandem.App/App.axaml` (цвета консоли), `ViewModels/SideViewModel.cs` и `PanelViewModel.cs` (сообщение в строке состояния), `tests/Tandem.App.Tests/ViewModels/MainViewModelTests.cs`
 - Create: `src/Tandem.App/ViewModels/Tools/ToolsCommands.cs`, `ViewModels/Net/NetCommands.cs`, `Services/IToolWindows.cs`, `Services/ToolWindows.cs`, `Views/Dialogs/ConflictDialog.cs` (класс `ConflictDialog` переносится сюда из `ChoiceDialogs.cs` без изменений — чтобы направления tools-b и net не правили один файл), `tests/Tandem.App.Tests/Views/ScriptedToolWindows.cs`
 - Modify: `Commands/CommandIds.cs`, `Commands/KeyMap.cs`, `Views/MainMenu.cs`, `ViewModels/MainViewModel.cs`, `ViewModels/PanelViewModel.Selection.cs`, `Composition.cs` (`AppServices.ToolWindows`), `Services/IDialogService.cs`, `DialogService.cs`, `Views/Dialogs/ChoiceDialogs.cs` (вынос `ConflictDialog`), `Views/MainWindow.axaml.cs` (закрытие окон инструментов при выходе), оба файла ресурсов, `tests/…/Views/TestApp.cs`, `ScriptedDialogs.cs`
-- Test: `tests/Tandem.App.Tests/Commands/KeyMapTests.cs`, `CommandRegistryTests.cs`, `KeyChordRulesTests.cs`, `LocalizationTests.cs`, `ViewModels/PanelSelectionTests.cs`, `Views/MainWindowTests.cs`
+- Test: `tests/Tandem.App.Tests/Commands/KeyMapTests.cs`, `CommandRegistryTests.cs`, `KeyChordRulesTests.cs` (`Every_stage_3_chord_is_assignable`), `LocalizationTests.cs`, `ViewModels/PanelSelectionTests.cs`, `ViewModels/MainViewModelTests.cs`, `ViewModels/PanelListingTests.cs` (сообщение), `Views/MainWindowTests.cs`, `Views/ToolWindowsTests.cs` (новый), `Views/DialogWindowTests.cs`
 
 **Interfaces:**
 - Produces:
@@ -373,19 +402,31 @@ public interface IToolWindows {
     Task<bool> CloseAllAsync();
 }
 public sealed partial class ToolWindows : IToolWindows {
-    private void Register<TViewModel>(Func<TViewModel, Window> create);     // вызывают частичные методы
+    public void Register<TViewModel>(Func<TViewModel, Window> create);      // вызывают частичные методы и тесты
+    // ConfirmModel зарегистрирован здесь же: одно общее окно подтверждения
     partial void AddRename(); partial void AddChecksums(); partial void AddCompare(); partial void AddSync(); partial void AddConsole();   // вызываются из конструктора
+}
+/// Модель окна, которое нельзя закрыть молча: ToolWindows спрашивает её при закрытии окна и в CloseAllAsync; false — окно остаётся.
+public interface ICloseGuard { Task<bool> CanCloseAsync(); }
+/// Готовый вопрос «да / отменить» для инструментов и консоли (отмена переименования, подтверждение синхронизации, закрытие консоли):
+/// показывается через IToolWindows.ShowDialogAsync, в тестах на него отвечает ScriptedToolWindows.OnDialog.
+public sealed class ConfirmModel(string text, string? detail, string confirmLabel, bool cancelIsDefault = true) : IDialogModel<bool> {
+    public string Text { get; } public string? Detail { get; } public string ConfirmLabel { get; } public bool CancelIsDefault { get; }
 }
 public interface IDialogService {   // добавить
     /// Задано — диалог конфликта показывает кнопку «Сравнить…» и вызывает это с двумя файлами и своим окном.
     Func<FileEntry, FileEntry, Window, Task>? CompareFiles { get; set; }
 }
+// DialogService.AskConflictAsync уже в этой задаче создаёт диалог как new ConflictDialog(viewModel, CompareFiles);
+// у ConflictDialog появляется второй параметр конструктора Func<FileEntry, FileEntry, Window, Task>? compare = null, который пока не используется
+// (кнопку добавляет задача 10, правя только ConflictDialog.cs).
 
 namespace Tandem.App.ViewModels.Tools;
 public sealed partial class ToolsCommands : IDisposable {
     public ToolsCommands(WorkspaceViewModel workspace, AppServices services, FileCommands files,
         IOperationInteraction interaction, CommandRegistry commands, Action<Exception> reportFailure);
     private void On(string id, Func<Task> run, Func<bool> canRun);   // регистрирует команду и включает её в пересчёт доступности
+    private void OnDispose(Action cleanup);                          // частичные файлы регистрируют здесь свою уборку; Dispose вызывает всё в обратном порядке
     private PanelViewModel? Active { get; } private PanelViewModel? Passive { get; }
     partial void RegisterRename(); partial void RegisterChecksums(); partial void RegisterFolderSizes();
     partial void RegisterCompareDirs(); partial void RegisterCompareFiles(); partial void RegisterSync();
@@ -396,17 +437,28 @@ public sealed partial class NetCommands : IDisposable {
     public NetCommands(WorkspaceViewModel workspace, AppServices services, FileCommands files, CommandRegistry commands,
         Action<Exception> reportFailure);
     private void On(string id, Func<Task> run, Func<bool> canRun);   // как у ToolsCommands
-    partial void RegisterConsole();                                    // вызывается из конструктора; тело даёт ветвь net-ssh (задача 29)
+    private void OnDispose(Action cleanup);
+    partial void RegisterConsole();                                    // вызывается из конструктора; тело даёт задача 29
+    /// Закрывает сетевые соединения перед выходом из приложения; в заготовке ничего не делает (тело — задача 21).
+    public Task CloseAsync();
 }
 namespace Tandem.App.ViewModels;
 public sealed partial class PanelViewModel {
     /// Помечает строки, для которых predicate истинно, и снимает пометку с остальных («..» не помечается).
     public void SelectWhere(Func<FileEntry, bool> predicate);
+    /// Короткое сообщение для строки состояния панели («Помечено: слева 3, справа 1», «Подключение к …»). Не ошибка.
+    /// Исчезает при переходе в другую папку и при ShowNotice(null); обновление списка его не трогает.
+    public string? Notice { get; }
+    public void ShowNotice(string? text);
+}
+public sealed partial class MainViewModel {
+    /// Обработчик Esc, который спрашивают раньше клавиш панели: true — Esc поглощён. Освобождение снимает обработчик.
+    public IDisposable OnEscape(Func<bool> tryHandle);
 }
 public sealed partial class MainViewModel { public ToolsCommands Tools { get; } public NetCommands Net { get; } }
 ```
 
-`AppServices` получает позиционный параметр `IToolWindows ToolWindows` после `Windows` (обновить все места создания: `grep -rn "new AppServices(" src tests`). `MainViewModel` создаёт `Tools` и `Net` после `Archives`, освобождает их в `Dispose`; `HasOpenWindows` и `ConfirmCloseAsync` учитывают `ToolWindows`. Пока направления не добавили обработчики, команды не зарегистрированы и их пункты меню серые (так `MainMenu` уже поступает с незарегистрированными командами).
+`AppServices` получает позиционный параметр `IToolWindows ToolWindows` после `Windows` (обновить все места создания: `grep -rn "new AppServices(" src tests`). `MainViewModel` создаёт `Tools` и `Net` после `Archives`, освобождает их в `Dispose`; `HasOpenWindows` и `ConfirmCloseAsync` учитывают `ToolWindows` (в том числе отказ `ICloseGuard`: выход отменяется); после согласия пользователя на выход `ConfirmCloseAsync` ждёт `Net.CloseAsync()` не дольше 5 секунд — `AppServices.Dispose` сетевых соединений не закрывает и остаётся синхронным. `SideViewModel.StatusLine` показывает `Panel.Notice` после сообщения об ошибке и раньше обычной строки «выбрано …»; `HasError` от него не зависит. `HandleKeyAsync` для Esc сначала спрашивает обработчики `OnEscape` (последний зарегистрированный — первым), затем работает как раньше. Пока направления не добавили обработчики, команды не зарегистрированы и их пункты меню серые (так `MainMenu` уже поступает с незарегистрированными командами).
 
 Сочетания — таблица раздела «Сочетания по умолчанию» (в `KeyMap.Default` в этом порядке, после `ArchiveUnpack`). `tools.checksumCreate` и `tools.checksumVerify` — без сочетаний (добавить в список команд «только меню» в `KeyMapTests`).
 
@@ -418,7 +470,7 @@ public sealed partial class MainViewModel { public ToolsCommands Tools { get; } 
 
 В конец обоих файлов ресурсов — четыре раздела-заготовки из раздела «Параллельное выполнение», слово в слово.
 
-Цвета консоли (чтобы ветвь net-ssh не правила `App.axaml`, который в фазе B принадлежит задаче 10): в `App.axaml` добавить для светлой и тёмной темы ключи `Tandem.TerminalBackground`, `Tandem.TerminalForeground`, `Tandem.TerminalCursor`, `Tandem.TerminalSelection` и шестнадцать `Tandem.TerminalAnsi0` … `Tandem.TerminalAnsi15` (чёрный, красный, зелёный, жёлтый, синий, пурпурный, бирюзовый, белый и их яркие варианты), подобранные так, чтобы каждый из шестнадцати читался на фоне своей темы.
+Цвета консоли (чтобы ветвь net-ssh не правила `App.axaml`, который в фазе B принадлежит задаче 10): в `App.axaml` добавить для светлой и тёмной темы ключи `Tandem.TerminalBackground`, `Tandem.TerminalForeground`, `Tandem.TerminalCursor`, `Tandem.TerminalSelection` и шестнадцать `Tandem.TerminalAnsi0` … `Tandem.TerminalAnsi15` (чёрный, красный, зелёный, жёлтый, синий, пурпурный, бирюзовый, белый и их яркие варианты), подобранные так, по правилам теста контраста ниже (чёрный остаётся чёрным, белый — белым: программы на сервере сами красят ими фон).
 
 `ScriptedToolWindows` (тесты): `Shown` — список показанных моделей; `OnDialog` — `Func<object, object?>`, отвечающая на модальные окна (без неё — `default`); окон не создаёт. `TestApp` получает параметр выбора: настоящий `ToolWindows` (по умолчанию, окна без экрана) или `ScriptedToolWindows`.
 
@@ -426,27 +478,39 @@ public sealed partial class MainViewModel { public ToolsCommands Tools { get; } 
 
 ```csharp
 // KeyMapTests: дополнить теорию Default_binding и Default_map_has_the_whole_table 14 новыми парами; затем
-public void Stage_3_chords_do_not_collide_with_earlier_ones()            // Default_map_has_no_duplicate_chords остаётся зелёным
+// KeyChordRulesTests
 public void Every_stage_3_chord_is_assignable()                           // KeyChordRules.IsAssignable для каждой из 14
+// MainViewModelTests: Registers_every_command теперь проверяет все идентификаторы, кроме двенадцати команд этапа 3
+// (явный список исключений с пометкой «задача 24 возвращает их в проверку»); остальной текст теста не меняется
 // CommandRegistryTests / MainWindowTests
 public void Tools_and_network_menus_list_every_new_command_in_order()
-public void A_command_nobody_registered_yet_shows_a_disabled_menu_item()  // до фазы B — все двенадцать
+public void A_menu_item_of_an_unregistered_command_is_disabled_and_of_a_registered_one_enabled()   // на CommandRegistry с выдуманным идентификатором,
+                                                                                                    // а не на двенадцати настоящих: тест не должен покраснеть в фазе B
 // PanelSelectionTests
 public void SelectWhere_marks_matching_rows_and_unmarks_the_rest()
 public void SelectWhere_never_marks_the_parent_link_and_updates_the_status()
-// ToolWindows (Views)
+// PanelListingTests / MainViewModelTests
+public async Task Notice_is_shown_in_the_status_line_and_goes_away_on_navigation_but_not_on_refresh()
+public async Task Notice_does_not_hide_an_error_and_is_not_an_error()
+public async Task Escape_handler_gets_the_key_before_the_panel_and_stops_getting_it_once_disposed()
+public async Task Quit_waits_for_the_network_close_but_not_longer_than_the_limit()
+// DialogWindowTests
+[AvaloniaFact] public async Task Conflict_dialog_is_given_the_compare_hook_of_the_dialog_service()     // ConflictDialog получил тот же делегат; кнопки ещё нет
+// ToolWindowsTests (новый файл; тестовая модель регистрируется через открытый Register)
 [AvaloniaFact] public async Task Dialog_model_closes_its_window_with_the_result()
+[AvaloniaFact] public async Task Confirm_model_answers_true_on_its_button_and_false_on_cancel_or_Escape()
+[AvaloniaFact] public async Task Close_guard_can_keep_its_window_open_and_stops_CloseAll()
 [AvaloniaFact] public void Showing_the_same_model_twice_keeps_one_window()
 [AvaloniaFact] public async Task Closing_the_app_closes_tool_windows()
 // LocalizationTests: Both_languages_have_identical_key_sets остаётся зелёным; добавить
 public void Stage_3_section_markers_are_present_in_both_resource_files()  // восемь строк begin/end в каждом файле
-[AvaloniaFact] public void Terminal_colours_exist_in_both_themes_and_every_ansi_colour_is_readable_on_the_background()   // контраст с фоном темы не ниже 3:1
+[AvaloniaFact] public void Terminal_colours_exist_in_both_themes_and_every_ansi_colour_is_readable_on_the_background()   // цвета 1–6 и 9–14 и цвет текста по умолчанию — контраст с фоном темы не ниже 3:1; цвета, родственные фону (0 и 8 в тёмной теме, 7 и 15 в светлой), от этого правила освобождены; отдельно: 7 на 0 и 15 на 8 — не ниже 4,5:1 (программы вроде mc и htop рисуют белым по чёрному)
 ```
 
 - [ ] **Step 2:** Run `dotnet test tests/Tandem.App.Tests --filter "FullyQualifiedName~KeyMap|FullyQualifiedName~CommandRegistry|FullyQualifiedName~PanelSelection|FullyQualifiedName~Localization|FullyQualifiedName~MainWindow"` → FAIL.
 - [ ] **Step 3:** Реализовать. Тела частичных методов не писать — их дают направления.
 - [ ] **Step 4:** Run `dotnet build Tandem.slnx && dotnet test Tandem.slnx` → 0 предупреждений, всё PASS.
-- [ ] **Step 5:** Commit: `feat(app): stage 3 commands, chords, menus and tool window scaffolding`. Создать три рабочие копии от этого коммита: `tools-a`, `tools-b`, `net` (навык `superpowers:using-git-worktrees`).
+- [ ] **Step 5:** Commit: `feat(app): stage 3 commands, chords, menus and tool window scaffolding`. Рабочие копии направлений от этого коммита создаёт ведущий.
 
 ---
 ## Направление tools-a (задачи 4–7)
@@ -460,7 +524,7 @@ public void Stage_3_section_markers_are_present_in_both_resource_files()  // в�
 - Test: `tests/Tandem.Core.Tests/Tools/Rename/RenameTemplateTests.cs`, `RenamePlannerTests.cs`
 
 **Interfaces:**
-- Consumes: `FileEntry`, `VfsPath`.
+- Consumes: `FileEntry`, `VfsPath`, `NameKey.SameOnMacDisk` (задача 1).
 - Produces:
 
 ```csharp
@@ -490,7 +554,7 @@ public static class RenamePlanner {
 
 Порядок: шаблоны → поиск и замена по всему получившемуся имени (обычный текст или `Regex` с пределом времени 1 с, без учёта регистра, пока не задано `MatchCase`; пустой `Search` — ничего) → регистр (только часть до последней точки).
 
-Статусы: `InvalidName` — пусто, «.», «..», содержит `/` или `\0`, длиннее 255 байтов UTF-8; `Duplicate` — два элемента одной папки получают одно имя; `NameTaken` — имя занято элементом папки, который сам в этом плане не переименовывается в другое имя. «То же имя» сравнивается без учёта регистра и формы Юникода (после `Normalize(FormC)`, `OrdinalIgnoreCase`) — как на диске macOS. Смена только регистра или формы собственного имени — `Ok`. Обмен `a↔b` и цепочка `a→b, b→c` — `Ok` у всех участников.
+Статусы: `InvalidName` — пусто, «.», «..», содержит `/` или `\0`, длиннее 255 байтов UTF-8, **либо часть имени до расширения пуста** (шаблон не должен молча превращать файлы в скрытые «.txt»); `Duplicate` — два элемента одной папки получают одно имя; `NameTaken` — имя занято элементом папки, который сам в этом плане не переименовывается в другое имя. «То же имя» — `NameKey.SameOnMacDisk` (задача 1): без учёта регистра и формы Юникода, как на диске macOS. Смена только регистра или формы собственного имени — `Ok`. Обмен `a↔b` и цепочка `a→b, b→c` — `Ok` у всех участников.
 
 - [ ] **Step 1: Тесты**
 
@@ -498,7 +562,7 @@ public static class RenamePlanner {
 // RenameTemplateTests
 [Theory] public void Name_tokens(string template, string fileName, string expected)
     // "[N]_old","report.pdf"→"report_old.pdf"; "[N2-4]","abcdef.txt"→"bcd.txt"; "[N3-]","abcdef.txt"→"cdef.txt";
-    // "[N9-]","abc.txt" → InvalidName (пустое имя); "[[]x]","a.txt"→"[x].txt"
+    // "[N9-]","abc.txt" → InvalidName (пустая часть имени до расширения); "[[]x]","a.txt"→"[x].txt"
 public void Counter_uses_start_step_and_digits()                      // start 5, step 5, digits 3 → 005, 010, 015 в порядке entries
 public void Date_tokens_come_from_the_modified_time_in_the_given_zone()   // 2026-03-01T23:30Z в UTC+3 → [Y]-[M]-[D] = 2026-03-02
 public void Extension_template_can_replace_or_drop_the_extension()    // "txt" → a.txt; "" → "a" без точки
@@ -532,7 +596,7 @@ public void Items_of_different_folders_do_not_collide()                 // па�
 **Files:**
 - Create: `src/Tandem.Core/Tools/Rename/BatchRenameOperation.cs`, `src/Tandem.App/ViewModels/Tools/MultiRenameViewModel.cs`, `ViewModels/Tools/ToolsCommands.Rename.cs`, `Views/Tools/MultiRenameWindow.axaml(.cs)`, `Services/ToolWindows.Rename.cs`
 - Modify: оба файла ресурсов (раздел tools-a)
-- Test: `tests/Tandem.Core.Tests/Tools/Rename/BatchRenameOperationTests.cs`, `BatchRenameLocalTests.cs`, `tests/Tandem.App.Tests/ViewModels/MultiRenameTests.cs`, `Views/MultiRenameWindowTests.cs`
+- Test: `tests/Tandem.Core.Tests/Tools/Rename/BatchRenameOperationTests.cs`, `tests/Tandem.App.Tests/Tools/BatchRenameLocalTests.cs` (в тестах приложения: ему нужен `MacExclusiveRename`, а тесты ядра слой macOS не видят), `tests/Tandem.App.Tests/ViewModels/MultiRenameTests.cs`, `Views/MultiRenameWindowTests.cs`
 
 **Interfaces:**
 - Consumes: `RenamePlanner`, `RenamePlan` (задача 4); `ItemErrors`, `FileOperation` (ядро); `ToolsCommands.On`, `IToolWindows`, `FileCommands.StartOperation` (задача 3 и этап 2).
@@ -544,7 +608,7 @@ public sealed record RenameStep(VfsPath From, VfsPath To);                 // в
 /// Сделанное переименование и вид файла сразу после него — чтобы отмена узнала «тот же ли это файл».
 public sealed record RenamedItem(VfsPath From, VfsPath To, EntryKind Kind, long Size, DateTimeOffset Modified);
 public sealed class BatchRenameOperation : FileOperation {                 // Kind == OperationKind.Rename
-    public const string TempSuffix = ".tandem-rename";                     // служебное имя: .{guid}.tandem-rename
+    // служебное имя: "." + guid + SafeReplace.RenameSuffix (задача 1)
     public BatchRenameOperation(ProviderRegistry providers, IReadOnlyList<RenameStep> steps, IOperationInteraction interaction,
         IReadOnlyList<RenamedItem>? undoOf = null);
     /// Что действительно переименовано (также после отмены и ошибки); читать после завершения.
@@ -552,7 +616,8 @@ public sealed class BatchRenameOperation : FileOperation {                 // Ki
 }
 namespace Tandem.App.ViewModels.Tools;
 public sealed partial class MultiRenameViewModel : ObservableObject, IDialogModel<RenamePlan> {
-    public MultiRenameViewModel(IReadOnlyList<FileEntry> targets, IReadOnlyDictionary<VfsPath, IReadOnlySet<string>> namesByFolder);
+    public MultiRenameViewModel(IReadOnlyList<FileEntry> targets, IReadOnlyDictionary<VfsPath, IReadOnlySet<string>> namesByFolder,
+        TimeZoneInfo zone, Func<TimeSpan, CancellationToken, Task>? previewDelay = null);   // пояс и задержка задаются: тесты не зависят от часов машины
     // свойства правила (NameTemplate, ExtensionTemplate, Search, Replace, UseRegex, MatchCase, Case, CounterStart, CounterStep, CounterDigits),
     // Rows (старое имя, новое имя, статус), Summary, RuleError, CanAccept; команды Accept и Cancel
 }
@@ -570,7 +635,7 @@ public sealed partial class ToolsCommands { public bool CanUndoRename { get; } }
 Приложение:
 - `tools.multiRename` доступна, когда есть цели (`GetOperationTargets`) и источник каждой может писать. Команда читает имена папок целей вне потока интерфейса, показывает `MultiRenameViewModel` через `IToolWindows.ShowDialogAsync`; при принятии строит шаги из элементов `Ok` и запускает операцию через `FileCommands.StartOperation` (очередь, окно прогресса, обновление панелей, сводка — как у копирования).
 - Предварительный просмотр пересчитывается при каждом изменении правила: до 2000 элементов — сразу, больше — вне потока интерфейса с задержкой 150 мс, последний результат вытесняет прежние. Ошибка правила показывается текстом под полем и запрещает «Переименовать»; строки со статусами `InvalidName`, `Duplicate`, `NameTaken` выделены существующим цветом ошибки темы и названы в `Summary` («Будет переименовано 998 из 1000; мешают 2»).
-- После завершения операции её `Completed` (если не пуст) становится журналом отмены, вытесняя прежний. `tools.undoRename` доступна при непустом журнале: спрашивает подтверждение («Вернуть прежние имена: N?»), запускает `BatchRenameOperation` с обратными шагами и `undoOf`; после неё журнал пуст (повторить отменённое нельзя).
+- `FileCommands.StartOperation` ничего не возвращает и не меняется: команда сама ждёт `operation.Completion` (ошибку и отмену тоже) и уже затем читает `Completed`. После завершения операции её `Completed` (если не пуст) становится журналом отмены, вытесняя прежний. `tools.undoRename` доступна при непустом журнале: спрашивает подтверждение («Вернуть прежние имена: N?») — `ConfirmModel` через `IToolWindows.ShowDialogAsync` (задача 3), не через `IDialogService`; запускает `BatchRenameOperation` с обратными шагами и `undoOf`; после неё журнал пуст (повторить отменённое нельзя).
 
 - [ ] **Step 1: Тесты**
 
@@ -589,7 +654,7 @@ public async Task Undo_restores_the_old_names()
 public async Task Undo_skips_a_file_changed_since_the_rename()                     // RF4: ChangedSinceCompared, файл не тронут
 public async Task Undo_skips_when_the_old_name_is_taken_again()                    // RF4: NameTaken, оба файла целы
 public async Task Undo_after_a_partial_rename_reverts_only_what_was_done()
-// BatchRenameLocalTests (настоящая временная папка, LocalFileSystemProvider + MacExclusiveRename) — критерий этапа
+// BatchRenameLocalTests (Tandem.App.Tests/Tools; настоящая временная папка, LocalFileSystemProvider + MacExclusiveRename) — критерий этапа
 public async Task Thousand_files_renamed_by_template_and_undone()   // 1000 файлов "f0001.txt"…; правило "[N]_[C]" (digits 4) → все имена по плану;
                                                                      // отмена → исходные имена и содержимое байт в байт; в папке нет лишних файлов
 // MultiRenameTests ([AvaloniaFact], TestApp + ScriptedToolWindows)
@@ -611,7 +676,7 @@ public async Task Rename_in_a_search_result_panel_renames_each_file_in_its_own_f
 
 ### Task 6: Контрольные суммы: создание и проверка
 
-**Направление:** tools-a. **Зависит от:** 3.
+**Направление:** tools-a. **Зависит от:** 3; в рабочей копии идёт после задачи 5.
 
 **Files:**
 - Create: `src/Tandem.Core/Tools/Checksums/Checksum.cs`, `ChecksumFile.cs`, `ChecksumCreateOperation.cs`, `ChecksumVerifyOperation.cs`, `src/Tandem.App/ViewModels/Tools/ChecksumViewModels.cs`, `ToolsCommands.Checksums.cs`, `Views/Tools/ChecksumWindows.cs`, `Services/ToolWindows.Checksums.cs`
@@ -652,11 +717,11 @@ public sealed class ChecksumVerifyOperation(ProviderRegistry providers, VfsPath 
 
 Форматы. Запись: `.sfv` — `путь ХЕШ`; остальные — `хеш *путь` (как пишут `md5sum`, `shasum` в двоичном режиме); строки через `\n`, UTF-8 без метки. Чтение принимает: `хеш *путь`, `хеш  путь`, `АЛГОРИТМ (путь) = хеш`, для `.sfv` — `путь хеш`; строки-комментарии с `;` и `#`; `\r\n`; обратную косую черту в пути как `/`; хеш в любом регистре. Текст файла сумм читается как UTF-8, а при неверном UTF-8 — как Windows-1251 (`TextEncodingDetector`). Строка, которую не удалось разобрать, — в `UnreadableLineNumbers`.
 
-Создание: источники — файлы и папки (папки обходятся рекурсивно; ссылки пропускаются и попадают в сводку как `SymlinksNotSupported`); пути в файле — относительно папки, где создаётся файл сумм; источник вне этой папки — отказ до начала. Существующий файл сумм — отказ `DestinationExists`. Файл сумм пишется через `SafeReplace.WriteAsync` в самом конце; отмена и «Прервать» не оставляют ничего. Сам создаваемый файл в список не попадает.
+Создание: источники — файлы и папки (папки обходятся рекурсивно; ссылки пропускаются и попадают в сводку как `SkipReason.LinkSkipped`); пути в файле — относительно папки, где создаётся файл сумм. Источник вне этой папки невозможен по построению: команда создаёт файл сумм в папке активной панели и недоступна на панели с «чужими» записями (результаты поиска); конструктор операции на такой источник отвечает `ArgumentException` (ошибка вызывающего, не отказ для пользователя — нового `RejectionReason` нет). Существующий файл сумм — отказ `DestinationExists`. Файл сумм пишется через `SafeReplace.WriteAsync` в самом конце; отмена и «Прервать» не оставляют ничего. Сам создаваемый файл в список не попадает.
 
 Проверка: путь из файла сумм разрешается от папки файла сумм; абсолютный путь и путь с `..`, выходящим из этой папки, не читаются — `OutsideFolder`. Отсутствующий файл — `Missing`; ошибка чтения, на которую ответили «Пропустить», — `Unreadable`. Ход — по байтам проверяемых файлов.
 
-Приложение: `tools.checksumCreate` — есть цели и папка активной панели пишется; диалог (алгоритм — по умолчанию SHA-256; имя файла — имя единственной цели или имя папки панели плюс расширение алгоритма, меняется вместе с алгоритмом) → операция через `FileCommands.StartOperation`, курсор встаёт на созданный файл. `tools.checksumVerify` — курсор на файле, для которого `Checksum.FromFileName` не null → операция; по завершении окно результатов: «Совпало N, не совпало M, нет файла K», затем список, несовпавшие и отсутствующие первыми; нераспознанные строки названы номерами.
+Приложение: `tools.checksumCreate` — есть цели, папка активной панели пишется и панель не содержит «чужих» записей; диалог (алгоритм — по умолчанию SHA-256; имя файла — имя единственной цели или имя папки панели плюс расширение алгоритма, меняется вместе с алгоритмом) → операция через `FileCommands.StartOperation`; команда сама ждёт `operation.Completion`, затем `RefreshAsync` активной панели и ставит `CursorIndex` на созданный файл (`FileCommands` не меняется). `tools.checksumVerify` — курсор на файле, для которого `Checksum.FromFileName` не null → операция; по завершении окно результатов: «Совпало N, не совпало M, нет файла K», затем список, несовпавшие и отсутствующие первыми; нераспознанные строки названы номерами.
 
 - [ ] **Step 1: Тесты**
 
@@ -692,7 +757,7 @@ public async Task Verify_shows_mismatches_first()
 
 ### Task 7: Размеры папок
 
-**Направление:** tools-a. **Зависит от:** 3.
+**Направление:** tools-a. **Зависит от:** 3; в рабочей копии идёт после задачи 6.
 
 **Files:**
 - Create: `src/Tandem.Core/Tools/FolderSizeCalculator.cs`, `src/Tandem.App/ViewModels/Tools/ToolsCommands.FolderSizes.cs`
@@ -720,7 +785,7 @@ public sealed partial class PanelViewModel {
 }
 ```
 
-Решения: пока идёт подсчёт, в столбце размера папки — «…»; затем размер обычным форматом, с приставкой «≥» при `Unreadable > 0`. Подсчитанные размеры входят в «выбрано … байт» строки состояния. Размеры живут, пока панель показывает ту же папку (обновление списка их сохраняет для папок, которые остались); переход в другую папку и закрытие вкладки отменяют идущие подсчёты и забывают размеры. Повторный вызов для уже подсчитанной папки считает заново. Сортировка по размеру подсчитанные размеры не учитывает (папки по-прежнему идут первыми по имени). Подсчёт идёт мимо очереди операций и без окна прогресса; для «всех папок» — последовательно, по одной (щадит серверы). Ссылки на папки не считаются. `tools.folderSize` доступна, когда курсор на папке; `tools.folderSizeAll` — когда в списке есть папки.
+Решения: пока идёт подсчёт, в столбце размера папки — строка `FolderSize_Computing` («…»); затем размер обычным форматом, при `Unreadable > 0` — через `FolderSize_AtLeast` («≥ {0}»); оба — ресурсы, не знаки в коде. Подсчитанные размеры входят в «выбрано … байт» строки состояния. Размеры живут, пока панель показывает ту же папку (обновление списка их сохраняет для папок, которые остались); переход в другую папку и закрытие вкладки отменяют идущие подсчёты и забывают размеры. Повторный вызов для уже подсчитанной папки считает заново. Сортировка по размеру подсчитанные размеры не учитывает (папки по-прежнему идут первыми по имени). Подсчёт идёт мимо очереди операций и без окна прогресса; для «всех папок» — последовательно, по одной (щадит серверы). Ссылки на папки не считаются. `tools.folderSize` доступна, когда курсор на папке; `tools.folderSizeAll` — когда в списке есть папки.
 
 - [ ] **Step 1: Тесты**
 
@@ -753,17 +818,16 @@ public async Task Commands_follow_the_cursor_and_the_listing()
 **Направление:** tools-b. **Зависит от:** 3.
 
 **Files:**
-- Create: `src/Tandem.Core/Tools/Compare/DirectoryComparer.cs`, `src/Tandem.App/ViewModels/Tools/ToolsCommands.CompareDirs.cs`
+- Create: `src/Tandem.Core/Tools/Compare/DirectoryComparer.cs`, `src/Tandem.App/ViewModels/Tools/ToolsCommands.CompareDirs.cs` (`NameKey` уже создан задачей 1)
 - Modify: оба файла ресурсов (раздел tools-b)
 - Test: `tests/Tandem.Core.Tests/Tools/Compare/DirectoryComparerTests.cs`, `tests/Tandem.App.Tests/ViewModels/CompareDirsTests.cs`
 
 **Interfaces:**
-- Consumes: `PanelViewModel.SelectWhere` (задача 3).
+- Consumes: `PanelViewModel.SelectWhere`, `PanelViewModel.ShowNotice` (задача 3); `NameKey.Of` (задача 1).
 - Produces:
 
 ```csharp
 namespace Tandem.Core.Tools.Compare;
-public static class NameKey { public static string Of(string name); }     // Normalize(FormC); сравнение ключей — Ordinal
 public sealed record DirectoryDifference(IReadOnlySet<string> MarkLeft, IReadOnlySet<string> MarkRight,
     int UniqueLeft, int UniqueRight, int Differing);                        // в наборах — имена, как они записаны на своей стороне
 public static class DirectoryComparer {
@@ -772,7 +836,7 @@ public static class DirectoryComparer {
 }
 ```
 
-Правила: пары составляются по `NameKey` (форма Юникода не важна, регистр важен). Имя есть только на одной стороне — помечается там (файл или папка). Файл и файл: отличаются, если разный размер или время изменения расходится больше чем на `tolerance`, — помечаются **на обеих** сторонах. Папка и папка — не помечаются (внутрь не заходим). Файл против папки и ссылки с разной целью — помечаются на обеих. Сравниваются строки, которые панели сейчас показывают (скрытые — если показаны). Команда `tools.compareDirs` доступна, когда обе панели показывают папку без ошибки и ни одна не содержит «чужих» записей (результаты поиска); после сравнения — `SelectWhere` на обеих панелях и сообщение в строке состояния активной панели: «Помечено: слева N, справа M» либо «Папки не отличаются».
+Правила: пары составляются по `NameKey` (форма Юникода не важна, регистр важен). Имя есть только на одной стороне — помечается там (файл или папка). Файл и файл: отличаются, если разный размер или время изменения расходится больше чем на `tolerance`, — помечаются **на обеих** сторонах. Папка и папка — не помечаются (внутрь не заходим). Файл против папки и ссылки с разной целью — помечаются на обеих. Сравниваются строки, которые панели сейчас показывают (скрытые — если показаны). Команда `tools.compareDirs` доступна, когда обе панели показывают папку без ошибки и ни одна не содержит «чужих» записей (результаты поиска); после сравнения — `SelectWhere` на обеих панелях и сообщение в строке состояния активной панели через `ShowNotice`: «Помечено: слева N, справа M» либо «Папки не отличаются».
 
 - [ ] **Step 1: Тесты**
 
@@ -798,7 +862,7 @@ public async Task Command_is_off_when_a_panel_shows_search_results_or_an_error()
 
 ### Task 9: Сравнение файлов: текст и двоичные данные (ядро)
 
-**Направление:** tools-b. **Зависит от:** 3 (и фактов `DiffPlexProbeTests` задачи 2).
+**Направление:** tools-b. **Зависит от:** 3 (и фактов `DiffPlexProbeTests` задачи 2); в рабочей копии идёт после задачи 8.
 
 **Files:**
 - Create: `src/Tandem.Core/Tools/Compare/TextDiff.cs`, `BinaryDiff.cs`, `FileComparison.cs`
@@ -841,7 +905,7 @@ public static class FileComparison {
 }
 ```
 
-Правила: строки делятся по `\n`, `\r\n` и `\r` и сравниваются без окончаний; если тексты отличаются только окончаниями строк — строк-различий нет, `LineEndingsDiffer == true`. `DifferenceStarts` — индексы первых строк каждого сплошного блока различий (для «следующее/предыдущее отличие»). `Auto`: текст, если оба файла не больше `MaxTextBytes` и оба не выглядят двоичными (`TextEncodingDetector`), иначе двоичное; `Text` для слишком большого файла — `IOException` с понятным типом (приложение переводит). Кодировка каждой стороны — заданная или угаданная; метка BOM в текст не входит. Двоичное сравнение читает оба потока блоками, не загружая файлы в память; `Ranges` — первые `MaxRanges` сплошных отрезков различий в общей части, `DifferingBytes` считается по всей общей части. Файлы читаются через их источники (архив, сервер — без особых случаев).
+Правила: строки делятся по `\n`, `\r\n` и `\r` и сравниваются без окончаний; если тексты отличаются только окончаниями строк — строк-различий нет, `LineEndingsDiffer == true`. `DifferenceStarts` — индексы первых строк каждого сплошного блока различий (для «следующее/предыдущее отличие»). `Auto`: текст, если оба файла не больше `MaxTextBytes` и оба не выглядят двоичными (`TextEncodingDetector`), иначе двоичное; `Text` для слишком большого файла — `FileTooLargeForTextException : IOException` (объявить в `Tools/Compare`); слова для него даёт окно сравнения ключом `Compare_TooLargeForText` — `OperationTexts` заморожен и не меняется. Кодировка каждой стороны — заданная или угаданная; метка BOM в текст не входит. Двоичное сравнение читает оба потока блоками, не загружая файлы в память; `Ranges` — первые `MaxRanges` сплошных отрезков различий в общей части, `DifferingBytes` считается по всей общей части. Файлы читаются через их источники (архив, сервер — без особых случаев).
 
 - [ ] **Step 1: Тесты**
 
@@ -901,12 +965,13 @@ public sealed partial class FileCompareViewModel : ObservableObject, IDialogMode
     public void NextDifference(); public void PreviousDifference();
     public bool IsBusy { get; } public string? Error { get; }
 }
+public sealed record BinaryRangeRow(long Offset, long Length, string LeftHex, string RightHex);
 ```
 
 Решения:
 - Окно: один виртуализированный список строк, две колонки моноширинным шрифтом с номерами строк; фон строки и подсветка изменённых отрезков — из новых ресурсов темы `Tandem.DiffChangedBackground`, `Tandem.DiffAddedBackground`, `Tandem.DiffRemovedBackground`, `Tandem.DiffInlineBackground` (светлый и тёмный вариант каждого). Клавиши окна: Alt+↓ / Alt+↑ — следующее и предыдущее отличие, Cmd+1 / Cmd+2 — текст и двоичный режим, Esc — закрыть. Окно только показывает; правки нет.
 - Какие файлы сравнивает `tools.compareFiles`: если в активной панели помечено ровно два файла — их; иначе файл под курсором активной панели и файл с тем же именем в папке пассивной панели, а если такого нет — файл под курсором пассивной панели. Иначе команда недоступна. Окно немодальное (`IToolWindows.Show`); чтение идёт вне потока интерфейса, окно открывается сразу с признаком `IsBusy`.
-- Диалог конфликта: когда задано `IDialogService.CompareFiles` и оба элемента — файлы, диалог показывает кнопку `Conflict_Compare` («Сравнить…»). Кнопка открывает окно сравнения модально к диалогу (`ShowDialogAsync`); диалог конфликта остаётся открытым, операция ждёт; после закрытия окна сравнения пользователь выбирает действие как раньше. `ToolsCommands` при создании присваивает `services.Dialogs.CompareFiles`, при освобождении — обнуляет.
+- Диалог конфликта: когда задано `IDialogService.CompareFiles` и оба элемента — файлы, диалог показывает кнопку `Compare_ConflictButton` («Сравнить…»); делегат диалог уже получает вторым параметром конструктора (задача 3), поэтому правится только `ConflictDialog.cs`. Кнопка открывает окно сравнения модально к диалогу (`ShowDialogAsync`); диалог конфликта остаётся открытым, операция ждёт; после закрытия окна сравнения пользователь выбирает действие как раньше. `ToolsCommands.CompareFiles.cs` в `RegisterCompareFiles` присваивает `services.Dialogs.CompareFiles` и через `OnDispose` (задача 3) обнуляет его при освобождении.
 
 - [ ] **Step 1: Тесты**
 
@@ -935,7 +1000,7 @@ public async Task Compares_a_file_in_an_archive_with_a_file_on_disk()        // 
 
 ### Task 11: Синхронизация папок: сравнение и план
 
-**Направление:** tools-b. **Зависит от:** 9 (`BinaryDiff.AreEqualAsync`), 8 (`NameKey`).
+**Направление:** tools-b. **Зависит от:** 9 (`BinaryDiff.AreEqualAsync`); `NameKey` и `SafeReplace.IsServiceName` — из задачи 1; в рабочей копии идёт после задачи 10.
 
 **Files:**
 - Create: `src/Tandem.Core/Tools/Sync/SyncModel.cs`, `SyncPlanner.cs`
@@ -953,10 +1018,9 @@ public enum SyncState { Equal, LeftNewer, RightNewer, Different, LeftOnly, Right
 public enum SyncAction { None, CopyToRight, CopyToLeft, DeleteLeft, DeleteRight }
 /// Файл, ссылка или пустая папка, существующая только на одной стороне. RelativePath — через '/', в написании стороны, где элемент есть
 /// (левой, если есть на обеих).
-public sealed record SyncItem(string RelativePath, FileEntry? Left, FileEntry? Right, SyncState State) {
-    public SyncAction DefaultAction { get; }
-    public IReadOnlyList<SyncAction> AllowedActions { get; }
-}
+/// DefaultAction и AllowedActions вычисляет SyncPlanner (он знает возможности источников обеих сторон) и кладёт в запись.
+public sealed record SyncItem(string RelativePath, FileEntry? Left, FileEntry? Right, SyncState State,
+    SyncAction DefaultAction, IReadOnlyList<SyncAction> AllowedActions);
 public sealed record SyncComparison(VfsPath LeftRoot, VfsPath RightRoot, SyncOptions Options, IReadOnlyList<SyncItem> Items,
     IReadOnlyList<string> UnreadableFolders);
 public readonly record struct SyncProgress(int FoldersScanned, int FilesCompared, long BytesCompared);
@@ -972,10 +1036,10 @@ public static class SyncPlanner {
 - `SizeAndDate`: размеры равны и времена в пределах `Tolerance` → `Equal`; иначе более позднее время → `LeftNewer`/`RightNewer`; время в пределах допуска при разном размере → `Different`.
 - `Content`: при равных размерах файлы читаются и сравниваются (`BinaryDiff.AreEqualAsync`): равны → `Equal` при любом времени; не равны или размеры разные → по времени, как выше (`Different`, когда время в пределах допуска).
 - Ссылки сравниваются по тексту цели; внутрь ссылок на папки обход не идёт.
-- Действие по умолчанию: `LeftNewer`, `LeftOnly` → `CopyToRight`; `RightNewer`, `RightOnly` → `CopyToLeft`; остальное → `None`. **Удаление никогда не бывает действием по умолчанию.** Разрешено: для элемента на обеих сторонах — `None`, `CopyToRight`, `CopyToLeft`; `LeftOnly` — `None`, `CopyToRight`, `DeleteLeft`; `RightOnly` — `None`, `CopyToLeft`, `DeleteRight`; `KindMismatch` — только `None`. Копирование в сторону, чей источник не пишет или (для ссылки) не хранит ссылки, из разрешённых исключается.
+- Действие по умолчанию: `LeftNewer`, `LeftOnly` → `CopyToRight`; `RightNewer`, `RightOnly` → `CopyToLeft`; остальное → `None`. **Удаление никогда не бывает действием по умолчанию.** Разрешено: для элемента на обеих сторонах — `None`, `CopyToRight`, `CopyToLeft`; `LeftOnly` — `None`, `CopyToRight`, `DeleteLeft`; `RightOnly` — `None`, `CopyToLeft`, `DeleteRight`; `KindMismatch` — только `None`. Копирование в сторону, чей источник не пишет или (для ссылки) не хранит ссылки, из разрешённых исключается, как и удаление на стороне, которая не пишет; если исключено действие по умолчанию — по умолчанию `None`.
 - Папка, которую не удалось прочитать на одной из сторон: её путь — в `UnreadableFolders`, и **всё поддерево исключается на обеих сторонах** (ни одного элемента из него).
 - Маска применяется к именам файлов (папки обходятся все); скрытые — по `IncludeHidden`.
-- Служебные имена `.*.tandem-part`, `.*.tandem-old`, `.*.tandem-rename` в сравнение не попадают.
+- Имена, для которых `SafeReplace.IsServiceName` истинно, в сравнение не попадают.
 
 - [ ] **Step 1: Тесты**
 
@@ -1029,7 +1093,7 @@ public sealed class SyncOperation : FileOperation {                          // 
 Правила:
 - Решения с `None` не делают ничего. Порядок: копирование вправо, копирование влево, удаления.
 - **Перед каждым действием обе стороны элемента перечитываются.** Сторона «та же», если вид, размер и время изменения совпадают с записанными при сравнении (отсутствовала — и сейчас отсутствует). Копирование выполняется, только если источник тот же и то, что будет заменено, то же; удаление — только если удаляемое то же. Иначе элемент пропускается с `SkipReason.ChangedSinceCompared` и остаётся нетронутым.
-- Копирование идёт обычным движком (`CopyEngine`): временное имя, `SafeReplace`, время изменения и права как при F5; недостающие папки создаются. Вопрос о конфликте пользователю не задаётся: замена решена в плане; конфликт, которого в плане не было (цель появилась после сравнения), — пропуск `ChangedSinceCompared`.
+- Копирование идёт обычным движком (`CopyEngine`): временное имя, `SafeReplace`, время изменения и права как при F5; недостающие папки создаются. `CopyEngine` не правится: он по-прежнему вызывает `ResolveConflictAsync`, но `SyncOperation` передаёт ему собственную обёртку `IOperationInteraction`, которая на конфликт отвечает `Overwrite` для целей, чья замена записана в плане, и `Skip` для всех прочих (операция записывает такой элемент как `ChangedSinceCompared`), а вопросы об ошибках передаёт настоящему собеседнику. Пользователь вопроса о конфликте не видит.
 - Удаление: в Корзину, когда источник объявляет `Trash` и служба корзины дана; иначе безвозвратно. Удаляется сам элемент (файл, ссылка, пустая папка); папки, опустевшие после удаления файлов, остаются.
 - Ошибки ввода-вывода на элементе — через `ItemErrors` (повторить — в том числе после потери связи, пропустить, прервать).
 - Всё идёт внутри `RunInBatchAsync` по обоим корням (сторона-архив zip переписывается один раз в конце).
@@ -1097,7 +1161,7 @@ public sealed partial class SyncViewModel : ObservableObject, IDisposable {
 - `tools.syncDirs` доступна, когда обе панели показывают папку без ошибки, ни одна не содержит «чужих» записей и папки не совпадают; открывает немодальное окно (одно; повторный вызов выводит его вперёд) для папки левой и правой панели. Сравнение запускается кнопкой «Сравнить», идёт вне потока интерфейса с показом хода («папок N, файлов M») и кнопкой «Стоп».
 - Список виртуализирован. Строка: путь, сведения слева, значок действия (→, ←, =, ✕ слева, ✕ справа), сведения справа. Клавиши окна: → и ← — направление копирования, Пробел — следующее из разрешённых действий без удаления, Fn+Delete (Delete) — удаление для элемента одной стороны, Cmd+A — выделить все; действие применяется к выделенным строкам. Равные элементы скрыты, пока не включён `ShowEqual`.
 - Итоги под списком: «→ N файлов, X МБ · ← M файлов, Y МБ · удалить: слева A, справа B».
-- «Синхронизировать» доступна, когда есть хоть одно действие, отличное от `None`. Сначала подтверждение (`confirm`): те же итоги; при удалениях — отдельная строка «Будет удалено: слева A (в Корзину / безвозвратно), справа B (…)» и кнопка по умолчанию — «Отменить». Затем `SyncOperation` через `FileCommands.StartOperation` (очередь, окно прогресса, сводка пропущенного), после её завершения — автоматическое повторное сравнение.
+- «Синхронизировать» доступна, когда есть хоть одно действие, отличное от `None`. Сначала подтверждение (`confirm`; `ToolsCommands.Sync.cs` показывает его как `ConfirmModel` через `IToolWindows.ShowDialogAsync`, не через `IDialogService`): те же итоги; при удалениях — отдельная строка «Будет удалено: слева A (в Корзину / безвозвратно), справа B (…)» и кнопка по умолчанию — «Отменить». Затем `SyncOperation` через `FileCommands.StartOperation` (очередь, окно прогресса, сводка пропущенного); делегат `run` сам ждёт `operation.Completion` и возвращает итог (null — операция завершилась ошибкой), после чего модель автоматически сравнивает заново.
 - Нечитаемые папки названы строкой над списком («Не прочитано папок: K — их содержимое не сравнивалось»).
 
 - [ ] **Step 1: Тесты**
@@ -1126,7 +1190,7 @@ public async Task Sync_between_a_folder_and_a_zip_archive_works()               
 
 ## Направление net (задачи 14–23)
 
-После задачи 14 направление ведётся тремя ветвями, каждая в своей рабочей копии от коммита задачи 14 (ветви 15, 18 и 19 можно начать раньше — от коммита задачи 3): **net-ftp** — 15 → 16 (`src/Tandem.Net/Ftp/**`, `tests/Tandem.Net.Tests/Ftp/**`); **net-sftp** — 17 (`src/Tandem.Net/Sftp/**`, `tests/Tandem.Net.Tests/Sftp/**`); **net-app** — 18 → 19 → 20 → 21 (`Tandem.Platform.Mac`, `src/Tandem.Net/Connections/**`, файлы приложения из таблицы). Ветви сливаются в `net`, затем идут задачи 22 и 23.
+После задачи 14 направление ведётся ветвями, каждая в своей рабочей копии от коммита задачи 14 (ветви 15, 18, 19 и 27 можно начать раньше — от коммита задачи 3): **net-ftp** — 15 → 16 (`src/Tandem.Net/Ftp/**`, `tests/Tandem.Net.Tests/Ftp/**`); **net-sftp** — 17 (`src/Tandem.Net/Sftp/**`, `tests/Tandem.Net.Tests/Sftp/**`); **net-app** — 18 → 19 → 20 → 21 (`Tandem.Platform.Mac`, `src/Tandem.Net/Connections/**`, файлы приложения из таблицы); **net-ssh** — 27 (`src/Tandem.Net/Terminal/**`). Ведущий сливает ветви в `net`; затем на ветке `net` по очереди идут задачи 22, 23, 28, 29.
 
 ### Task 14: Источник «сервер»: `RemoteProvider` поверх `IRemoteSession`
 
@@ -1150,7 +1214,7 @@ public enum NetAuth { Password, PrivateKey, Anonymous }
 public sealed record ConnectionProfile(Guid Id, string Name, NetProtocol Protocol, string Host, int Port, string User, NetAuth Auth,
     string? PrivateKeyPath = null, string InitialPath = "/", bool PassiveMode = true, string? NameEncoding = null) {
     public static int DefaultPort(NetProtocol protocol);        // Ftp 21, FtpsExplicit 21, FtpsImplicit 990, Sftp 22
-    public string Address { get; }                              // "sftp://user@host" или "ftp://user@host:2121" (порт — только не по умолчанию); пароля нет никогда
+    [JsonIgnore] public string Address { get; }                 // (и VolumeKey — тоже [JsonIgnore]: в connections.json только параметры конструктора) "sftp://user@host" или "ftp://user@host:2121" (порт — только не по умолчанию); пароля нет никогда
     public string VolumeKey { get; }                            // Address в нижнем регистре; без обращения к сети
     public ConnectionProfile Normalized();                      // обрезка пробелов; порт вне 1…65535 → по умолчанию; InitialPath — абсолютный; Anonymous → User "anonymous"
 }
@@ -1226,12 +1290,13 @@ public sealed class RemoteProvider : IFileSystemProvider, IHostedProvider, IAsyn
 - `IsSameEntryAsync`: оба существуют и пути равны. `IsHidden` — имя с точки. `Created` = `Modified`.
 - Отмена любого вызова — `OperationCanceledException`.
 
-`FakeRemoteServer` (тесты): дерево в памяти, общее для всех выданных им соединений (`NewSession()`), и ручки: `Features`, `Offline` (подключение не удаётся), `DropNow()` (все соединения мертвы; новые открываются), `DropAfterBytes` (обрыв потока после N байтов), `RenameOverwrites`, `FailCloseWrite` (исключение при закрытии потока записи), `FailOn(имя вызова, путь)`, `ConnectCount`, `MaxOpenAtOnce`, `Log`. Одно соединение без `Multiplexed` бросает `InvalidOperationException` при втором одновременном вызове — так тесты ловят ошибки пула.
+`FakeRemoteServer` (тесты; написан только на открытых типах `Tandem.Net`, потому что позже его файл связывают в тесты приложения, которым внутренние типы не видны): дерево в памяти, общее для всех выданных им соединений (`NewSession()`, `AsFactory()` — как `IRemoteSessionFactory`), и ручки: `Features`, `Offline` (подключение не удаётся), `DropNow()` (все соединения мертвы; новые открываются), `DropAfterBytes` (обрыв потока после N байтов), `RenameOverwrites`, `FailCloseWrite` (исключение при закрытии потока записи), `FailOn(имя вызова, путь)`, `ConnectCount`, `MaxOpenAtOnce`, `Log`. Одно соединение без `Multiplexed` бросает `InvalidOperationException` при втором одновременном вызове — так тесты ловят ошибки пула.
 
 - [ ] **Step 1: Тесты**
 
 ```csharp
-// RemoteProviderContractTests : ProviderContractTests — два класса: сервер со всеми возможностями и сервер без Symlinks/Modes/Multiplexed
+// RemoteProviderContractTests : ProviderContractTests — три класса: сервер со всеми возможностями; сервер без Symlinks/Modes/Multiplexed (SetModified есть);
+// сервер без SetModified с StoresModifiedTime == false (как FTP без MFMT)
 // RemoteProviderTests
 public async Task Idle_connection_closed_by_the_server_is_replaced_silently()            // RF2: DropNow(), затем листинг — успех, ConnectCount == 2
 public async Task Offline_server_is_connection_lost_and_works_again_when_it_returns()
@@ -1370,7 +1435,8 @@ internal static class FtpSettings {
 - [ ] **Step 1: Тесты** (все — против `TestFtpServer`, через `RemoteProvider`, где не сказано иное)
 
 ```csharp
-// FtpContractTests : ProviderContractTests            — TimeResolution = 1 с; факты о ссылках и правах пропускаются по возможностям
+// FtpContractTests : ProviderContractTests            — TimeResolution = 1 с; сервер с Mfmt = true; факты о ссылках и правах пропускаются по возможностям;
+// второй класс FtpWithoutMfmtContractTests: Mfmt = false, StoresModifiedTime == false
 // FtpSessionTests
 public async Task Lists_with_MLSD_and_with_plain_LIST()
 public async Task Missing_folder_is_not_found_not_an_empty_listing()
@@ -1420,8 +1486,8 @@ public async Task Folder_tree_copied_to_the_server_and_back_is_identical()
 ```csharp
 namespace Tandem.Net.Sftp;
 public sealed class SftpSessionFactory : IRemoteSessionFactory {
-    /// readKeyFile читает файл закрытого ключа по пути из профиля (приложение читает через локальный источник и посредник доступа).
-    public SftpSessionFactory(Func<string, CancellationToken, Task<byte[]>> readKeyFile, TimeSpan? connectTimeout = null, TimeSpan? operationTimeout = null);
+    /// Файл ключа фабрика не читает: байты ключа приходят в NetCredentials.PrivateKey (их читает NetConnections, задача 20).
+    public SftpSessionFactory(TimeSpan? connectTimeout = null, TimeSpan? operationTimeout = null);
 }
 internal sealed class SftpSession : IRemoteSession { /* один SftpClient; Features: Multiplexed | Modes | SetModified (+ Symlinks по итогам пробы задачи 2) */ }
 internal static class SftpAuth {
@@ -1437,7 +1503,7 @@ internal static class SftpEntries { public static RemoteEntry? ToEntry(ISftpFile
 
 Правила:
 - Ключ узла: в обработчике `HostKeyReceived` — `ITrustDecisions.TrustHostKeyAsync` с алгоритмом и отпечатком SHA-256 (ожидание ответа блокирует поток подключения, не поток интерфейса); отказ — `NetTrustException`.
-- Ключ пользователя: файл читает `readKeyFile`; зашифрованный ключ просит ключевую фразу через `ICredentialSource` (`NetCredentials.Passphrase`), повтор — через `CredentialLoop`. Агент ключей (`ssh-agent`) не используется.
+- Ключ пользователя: байты ключа — в `NetCredentials.PrivateKey` (пустые при входе по ключу — `NetAuthenticationException`); зашифрованный ключ просит ключевую фразу через `ICredentialSource` (`NetCredentials.Passphrase`), повтор — через `CredentialLoop`. Агент ключей (`ssh-agent`) не используется.
 - Переименование — обычная команда переименования (не «posix-rename», которая заменяет цель); проверку существования всё равно делает `RemoteProvider`.
 - `KeepAliveInterval` = 30 с; предел времени операции — 30 с.
 - Перевод ошибок (`SftpErrors.Map`): «нет такого пути» → `VfsNotFoundException`; «нет доступа» → `VfsAccessDeniedException`; отказ во входе → `NetAuthenticationException`; обрыв соединения, истёкшее время, `SocketException`, «клиент не подключён» → `VfsConnectionLostException`; `OperationCanceledException` — как есть; прочие ошибки библиотеки → `VfsException` с её текстом. Точные типы исключений SSH.NET взять из комментариев `SshNetProbeTests`.
@@ -1463,7 +1529,7 @@ public void Dot_and_dot_dot_are_dropped()
 public async Task Connect_to_a_closed_port_is_connection_lost_within_the_timeout()
 public async Task Connect_to_something_that_is_not_ssh_is_connection_lost()             // TcpListener на 127.0.0.1 отвечает мусором
 public async Task Connect_honours_cancellation()
-public async Task Missing_key_file_is_an_authentication_error()                          // readKeyFile бросает VfsNotFoundException
+public async Task Key_auth_without_key_bytes_is_an_authentication_error()
 ```
 
 - [ ] **Step 2–4:** Run `--filter "FullyQualifiedName~Sftp"` → FAIL; реализовать; → PASS.
@@ -1523,8 +1589,8 @@ public async Task Unicode_secret_survives()
 
 **Files:**
 - Create: `src/Tandem.App/ViewModels/Net/RemoteEdit.cs`
-- Modify: `src/Tandem.App/ViewModels/Editing/EditorViewModel.cs`, `ViewModels/ShellCommands.cs` (`EditAsync`), `Views/Editing/EditorWindow.axaml.cs`, `Services/WindowService.cs`, `Services/IDialogService.cs`, `DialogService.cs`, `Views/Dialogs/ChoiceDialogs.cs` (`EditorSaveDialog` и новый диалог «выгрузить перед закрытием»), `tests/…/Views/ScriptedDialogs.cs`, оба файла ресурсов (раздел net), `tests/Tandem.App.Tests/ViewModels/StreamProvider.cs` (только если подделке не хватает журнала чтений)
-- Test: `tests/Tandem.App.Tests/ViewModels/RemoteEditTests.cs`, `Views/EditorWindowTests.cs`
+- Modify: `src/Tandem.App/ViewModels/Editing/EditorViewModel.cs`, `ViewModels/ShellCommands.cs` (`EditAsync`), `Views/Editing/EditorWindow.axaml.cs`, `Services/WindowService.cs`, `Services/IDialogService.cs`, `DialogService.cs`, `Views/Dialogs/ChoiceDialogs.cs` (`EditorSaveDialog` и новый диалог «выгрузить перед закрытием»), `tests/…/Views/ScriptedDialogs.cs`, оба файла ресурсов (раздел net)
+- Test: `tests/Tandem.App.Tests/ViewModels/RemoteEditTests.cs`, `Views/RemoteEditWindowTests.cs` (новые файлы; существующий `EditorWindowTests.cs` не правится)
 
 **Interfaces:**
 - Consumes: `ProviderCapabilities.LocalCopyEdit`, `TempFileStore`, `SafeReplace`, `BatchScope`, существующий `EditorViewModel`.
@@ -1536,7 +1602,7 @@ public enum UploadOutcome { Uploaded, ChangedAtSource, Failed }
 /// Временная копия файла далёкого источника и её возвращение в источник.
 public sealed class RemoteEdit {
     public static Task<RemoteEdit> DownloadAsync(ProviderRegistry providers, TempFileStore temp, VfsPath file, long maxBytes, CancellationToken ct);
-    public VfsPath Source { get; } public VfsPath LocalCopy { get; }          // LocalCopy — путь локального источника во временной папке
+    public VfsPath Source { get; } public VfsPath LocalCopy { get; }          // LocalCopy — путь источника "local" во временной папке
     /// Пишет копию в источник через SafeReplace (в пакете источника). overwriteChanged == false и файл в источнике уже не тот,
     /// что скачивали (размер, время, либо исчез) → ChangedAtSource, ничего не записано.
     public Task<(UploadOutcome Outcome, Exception? Error)> UploadAsync(bool overwriteChanged, CancellationToken ct);
@@ -1559,6 +1625,8 @@ public interface IDialogService {   // добавить
 
 Правила:
 - `ShellCommands.EditAsync`: если источник файла объявляет `LocalCopyEdit` — всегда встроенный редактор через `OpenRemoteAsync` (внешний редактор для таких файлов не запускается: приложение не узнает, когда он сохранил). Файл больше `EditorViewModel.MaxFileBytes` отклоняется **до** скачивания; двоичный — после (копия удаляется). `EditorViewModel.File`, `Target` и заголовок — путь в источнике (повторное F4 выводит вперёд открытое окно).
+- Копия пишется, читается и удаляется **через локальный источник** (`providers.Get("local")`): путь даёт `TempFileStore.NewFile`, папку копии `RemoteEdit` создаёт через источник, удаляет — тоже через него (и `TempFileStore.Release`). Так приложение ходит во временную папку через посредника доступа, а в тестах (`TestApp`, где локальный источник — в памяти) копия живёт в памяти.
+- `EditorViewModel.Target` для такой копии остаётся путём **в источнике** (по нему `TryActivateEditorAsync` находит открытое окно); куда писать при сохранении, решает отдельное закрытое поле — путь копии. Комментарий к `Target` обновить: «файл, который правят; для временной копии — его путь в источнике, запись идёт в копию». Сохранение никогда не пишет в источник напрямую — только `UploadAsync`.
 - Cmd+S сохраняет во временную копию прежними правилами редактора. После каждого удачного сохранения — вопрос `UploadToSource` («Загрузить «{имя}» на сервер?»). «Да» → `UploadAsync`. «Нет» → `HasPendingUpload == true`, в заголовке пометка `RemoteEdit_NotUploaded`.
 - Выгрузка: источник изменился после скачивания или прошлой выгрузки → вопрос `OverwriteChangedAtSource` (по умолчанию «Отменить»). Запись — `SafeReplace` (обрыв не портит файл в источнике); права файла в источнике сохраняются, если источник их поддерживает. Сбой → `Error` редактора словами (`OperationTexts.ForFailure`), `HasPendingUpload` остаётся, текст и копия целы; повторить — снова Cmd+S или закрытие окна.
 - Закрытие окна: сначала прежний вопрос о несохранённом тексте; затем, если `HasPendingUpload`, — `AskUploadBeforeCloseAsync`: выгрузить (при сбое окно остаётся), не выгружать (окно закрывается), остаться. Выход из приложения идёт тем же путём (`WindowService.CloseAllAsync`). Закрытое окно удаляет копию.
@@ -1577,8 +1645,10 @@ public async Task Failed_upload_keeps_the_text_the_copy_and_the_old_source_file(
 public async Task Upload_can_be_retried_after_the_connection_returns()
 public async Task Closing_with_a_pending_upload_asks_and_stays_open_on_cancel_or_failure() // RF5
 public async Task Closing_removes_the_temporary_copy()
-public async Task Too_large_file_is_refused_before_any_download()                          // журнал чтений источника пуст
+public async Task Too_large_file_is_refused_before_any_download()                          // DroppingProvider.Reads пуст
 public async Task Binary_file_is_refused_and_its_copy_removed()
+public async Task Save_never_writes_to_the_source_directly()                               // до ответа на вопрос о выгрузке источник не открывался на запись
+// два следующих — сторожевые: они зелёные уже на шаге 2 (внешний редактор и так только для диска), и это ожидаемо
 public async Task External_editor_setting_is_ignored_for_such_sources()
 public async Task Second_F4_on_the_same_file_brings_the_open_editor_forward()
 public async Task Zip_and_disk_files_are_still_edited_in_place()                           // тесты редактора этапа 2 не изменены и зелёные
@@ -1632,6 +1702,7 @@ public sealed class NetConnections : IAsyncDisposable {
     public static string SecretKey(Guid profileId, SecretKind kind);          // "connection:{id:N}:password" / ":passphrase"
     public IReadOnlyList<ConnectionProfile> Profiles { get; }                 // по имени
     public event EventHandler? Changed;
+    public event EventHandler<Exception>? SecretSaveFailed;                   // связка ключей не приняла секрет; подключение при этом продолжается
     public void Load();
     /// Создаёт или заменяет подключение. password: null — не трогать сохранённый, "" — удалить из связки, иначе — записать в связку.
     public Task SaveAsync(ConnectionProfile profile, string? password, CancellationToken ct);
@@ -1649,7 +1720,8 @@ public sealed class NetConnections : IAsyncDisposable {
 
 Правила:
 - На подключение — один `RemoteProvider` с идентификатором `"net:" + n`, зарегистрированный **после** первого удачного входа и живущий до выхода; повторный `ConnectAsync` и подключение после `DisconnectAsync` используют его же (тот же `origin`, что при первом подключении).
-- Данные для входа (`ICredentialSource` службы): сначала те, что уже приняты в этом сеансе (в памяти) → затем из связки ключей → затем вопрос `INetPrompts`. `previousWasWrong` пропускает первые два шага. Принятые сервером данные запоминаются в памяти до выхода; в связку пишутся, только если пользователь отметил «запомнить» (и заменяют прежние). Ошибка чтения связки — как будто секрета нет (спросить); ошибка записи — подключение продолжается, ошибка возвращается вызывающему отдельным событием `SecretSaveFailed`.
+- Данные для входа (`ICredentialSource` службы): сначала те, что уже приняты в этом сеансе (в памяти) → затем из связки ключей → затем вопрос `INetPrompts`. `previousWasWrong` пропускает первые два шага. Принятые сервером данные запоминаются в памяти до выхода; в связку пишутся, только если пользователь отметил «запомнить» (и заменяют прежние). Ошибка чтения связки — как будто секрета нет (спросить); ошибка записи — подключение продолжается, об ошибке сообщает событие `SecretSaveFailed`.
+- Файл закрытого ключа читает только эта служба (`readKeyFile`, путь из профиля) и кладёт байты в `NetCredentials.PrivateKey`; фабрики соединений и консоль файлов не читают. Файл не найден или не читается — `NetAuthenticationException` с путём файла (без содержимого).
 - Ключ узла (`ITrustDecisions` службы): совпал с сохранённым — да; неизвестный — вопрос, при «да» сохранить; **изменившийся — вопрос с прежним отпечатком, при «нет» отказ, прежний ключ остаётся**. Сертификат — так же по отпечатку.
 - Нет фабрики для протокола — `NotSupportedException`.
 - `DeleteAsync` подключённого сервера: соединения закрываются, запись и секреты удаляются, источник остаётся зарегистрированным (вкладки уводит приложение).
@@ -1662,7 +1734,7 @@ public sealed class NetConnections : IAsyncDisposable {
 public void Saves_and_loads_profiles()
 public void Corrupt_file_is_set_aside_as_bad_and_gives_an_empty_list()
 public void Loaded_profiles_are_normalized_and_duplicates_by_id_dropped()
-public void File_has_no_field_that_could_hold_a_secret()                              // RF6: имена свойств JSON — ровно поля ConnectionProfile
+public void File_has_no_field_that_could_hold_a_secret()                              // RF6: имена свойств JSON — ровно параметры конструктора ConnectionProfile (Address и VolumeKey в файл не пишутся)
 // TrustStoreTests
 public void Remembers_host_keys_per_host_port_and_algorithm_and_survives_reload()
 public void Corrupt_file_trusts_nothing()
@@ -1679,7 +1751,8 @@ public async Task Unknown_host_key_is_asked_once_and_remembered()
 public async Task Changed_host_key_is_refused_unless_confirmed_and_the_old_one_stays()
 public async Task Unreadable_keychain_falls_back_to_asking()
 public async Task Keychain_write_failure_does_not_fail_the_connection()
-public async Task Private_key_is_read_through_the_given_reader()
+public async Task Private_key_is_read_through_the_given_reader_and_handed_over_as_bytes()
+public async Task Missing_key_file_is_an_authentication_error_naming_the_file()
 public async Task Delete_removes_the_profile_and_both_secrets()
 public async Task Password_is_stored_only_in_the_secret_store()                        // RF6: текст пароля не найден ни в одном файле папки настроек
 public async Task Failure_texts_never_contain_the_password()                           // RF6
@@ -1730,11 +1803,11 @@ public sealed partial class NetCommands {
 Решения:
 - `net.connect` (Cmd+K) доступна всегда после загрузки: открывает список подключений (имя, адрес; кнопки «Подключиться», «Создать…», «Изменить…», «Удалить», «Закрыть»; Enter — подключиться). Удаление спрашивает подтверждение.
 - Форма подключения: имя; протокол (FTP, FTPS явный, FTPS неявный, SFTP); сервер; порт (подставляется по протоколу, пока пользователь не ввёл свой); пользователь; способ входа (пароль; файл ключа — только SFTP; анонимно — только FTP и FTPS); путь к файлу ключа с кнопкой выбора файла; пароль или ключевая фраза в поле со скрытым вводом и флажок «Хранить в связке ключей»; начальная папка; для FTP — пассивный режим и кодировка имён (список `TextEncodings`, по умолчанию UTF-8). Для протокола FTP под полем пароля — предупреждение `Connection_PlainFtpWarning` («Пароль и файлы передаются без шифрования»). Проверки: сервер обязателен, порт 1…65535, для входа по ключу — путь к ключу. При правке поле пароля пустое: пустое и флажок стоит — сохранённый пароль не трогается; флажок снят — сохранённый пароль удаляется.
-- Подключение: `NetConnections.ConnectAsync` вне потока интерфейса; пока оно идёт, в строке состояния активной панели — «Подключение к {адрес}…», Esc отменяет. Успех → `NavigateToAsync(начальная папка)` активной панели. `origin` — `ProviderRegistry.PersistentLocationOf(текущая папка)`. Ошибка — сообщение словами (`OperationTexts.ForFailure`) и текст сервера деталью; отказ пользователя ввести пароль (`Declined`) и отмена — без сообщения. `SecretSaveFailed` — сообщение «Не удалось сохранить пароль в связке ключей».
+- Подключение: `NetConnections.ConnectAsync` вне потока интерфейса; пока оно идёт, в строке состояния активной панели — «Подключение к {адрес}…» (`PanelViewModel.ShowNotice`, задача 3), Esc отменяет (`MainViewModel.OnEscape`, задача 3; обработчик зарегистрирован только на время подключения). Успех → `NavigateToAsync(начальная папка)` активной панели. `origin` — `ProviderRegistry.PersistentLocationOf(текущая папка)`. Ошибка — сообщение словами и текст сервера деталью: отказ во входе (`NetAuthenticationException`), неподтверждённый ключ или сертификат (`NetTrustException`) и неподдерживаемый протокол `NetCommands` называет сам ключами `Net_*` («Сервер не принял имя или пароль», «Ключ сервера не подтверждён») — `OperationTexts` заморожен, не знает типов `Tandem.Net` и назвал бы их «нет доступа»; прочее — `OperationTexts.ForFailure`; отказ пользователя ввести пароль (`Declined`) и отмена — без сообщения. `SecretSaveFailed` — сообщение «Не удалось сохранить пароль в связке ключей».
 - Вопрос о пароле: имя подключения и адрес, поле со скрытым вводом, флажок «Запомнить в связке ключей», при `previousWasWrong` — строка «Сервер не принял пароль». Вопрос о ключе узла: адрес, алгоритм, отпечаток; для изменившегося ключа — оба отпечатка, предупреждение и кнопка по умолчанию «Отменить».
 - `net.disconnect` (Cmd+Shift+K) доступна, когда `NetConnections.ProfileOf(источник активной панели)` не null. Если в очереди есть операции, затрагивающие этот сервер, — сообщение и отказ. Иначе каждая вкладка обеих панелей, показывающая этот источник, уходит «вверх» из его корня (в `origin`), затем `DisconnectAsync`.
-- Боковая панель: раздел `Sidebar_Connections` («Сетевые подключения») со списком сохранённых подключений; щелчок подключается в активной панели.
-- `Composition.CreatePlatformServices`: `MacKeychainSecretStore`, `ConnectionStore` и `TrustStore` в папке настроек, `NetConnections` с **пустой** таблицей фабрик (протоколы подключает задача 22). `Composition.StartAsync` вызывает `Net.Load()` вместе с чтением настроек. Выход из приложения закрывает соединения (`AppServices.Dispose`).
+- Боковая панель: раздел `Net_SidebarConnections` («Сетевые подключения») со списком сохранённых подключений; щелчок подключается в активной панели.
+- `Composition.CreatePlatformServices`: `MacKeychainSecretStore`, `ConnectionStore` и `TrustStore` в папке настроек, `NetConnections` с **пустой** таблицей фабрик (протоколы подключает задача 22). `Composition.StartAsync` вызывает `Net.Load()` вместе с чтением настроек. Выход из приложения: `NetCommands.CloseAsync()` (его ждёт `MainViewModel.ConfirmCloseAsync`, задача 3) закрывает все соединения `NetConnections`; `AppServices.Dispose` остаётся синхронным и соединений не трогает.
 - `TestApp`: `FakeSecretStore`, `ScriptedNetDialogs`, `NetConnections` во временной папке с фабриками `FakeRemoteServer` для всех четырёх протоколов.
 
 - [ ] **Step 1: Тесты** (`[AvaloniaFact]`)
@@ -1755,6 +1828,8 @@ public async Task Connect_shows_the_server_folder_in_the_active_panel()
 public async Task Path_line_and_tab_title_show_the_address_without_a_password()   // RF6
 public async Task Up_from_the_server_root_returns_to_the_folder_connected_from()
 public async Task Connection_failure_is_told_in_words_and_declining_the_password_is_silent()
+public async Task Wrong_password_is_told_as_wrong_password_not_as_access_denied()
+public async Task Quitting_the_app_closes_every_connection()
 public async Task Escape_cancels_a_connection_in_progress()
 public async Task Password_and_host_key_questions_arrive_on_the_ui_thread()
 public async Task Disconnect_is_available_only_on_a_server_panel_and_returns_both_panels_tabs()
@@ -1774,21 +1849,21 @@ public async Task Sidebar_lists_saved_connections_and_a_click_connects()
 
 ### Task 22: Сборка сети в приложении
 
-**Направление:** net (после слияния ветвей net-ftp, net-sftp, net-app). **Зависит от:** 16, 17, 21.
+**Направление:** net (на ветке `net` после того, как ведущий слил в неё net-ftp, net-sftp, net-app и net-ssh). **Зависит от:** 16, 17, 21.
 
 **Files:**
-- Modify: `src/Tandem.App/Composition.cs`
+- Modify: `src/Tandem.App/Composition.cs`, `tests/Tandem.App.Tests/Tandem.App.Tests.csproj` (связать `..\Tandem.Net.Tests\Ftp\TestFtpServer.cs` и `..\Tandem.Platform.Mac.Tests\CountingBroker.cs`)
 - Test: `tests/Tandem.App.Tests/CompositionNetTests.cs`
 
 **Interfaces:**
 - Consumes: `FtpSessionFactory` (16), `SftpSessionFactory` (17), `NetConnections` (20), `MacKeychainSecretStore` (18).
-- Produces: `Composition.CreateSessionFactories(ProviderRegistry providers) : IReadOnlyDictionary<NetProtocol, IRemoteSessionFactory>` — `Ftp`, `FtpsExplicit`, `FtpsImplicit` → одна `FtpSessionFactory`; `Sftp` → `SftpSessionFactory`, чей `readKeyFile` читает файл через локальный источник `providers` (то есть через `IFileAccessBroker`), раскрывая `~` в домашнюю папку.
+- Produces: `Composition.CreateSessionFactories() : IReadOnlyDictionary<NetProtocol, IRemoteSessionFactory>` — `Ftp`, `FtpsExplicit`, `FtpsImplicit` → одна `FtpSessionFactory`; `Sftp` → `SftpSessionFactory`. `Composition.CreateKeyReader(ProviderRegistry providers, string homeDirectory) : Func<string, CancellationToken, Task<byte[]>>` — читает файл ключа через локальный источник `providers` (то есть через `IFileAccessBroker`), раскрывая `~` в переданную `homeDirectory` (тесты передают временную папку и настоящую домашнюю не трогают); его получает только `NetConnections`.
 
 - [ ] **Step 1: Тесты**
 
 ```csharp
 public void Every_protocol_has_a_factory()
-public async Task Key_file_is_read_through_the_local_provider_and_tilde_is_expanded()   // CountingBroker видел путь
+public async Task Key_file_is_read_through_the_local_provider_and_tilde_is_expanded()   // CountingBroker видел путь; homeDirectory — временная папка теста
 public async Task Building_the_services_opens_no_connection_and_does_not_touch_the_keychain()   // FakeSecretStore.Calls пуст; ни одного сокета
 public async Task Connect_to_a_closed_local_port_through_the_real_ftp_and_sftp_factories_is_told_as_connection_lost()   // 127.0.0.1
 public async Task Ftp_end_to_end_through_the_app_services()    // TestFtpServer + настоящая FtpSessionFactory + NetConnections: подключиться, листинг, копия файла
@@ -1801,11 +1876,11 @@ public async Task Ftp_end_to_end_through_the_app_services()    // TestFtpServer 
 
 ### Task 23: Проверки на настоящем сервере (по переменным окружения)
 
-**Направление:** net. **Зависит от:** 16, 17.
+**Направление:** net. **Зависит от:** 16, 17, 20 (`TrustStore`), 22.
 
 **Files:**
 - Create: `tests/Tandem.Net.Tests/Integration/LiveServer.cs`, `LocalSshd.cs`, `SftpLiveContractTests.cs`, `FtpLiveContractTests.cs`, `LiveScenarioTests.cs`
-- Modify: `tests/Tandem.Net.Tests/README.md`
+- Modify: `tests/Tandem.Net.Tests/README.md`, `tests/Tandem.Net.Tests/Tandem.Net.Tests.csproj` (ссылка на проект `Tandem.Archives` — для сценария «архив → сервер»)
 
 **Interfaces:**
 - Produces: `LiveServer.Sftp`, `LiveServer.Ftp`, `LiveServer.Ftps` — описание сервера из переменных окружения или null; каждый тест начинается с `Assert.SkipWhen(server is null, <какие переменные задать>)`.
@@ -1817,10 +1892,10 @@ public async Task Ftp_end_to_end_through_the_app_services()    // TestFtpServer 
 - [ ] **Step 1: Тесты**
 
 ```csharp
-// SftpLiveContractTests / FtpLiveContractTests : ProviderContractTests       — общий набор договора на настоящем сервере (FTP — и для FTPS)
+// SftpLiveContractTests / FtpLiveContractTests : ProviderContractTests       — общий набор договора на настоящем сервере (FTP — и для FTPS);
+// у FTP StoresModifiedTime берётся из возможностей соединения (есть ли MFMT)
 // LiveScenarioTests (для каждого заданного сервера)
 public async Task Copy_from_a_zip_archive_to_the_server_and_back_is_identical()          // критерий этапа: архив → сервер
-public async Task Folder_synchronization_between_disk_and_server_ends_equal()
 public async Task Overwrite_on_the_server_leaves_no_part_or_backup_files()
 public async Task Rename_onto_an_existing_file_is_refused()                              // RF2 на настоящем сервере
 public async Task Wrong_password_is_reported_as_authentication()
@@ -1832,17 +1907,17 @@ public async Task Two_gigabyte_sparse_file_uploads_with_progress_and_can_be_canc
 - [ ] **Step 2:** Run `dotnet test tests/Tandem.Net.Tests --filter "FullyQualifiedName~Integration"` без переменных → все `Skipped`, в причине названы переменные; ни одного `Failed`.
 - [ ] **Step 3:** Реализовать `LiveServer` и `LocalSshd`. Исполнитель **не** задаёт переменные сам и не запускает `sshd` без прямого согласия заказчика; если согласие есть — Run `TANDEM_TEST_LOCAL_SSHD=1 dotnet test tests/Tandem.Net.Tests --filter "FullyQualifiedName~Integration"` и приложить итог к отчёту.
 - [ ] **Step 4:** Run `dotnet test Tandem.slnx` → PASS, тесты `Integration` — `Skipped`.
-- [ ] **Step 5:** Commit: `test(net): opt-in live server tests for SFTP, FTP and FTPS`. Слить `net` в `main`.
+- [ ] **Step 5:** Commit: `test(net): opt-in live server tests for SFTP, FTP and FTPS`.
 
 ---
 
-## Ветвь net-ssh: SSH-консоль (задачи 27–29)
+## SSH-консоль (задачи 27–29)
 
-Добавлено заказчиком после утверждения плана; номера идут по порядку добавления, а не выполнения. Ветвь ведётся в своей рабочей копии: задача 27 начинается сразу после фазы A, задача 28 — от коммита, где есть задачи 17 и 20, задача 29 — от ветки `net` после задачи 21. Сливается в `net` перед задачей 23 или сразу после неё.
+Добавлено заказчиком после утверждения плана; номера идут по порядку добавления, а не выполнения. Задача 27 — ветвь net-ssh, своя рабочая копия сразу после фазы A. Задачи 28 и 29 идут на ветке `net` после задач 22 и 23 (см. раздел «Параллельное выполнение»). Строки интерфейса всех трёх — в разделе ресурсов `stage3:net-ssh`.
 
 ### Task 27: Ядро эмулятора терминала
 
-**Направление:** net / net-ssh. **Зависит от:** 2 (факты `XTermNetProbeTests`).
+**Направление:** net / net-ssh (своя рабочая копия, одновременно со всеми). **Зависит от:** 2 (факты `XTermNetProbeTests`).
 
 **Files:**
 - Create: `src/Tandem.Net/Terminal/TerminalEmulator.cs`, `TerminalCell.cs`, `TerminalInput.cs`, `TerminalSelectionText.cs`
@@ -1940,14 +2015,14 @@ public void Wide_characters_are_copied_once()
 
 ### Task 28: Сеанс оболочки по SSH
 
-**Направление:** net / net-ssh. **Зависит от:** 17 (`SftpAuth`, перевод ошибок), 20 (`NetConnections.CredentialsOf`, `Trust`).
+**Направление:** net (на ветке `net` после слияния её ветвей). **Зависит от:** 17 (`SftpAuth`, перевод ошибок), 20 (`NetConnections.CredentialsOf`, `Trust`), 23 (`LiveServer`, `LocalSshd`), 27.
 
 **Files:**
-- Create: `src/Tandem.Net/Ssh/ITerminalTransport.cs`, `SshShellTransport.cs`, `SshConsoles.cs`, `tests/Tandem.Net.Tests/Ssh/FakeTerminalTransport.cs`
+- Create: `src/Tandem.Net/Ssh/ITerminalTransport.cs`, `SshShellTransport.cs`, `SshConsoles.cs`, `tests/Tandem.Net.Tests/Ssh/FakeTerminalTransport.cs` (только открытые типы `Tandem.Net`: файл потом связывают в тесты приложения)
 - Test: `tests/Tandem.Net.Tests/Ssh/SshConsolesTests.cs`, `SshShellOfflineTests.cs`, `tests/Tandem.Net.Tests/Integration/SshShellLiveTests.cs`
 
 **Interfaces:**
-- Consumes: `SftpAuth.Build`, `SftpAuth.Describe`, `SftpErrors.Map`, `CredentialLoop`, `ITrustDecisions`, `ICredentialSource` (задачи 14, 17); `NetConnections` (задача 20); `LiveServer`, `LocalSshd` (задача 23 — только для `SshShellLiveTests`; если задача 23 ещё не слита, этот файл тестов добавляется после неё).
+- Consumes: `SftpAuth.Build`, `SftpAuth.Describe`, `SftpErrors.Map`, `CredentialLoop`, `ITrustDecisions`, `ICredentialSource` (задачи 14, 17); `NetConnections` (задача 20); `LiveServer`, `LocalSshd` (задача 23); `TerminalEmulator` (задача 27 — в одном живом тесте).
 - Produces:
 
 ```csharp
@@ -1962,8 +2037,7 @@ public interface ITerminalTransport : IAsyncDisposable {
 public interface ITerminalTransportFactory {
     ITerminalTransport Create(ConnectionProfile profile, ICredentialSource credentials, ITrustDecisions trust);
 }
-public sealed class SshShellTransportFactory(Func<string, CancellationToken, Task<byte[]>> readKeyFile, TimeSpan? connectTimeout = null)
-    : ITerminalTransportFactory;
+public sealed class SshShellTransportFactory(TimeSpan? connectTimeout = null) : ITerminalTransportFactory;   // ключ — байтами в NetCredentials, файлов не читает
 /// Консоли для сохранённых подключений: те же имя, пароль или ключ и то же доверие ключу узла, что у панели.
 public sealed class SshConsoles(NetConnections connections, ITerminalTransportFactory factory) {
     public static bool Supports(ConnectionProfile profile);                   // Protocol == Sftp
@@ -2002,15 +2076,15 @@ public async Task Full_screen_program_enters_and_leaves_the_alternate_screen()  
 
 ### Task 29: Окно SSH-консоли (Cmd+Alt+K)
 
-**Направление:** net / net-ssh. **Зависит от:** 3, 21, 27, 28.
+**Направление:** net (на ветке `net`, последняя задача направления). **Зависит от:** 3, 21, 22, 27, 28.
 
 **Files:**
 - Create: `src/Tandem.App/ViewModels/Net/TerminalViewModel.cs`, `ViewModels/Net/ConsolePickViewModel.cs`, `ViewModels/Net/NetCommands.Console.cs`, `Views/Net/TerminalControl.cs`, `Views/Net/TerminalWindow.axaml(.cs)`, `Services/ToolWindows.Console.cs`, `Services/ITerminalClipboard.cs`
-- Modify: `src/Tandem.App/Composition.cs` (`AppServices.Consoles`; настоящая `SshShellTransportFactory` с тем же чтением ключа, что в задаче 22), оба файла ресурсов (раздел net-ssh), `tests/…/Views/TestApp.cs` (поддельная фабрика каналов), `Tandem.App.Tests.csproj` (связать `FakeTerminalTransport.cs`)
+- Modify: `src/Tandem.App/Composition.cs` (`AppServices.Consoles`; настоящая `SshShellTransportFactory` — файл ключа ей не нужен, его читает `NetConnections`), оба файла ресурсов (раздел net-ssh), `tests/…/Views/TestApp.cs` (поддельная фабрика каналов), `Tandem.App.Tests.csproj` (связать `FakeTerminalTransport.cs`)
 - Test: `tests/Tandem.App.Tests/ViewModels/TerminalViewModelTests.cs`, `ConsoleCommandTests.cs`, `Views/TerminalControlTests.cs`
 
 **Interfaces:**
-- Consumes: `TerminalEmulator`, `TerminalInput`, `TerminalSelectionText` (27); `ITerminalTransport`, `SshConsoles` (28); `NetCommands` с `partial void RegisterConsole()`, `ToolWindows` с `partial void AddConsole()`, цвета `Tandem.Terminal*`, `IDialogModel<T>` (задача 3); `NetConnections.ProfileOf` (20).
+- Consumes: `TerminalEmulator`, `TerminalInput`, `TerminalSelectionText` (27); `ITerminalTransport`, `SshConsoles` (28); `NetCommands` с `partial void RegisterConsole()`, `ToolWindows` с `partial void AddConsole()`, цвета `Tandem.Terminal*`, `IDialogModel<T>`, `ICloseGuard`, `ConfirmModel`, `NetCommands.OnDispose` (задача 3); `NetConnections.ProfileOf` (20).
 - Produces:
 
 ```csharp
@@ -2018,8 +2092,9 @@ namespace Tandem.App.Services;
 public interface ITerminalClipboard { Task<string?> GetTextAsync(); Task SetTextAsync(string text); }   // настоящий — буфер обмена окна; в тестах — в памяти
 namespace Tandem.App.ViewModels.Net;
 public enum TerminalState { Connecting, Connected, Ended, Failed }
-public sealed partial class TerminalViewModel : ObservableObject, IAsyncDisposable {
-    public TerminalViewModel(string title, Func<ITerminalTransport> open, ITerminalClipboard clipboard, Action<Exception> reportFailure);
+public sealed partial class TerminalViewModel : ObservableObject, ICloseGuard, IAsyncDisposable {   // CanCloseAsync: живой сеанс → вопрос
+    public TerminalViewModel(string title, Func<ITerminalTransport> open, ITerminalClipboard clipboard, Func<ConfirmModel, Task<bool>> confirm,
+        Action<Exception> reportFailure);
     public TerminalEmulator Screen { get; } public object ScreenLock { get; }
     public TerminalState State { get; } public string Title { get; } public string? StatusText { get; }
     public int ScrollOffset { get; set; }                                   // на сколько строк экран прокручен вверх
@@ -2048,7 +2123,7 @@ public sealed partial class TerminalViewModel : ObservableObject, IAsyncDisposab
 - `TerminalControl` — собственный элемент с `Render`: сетка моноширинным шрифтом (`Menlo`, размер из настроек шрифта приложения), размер в знаках пересчитывается при изменении размера окна и передаётся серверу (`Resize`, не чаще раза в 100 мс). Цвета по умолчанию, курсор, выделение и 16 основных цветов — ресурсы темы `Tandem.Terminal*` (их добавила задача 3); цвета из 256-цветной таблицы и «полные» цвета задаёт программа на сервере, они вычисляются по стандартной формуле xterm, а не берутся из кода оформления.
 - Вывод читается фоновым циклом и подаётся в `TerminalEmulator` под `ScreenLock`; перерисовка — не чаще 60 раз в секунду, поток интерфейса не блокируется и при потоке вывода в мегабайты (`yes`, `cat` большого файла).
 - `net.console` доступна, когда источник активной панели — подключение SFTP или сохранено хотя бы одно подключение SFTP. Панель на сервере SFTP → консоль этого подключения. Иначе: одно подключение SFTP → оно; несколько → маленький диалог выбора (`ConsolePickViewModel : IDialogModel<Guid?>` через `IToolWindows.ShowDialogAsync`). Каждая команда открывает новое окно (`IToolWindows.Show`); окон может быть несколько. Заголовок — «имя подключения — заголовок, присланный сервером».
-- Состояния: «Подключение…» (Esc отменяет и закрывает окно); ошибка — словами в окне с кнопкой «Подключиться снова»; оболочка вышла — «Сеанс завершён» и та же кнопка; обрыв связи — «Связь потеряна» и та же кнопка. Закрытие окна с живым сеансом спрашивает подтверждение («Закрыть консоль? Сеанс на сервере будет завершён», по умолчанию «Отменить»); выход из приложения идёт тем же путём.
+- Состояния: «Подключение…» (Esc отменяет и закрывает окно); ошибка — словами в окне с кнопкой «Подключиться снова»; оболочка вышла — «Сеанс завершён» и та же кнопка; обрыв связи — «Связь потеряна» и та же кнопка. Закрытие окна с живым сеансом спрашивает подтверждение («Закрыть консоль? Сеанс на сервере будет завершён», по умолчанию «Отменить»): модель реализует `ICloseGuard`, вопрос — `ConfirmModel` через `IToolWindows.ShowDialogAsync` (`IDialogService` не меняется). Выход из приложения идёт тем же путём: `MainViewModel.ConfirmCloseAsync` уже спрашивает `ToolWindows.CloseAllAsync` (задача 3), отказ оставляет приложение открытым.
 - **Консоль ничего не запоминает на диске:** набранное, вставленное и выведенное не попадает в журнал, во временную папку, в настройки и в тексты ошибок; прокрученные строки живут в памяти окна и исчезают с ним.
 
 - [ ] **Step 1: Тесты** (`[AvaloniaFact]`; `FakeTerminalTransport` — записывает отправленное, выдаёт заданный вывод, умеет «оборваться»)
@@ -2078,7 +2153,8 @@ public async Task With_several_connections_and_a_disk_panel_the_command_asks_whi
 public async Task Ftp_connections_are_not_offered()
 public async Task Console_does_not_ask_for_a_password_the_panel_already_gave()
 public async Task Closing_a_live_console_asks_first_and_quitting_the_app_asks_too()
-public async Task Main_window_shortcuts_do_not_fire_while_the_console_has_focus()            // F5, Tab, Cmd+M в окне консоли уходят серверу или игнорируются
+public async Task Main_window_shortcuts_do_not_fire_while_the_console_has_focus()            // F5, Tab, Cmd+M в окне консоли уходят серверу или игнорируются;
+                                                                                             // тест видит только маршрут клавиш Avalonia — сочетания строки меню macOS проверяет приёмка (задача 26)
 // TerminalControlTests
 [AvaloniaFact] public void Size_in_pixels_gives_columns_and_rows_of_the_monospace_grid()
 [AvaloniaFact] public void Mouse_position_maps_to_a_cell_also_when_scrolled_back()
@@ -2098,7 +2174,8 @@ public async Task Main_window_shortcuts_do_not_fire_while_the_console_has_focus(
 **Направление:** совместная работа (main). **Зависит от:** 5, 6, 7, 8, 10, 13, 19, 22, 29.
 
 **Files:**
-- Create: `tests/Tandem.App.Tests/Integration/ServerScenarioTests.cs`, `ServerToolsTests.cs`, `ServerAvailabilityTests.cs`
+- Create: `tests/Tandem.App.Tests/Integration/ServerScenarioTests.cs`, `ServerToolsTests.cs`, `ServerAvailabilityTests.cs`, `tests/Tandem.Net.Tests/Integration/LiveSyncTests.cs` (по переменным окружения, как задача 23)
+- Modify: `tests/Tandem.App.Tests/ViewModels/MainViewModelTests.cs` (`Registers_every_command` снова проверяет все идентификаторы: список исключений задачи 3 убрать)
 - Modify: только то, что тесты покажут сломанным (каждую правку — с её тестом и отдельной строкой в отчёте)
 
 **Interfaces:**
@@ -2116,7 +2193,7 @@ public async Task Copy_to_the_server_cut_off_asks_to_reconnect_and_retry_and_the
 public async Task F6_from_the_server_to_disk_removes_server_files_only_after_the_copy()
 public async Task F8_on_the_server_offers_only_permanent_deletion_with_the_warning()
 public async Task Zip_lying_on_the_server_opens_as_a_folder_and_its_file_can_be_viewed()
-public async Task F5_into_a_zip_lying_on_the_server_rewrites_it_safely()                     // старый архив цел при сбое записи
+public async Task Zip_lying_on_the_server_is_read_only_and_F5_into_it_is_refused_in_words()  // архив на сервере только читается (решение 25); архив не тронут
 public async Task F3_and_quick_view_show_a_server_file()
 public async Task F4_on_a_server_file_saves_asks_and_uploads()                               // RF5 сквозной
 public async Task Enter_on_a_server_file_opens_a_temporary_copy()
@@ -2132,12 +2209,14 @@ public async Task Checksums_are_created_and_verified_on_a_server_folder()
 public async Task Folder_sizes_are_computed_on_the_server_one_folder_at_a_time()            // MaxOpenAtOnce ≤ 1 на время подсчёта
 public async Task Compare_files_between_an_archive_and_the_server()
 public async Task Conflict_dialog_compare_works_while_copying_to_the_server()
+// LiveSyncTests (Tandem.Net.Tests; Skipped без переменных окружения) — сюда перенесён сценарий, которому нужен код tools-b
+public async Task Folder_synchronization_between_disk_and_a_live_server_ends_equal()
 // ServerAvailabilityTests
 public async Task On_a_server_panel_reveal_terminal_open_with_and_search_are_off()
 public async Task Tools_and_network_commands_have_the_expected_availability_on_disk_archive_search_and_server_panels()   // таблица 12 команд × 4 вида панели
 ```
 
-- [ ] **Step 3:** Run `dotnet test tests/Tandem.App.Tests --filter "FullyQualifiedName~Integration"` → падающие тесты показывают, что чинить. Чинить в общем коде (возможности источника, типы исключений), не проверкой «это сервер». **Если сценарий «F5 в zip на сервере» требует переделки `ArchiveProvider` больше чем на один файл — не переделывать: оставить чтение, запись в такой архив запретить понятным сообщением и записать в известные ограничения.**
+- [ ] **Step 3:** Run `dotnet test tests/Tandem.App.Tests --filter "FullyQualifiedName~Integration"` → падающие тесты показывают, что чинить. Чинить в общем коде (возможности источника, типы исключений), не проверкой «это сервер». Файлы панели кнопок (`ButtonBarViewModel`, `ArgumentTemplate`, `ButtonBar.axaml`) эта задача не правит — они у задачи 25.
 - [ ] **Step 4:** Run `dotnet build Tandem.slnx && dotnet test Tandem.slnx` → 0 предупреждений, PASS; повторить команду `grep` из шага 1 → пусто.
 - [ ] **Step 5:** Commit: `test(app): cross-track scenarios for servers, archives and tools` (правки — отдельными коммитами `fix(...)` перед ним).
 
@@ -2158,10 +2237,12 @@ public async Task Tools_and_network_commands_have_the_expected_availability_on_d
 
 ```csharp
 public static class ArgumentTemplate { public static IReadOnlySet<char> PlaceholdersOf(string template); }   // из 'p','t','f','n','s'
-public sealed partial class ButtonBarViewModel { public bool CanRunButton(UserButton button); }             // заменяет общее CanRun
+public sealed partial class ButtonBarViewModel { public bool IsAvailable(UserButton button); }               // общее CanRun остаётся для привязки, но зависит от кнопки
 ```
 
-Правило: кнопка доступна, когда каждая подстановка её шаблона имеет значение — `%p` нужен путь активной панели на диске, `%t` — пассивной, `%f` и `%s` — файлы на диске, `%n` — любой файл под курсором. Кнопка без подстановок путей доступна всегда. Правило безопасности этапа 2 (кнопка не запускается с пропущенным аргументом) остаётся.
+Как сейчас (этап 2, сверено с кодом): вся панель кнопок выключена, когда активная панель не на диске; аргумент с `%f`, `%n` или `%s`, которому нечего подставить (курсор на «..»), просто опускается; запуск блокируется, только когда нужен `%t`, а пассивная панель не на диске.
+
+Новое правило: кнопка недоступна, только когда её шаблону нужен **путь на диске, которого у панели нет**: `%p` — активная панель не на диске; `%t` — пассивная не на диске; `%f` или `%s` — активная панель не на диске (сами файлы не на диске). `%n` (имя) пути не требует. Кнопка без подстановок путей доступна на любой панели. Правило «нечего подставить под курсором → аргумент опускается» для `%f`, `%n`, `%s` остаётся как было: кнопка с `%f` на «..» по-прежнему доступна. Рабочая папка запускаемой программы — папка активной панели, а когда панель не на диске — домашняя папка. Закрытый метод `CanRunButton(UserButton?)` команды `[RelayCommand]` сохраняет свою сигнатуру; существующие `ButtonBarTests` обновляются здесь, в фазе C.
 
 - [ ] **Step 1: Тесты**
 
@@ -2170,7 +2251,9 @@ public sealed partial class ButtonBarViewModel { public bool CanRunButton(UserBu
 public async Task Button_without_path_placeholders_runs_on_archive_search_and_remote_panels()
 public async Task Button_needing_the_other_panels_path_is_off_when_that_panel_is_not_on_disk()
 public async Task Button_availability_follows_the_cursor_and_the_panels()
-public async Task A_disabled_button_never_starts_a_program_with_a_missing_argument()
+public async Task Button_with_a_file_placeholder_on_the_parent_link_still_runs_without_that_argument()   // поведение этапа 2 сохранено
+public async Task Working_folder_is_the_home_folder_when_the_active_panel_is_not_on_disk()
+public async Task A_button_missing_a_disk_path_never_starts_a_program()
 ```
 
 - [ ] **Step 2–4:** Run `--filter "FullyQualifiedName~ArgumentTemplate|FullyQualifiedName~ButtonBar"` → FAIL; реализовать; → PASS.
@@ -2186,17 +2269,18 @@ public async Task A_disabled_button_never_starts_a_program_with_a_missing_argume
 
 **Files:**
 - Create: `docs/checklists/stage-3.md`
-- Modify: `build/Info.plist` (`CFBundleShortVersionString` = `0.3.0`, `CFBundleVersion` = `3`, `NSLocalNetworkUsageDescription`), `build/verify-app.sh`, `README.md`
+- Create (ещё): `build/ru.lproj/InfoPlist.strings`
+- Modify: `build/Info.plist` (`CFBundleShortVersionString` = `0.3.0`, `CFBundleVersion` = `3`, `NSLocalNetworkUsageDescription`), `build/make-app.sh` (кладёт `ru.lproj/InfoPlist.strings` в `Contents/Resources`), `build/verify-app.sh`, `README.md`
 
 **Interfaces:**
 - Consumes: всё построенное в задачах 1–25.
 - Produces: `dist/Tandem.app` версии 0.3.0; список ручной приёмки.
 
 - [ ] **Step 1:** Дополнить `build/verify-app.sh`: версия 0.3.0 и наличие в `Contents/MacOS` файлов `Tandem.Net.dll`, `Renci.SshNet.dll`, `FluentFTP.dll`, `DiffPlex.dll`, `System.IO.Hashing.dll`, `XTerm.NET.dll` (точное имя файла — из отчёта задачи 2), а также зависимостей SSH.NET, которые задача 2 назвала в отчёте. Run `build/verify-app.sh` на старом пакете → FAIL.
-- [ ] **Step 2:** Поправить `Info.plist`. `NSLocalNetworkUsageDescription` — текст, который macOS показывает при первом подключении к серверу в локальной сети: «Tandem подключается к серверам FTP и SFTP, которые вы указали. / Tandem connects to the FTP and SFTP servers you set up.» Run `build/make-app.sh && build/verify-app.sh` → `RESULT: PASS`. Run `open dist/Tandem.app` → окно с двумя панелями, меню «Инструменты» и «Сеть».
+- [ ] **Step 2:** Поправить `Info.plist`. `NSLocalNetworkUsageDescription` — текст, который macOS показывает при первом подключении к серверу в локальной сети: в `Info.plist` — по-английски («Tandem connects to the FTP and SFTP servers you set up.»), русский — в `ru.lproj/InfoPlist.strings` («Tandem подключается к серверам FTP и SFTP, которые вы указали.»); `verify-app.sh` проверяет оба. Run `build/make-app.sh && build/verify-app.sh` → `RESULT: PASS` (пробный запуск внутри проверки — её собственный). Окно приложения исполнитель не открывает: установку и запуск делает ведущий, а первый пункт списка приёмки — «окно с двумя панелями, меню „Инструменты“ и „Сеть“».
 - [ ] **Step 3:** Написать `docs/checklists/stage-3.md` на русском, в той же форме, что `docs/checklists/stage-2.md` (действие → ожидаемый результат, флажки; главные критерии жирным). Разделы:
   - «Как запустить» — сборка, проверка, новые файлы `connections.json` и `known-hosts.json`, где лежат пароли (программа «Связка ключей», записи службы «Tandem») и как их удалить; настройки этапов 1–2 сохраняются; сборку 0.2.0 можно запустить на тех же настройках.
-  - «Проверить первым» — на настоящей клавиатуре (в том числе в русской раскладке) до приложения доходят Cmd+M (и окно не сворачивается), Ctrl+M, Ctrl+Shift+M, Shift+F2, Cmd+Shift+C, Cmd+Shift+D, Cmd+Shift+S, Cmd+Alt+I, Cmd+Shift+I, Cmd+K, Cmd+Shift+K, Cmd+Alt+K, Ctrl+F, Ctrl+Shift+F.
+  - «Проверить первым» — на настоящей клавиатуре (в том числе в русской раскладке) до приложения доходят Cmd+M (и окно не сворачивается), Ctrl+M, Ctrl+Shift+M, Shift+F2, Cmd+Shift+C, Cmd+Shift+D, Cmd+Shift+S, Cmd+Alt+I, Cmd+Shift+I, Cmd+K, Cmd+Shift+K, Cmd+Alt+K, Ctrl+F, Ctrl+Shift+F. Отдельно, при окне консоли в фокусе: Cmd+W закрывает консоль, а не вкладку панели; Cmd+M, Cmd+K, Cmd+T ничего не делают в главном окне (сочетания строки меню macOS автотесты не видят).
   - «Групповое переименование» — **1000 файлов по шаблону и отмена** (команда для создания: `mkdir t && cd t && for i in $(seq -w 1 1000); do echo $i > f$i.txt; done`); счётчик, дата, диапазон символов; поиск и замена, регулярное выражение; регистр; предварительный просмотр показывает конфликты; обмен имён; имя занято посторонним файлом; отмена после того, как один файл изменили.
   - «Сравнение папок» и «Сравнение файлов» — отличающиеся и уникальные помечены в обеих панелях; текст бок о бок с подсветкой в светлой и тёмной теме, переход по отличиям; двоичные файлы; файл из архива против файла на диске; кнопка «Сравнить…» в диалоге конфликта при копировании.
   - «Синхронизация» — **синхронизация двух папок**: по размеру и дате, по содержимому; направление по каждому элементу; удаление только по явному выбору, подтверждение с числами; изменить файл между сравнением и запуском → он пропущен и назван в сводке; отмена посреди; папка против zip.
@@ -2208,7 +2292,7 @@ public async Task A_disabled_button_never_starts_a_program_with_a_missing_argume
   - «SSH-консоль» (Cmd+Alt+K) — открывается для сервера активной панели и для сохранённого подключения SFTP, пароль повторно не спрашивается; приглашение bash или zsh, русский текст, цвета `ls`; **правая кнопка мыши с выделением копирует и снимает выделение, без выделения — вставляет в строку ввода**; многострочная вставка уходит сразу; Cmd+C и Cmd+V; `vim`, `top`, `less`, `mc`, `htop` рисуются правильно и после выхода возвращают прежний экран; изменение размера окна (`stty size`); прокрутка назад; Ctrl+C, Ctrl+D, Ctrl+R, Tab, стрелки, F-клавиши; `exit` → «Сеанс завершён»; выключить Wi-Fi → «Связь потеряна» и «Подключиться снова»; несколько консолей сразу; обе темы.
   - «F4 на сервере» — правка, сохранение, вопрос о загрузке; отказ и закрытие окна; файл изменён на сервере другим клиентом; обрыв при загрузке.
   - «Оба языка» и «Перезапуск» (вкладка на сервере открывается как папка диска).
-  - «Известные ограничения этапа 3»: докачки нет (прерванная передача начинается заново — так в спецификации); поиск на серверах недоступен; `ssh-agent` и вход по сертификату не поддерживаются; путь `sftp://…` нельзя ввести в строке пути — только через подключения; FTP-сервер без команды `MFMT` не хранит время файла, поэтому после загрузки на него синхронизация «по дате» считает файл более новым на сервере (использовать «по содержимому»); на сервере между проверкой имени и переименованием есть зазор (другой клиент может создать файл в этот миг); после обрыва, на который ответили «Пропустить» или «Прервать», на сервере может остаться файл `.имя.tandem-part`; внешний редактор для файлов на сервере не используется; просмотр файла с FTP-сервера сначала скачивает его целиком; журнал отмены переименования теряется при выходе; сортировка по размеру не учитывает подсчитанные размеры папок; при сборке без сертификата разработчика macOS после каждой пересборки заново спрашивает доступ к паролю в связке ключей; консоль: только для подключений SFTP; щелчки мыши программам на сервере не передаются; сеанс не записывается в файл; нет вкладок, поиска по выводу и настройки шрифта отдельно от приложения; многострочная вставка не спрашивает подтверждения; всё оставшееся из ограничений этапов 1–2, что ещё верно.
+  - «Известные ограничения этапа 3»: zip-архив, лежащий на сервере, открывается только для чтения (чтобы изменить — скопировать на диск); докачки нет (прерванная передача начинается заново — так в спецификации); поиск на серверах недоступен; `ssh-agent` и вход по сертификату не поддерживаются; путь `sftp://…` нельзя ввести в строке пути — только через подключения; FTP-сервер без команды `MFMT` не хранит время файла, поэтому после загрузки на него синхронизация «по дате» считает файл более новым на сервере (использовать «по содержимому»); на сервере между проверкой имени и переименованием есть зазор (другой клиент может создать файл в этот миг); после обрыва, на который ответили «Пропустить» или «Прервать», на сервере может остаться файл `.имя.tandem-part`; внешний редактор для файлов на сервере не используется; просмотр файла с FTP-сервера сначала скачивает его целиком; журнал отмены переименования теряется при выходе; сортировка по размеру не учитывает подсчитанные размеры папок; при сборке без сертификата разработчика macOS после каждой пересборки заново спрашивает доступ к паролю в связке ключей; консоль: только для подключений SFTP; щелчки мыши программам на сервере не передаются; сеанс не записывается в файл; нет вкладок, поиска по выводу и настройки шрифта отдельно от приложения; многострочная вставка не спрашивает подтверждения; всё оставшееся из ограничений этапов 1–2, что ещё верно.
 - [ ] **Step 4:** Обновить `README.md`: состояние (этап 3 на приёмке, версия 0.3.0), возможности этапа 3, `src/Tandem.Net` в структуре, файлы `connections.json` и `known-hosts.json`, где хранятся пароли, ссылки на этот план и `docs/checklists/stage-3.md`, абзац «Проверки на настоящем сервере» со ссылкой на `tests/Tandem.Net.Tests/README.md`; английский раздел — то же кратко.
 - [ ] **Step 5:** Run `dotnet build Tandem.slnx` → 0 предупреждений; `dotnet test Tandem.slnx` → все тесты PASS (тесты по переменным окружения — `Skipped`). Commit: `build: stage 3 bundle, checklist and README`.
 
@@ -2244,10 +2328,14 @@ public async Task A_disabled_button_never_starts_a_program_with_a_missing_argume
 23. **Консоль ничего не пишет на диск** (нет журнала сеанса), **не передаёт щелчки мыши программам на сервере** и не имеет вкладок. Цена: каждая из трёх возможностей — отдельная небольшая задача.
 24. **Сочетание консоли — Cmd+Alt+K** (рядом с Cmd+K «подключиться» и Cmd+Shift+K «отключиться»); в окне консоли раскладка главного окна не действует, серверу уходит всё, кроме Cmd+C, Cmd+V, Cmd+W. Цена: одна строка в `KeyMap`.
 
+25. **Zip-архив, лежащий на сервере, только читается.** Нынешний `ArchiveProvider` правит архив лишь на источнике с пакетной записью или на диске; учить его серверу — отдельная работа с отдельным риском для данных. Цена: чтобы изменить такой архив, его копируют на диск; снять ограничение — одна задача в `ArchiveProvider.Zip.cs` с тестами обрыва.
+26. **По итогам предварительной проверки плана** всё общее перенесено в фазу A (сообщение в строке состояния, обработчик Esc, уборка частичных файлов, `ConfirmModel`, `ICloseGuard`, передача «Сравнить» в диалог конфликта, `NameKey`, служебные имена, `StoresModifiedTime`, журнал чтений подделки, закрытие сети при выходе); задачи внутри одной рабочей копии идут по очереди; исполнители не сливают ветви и не запускают окно приложения. Цена: фаза A длиннее примерно на полдня, зато направления фазы B не правят общих файлов.
+
 ## Самопроверка плана
 
 - **Покрытие спецификации.** Группа F: групповое переименование (шаблон, счётчик, дата, поиск и замена с выражением, регистр, просмотр, отмена) — задачи 4–5; сравнение каталогов — 8; синхронизация (размер и дата или содержимое, направление по элементу, через движок) — 11–13; сравнение файлов (текст бок о бок с подсветкой, двоичное) — 9–10; контрольные суммы CRC32, MD5, SHA-1, SHA-256 (создание и проверка) — 6; размер папок (под курсором и всех) — 7. Группа G: FTP, FTPS — 15–16; SFTP с паролем и ключом — 17; сервер как источник в панели — 14, 21; менеджер подключений (сохранить, изменить, удалить), пароли в связке ключей — 18, 20, 21; F4 на сервере через временную копию с предложением загрузить — 19; операции и просмотр через общий движок — 14, 24; обрыв связи с «переподключиться и повторить» — 1, 14, 21, 24; SSH-консоль (эмулятор, сеанс оболочки с псевдотерминалом и сменой размера, окно, правая кнопка мыши как в PuTTY) — 27, 28, 29. Раздел 5.1 (`Tandem.Net`, `ISecretStore`) — 1, 2, 18; 5.2 (источники «сервер», вложение архива на сервере) — 14, 24; 5.3 (операция «синхронизация», действие «сравнить» в конфликте) — 10, 12; 5.4 (ключ читается через посредника доступа) — 22; 5.5 (подключения в JSON, пароли только в связке) — 18, 20; 5.6 (оба языка) — каждая задача с интерфейсом; 7.1 (боковая панель: сетевые подключения) — 21; 7.2 (Cmd+M) — 3, 5; раздел 8, этап 3: 1000 файлов с отменой — 5 (`Thousand_files_renamed_by_template_and_undone`) и приёмка; синхронизация двух папок — 12, 13, 24; SFTP как панель и архив → сервер — 14, 17, 21–24 и приёмка; раздел 9 (тесты ядра и `Net`, локальный тестовый сервер для FTP, ручной список) — в каждой задаче, 15, 26.
 - **Review Focus.** 1 — задачи 1, 14, 16, 24; 2 — 14, 16, 23; 3 — 11, 12, 13, 24; 4 — 4, 5; 5 — 19, 24; 6 — 16, 20, 21; 7 — 8, 11, 24; 8 — 27, 28, 29.
-- **Согласованность имён.** `VfsConnectionLostException`, `LocalCopyEdit`, `ISecretStore`, `OperationKind`, `SkipReason` (1) → 5, 6, 12, 14, 18–20; `IToolWindows`, `IDialogModel<T>`, `ToolsCommands.On`, `SelectWhere`, `IDialogService.CompareFiles` (3) → 5–8, 10, 13; `RenamePlan`, `RenameItem` (4) → 5; `NameKey` (8) → 11; `BinaryDiff.AreEqualAsync` (9) → 11; `SyncComparison`, `SyncItem`, `SyncAction` (11) → 12, 13; `ConnectionProfile`, `IRemoteSession`, `IRemoteSessionFactory`, `CredentialLoop`, `ITrustDecisions`, `ICredentialSource`, `RemoteProvider`, `FakeRemoteServer` (14) → 16, 17, 20–24; `TestFtpServer` (15) → 16, 22; `NetConnections`, `INetPrompts`, `SecretAnswer` (20) → 21, 22, 28; `TerminalEmulator`, `TerminalInput`, `TerminalSelectionText` (27) и `ITerminalTransport`, `SshConsoles` (28) → 29; `NetCommands.RegisterConsole`, `ToolWindows.AddConsole`, цвета `Tandem.Terminal*` (3) → 29; `AppServices` меняется в задаче 3 (`ToolWindows`) в задаче 21 (`Secrets`, `Net`, `NetDialogs`) и в задаче 29 (`Consoles`) — задача 29 идёт после 21 в том же направлении.
-- **Параллельность.** После задачи 3 направления не делят ни одного файла, кроме двух файлов ресурсов с отдельными разделами: диалог конфликта (задача 10) вынесен в свой файл, остальные диалоги `ChoiceDialogs.cs` правит только направление net (задача 19); свои тесты каждое направление пишет в новых файлах, существующие тестовые файлы в фазе B не дополняются.
+- **Предварительная проверка (47 замечаний)** учтена: общие зацепки — в задачах 1 и 3; единственное отклонённое предложение — нет (замечание 40 оставлено решением 13 без изменений, как и предлагалось).
+- **Согласованность имён.** `VfsConnectionLostException`, `LocalCopyEdit`, `ISecretStore`, `OperationKind`, `SkipReason` (1) → 5, 6, 12, 14, 18–20; `IToolWindows`, `IDialogModel<T>`, `ToolsCommands.On`, `SelectWhere`, `IDialogService.CompareFiles` (3) → 5–8, 10, 13; `RenamePlan`, `RenameItem` (4) → 5; `NameKey`, `SafeReplace.IsServiceName`, `SkipReason.LinkSkipped`, `StoresModifiedTime`, `DroppingProvider.Reads` (1) → 4, 5, 6, 8, 11, 14, 16, 19, 23; `ConfirmModel`, `ICloseGuard`, `ShowNotice`, `OnEscape`, `OnDispose`, `NetCommands.CloseAsync` (3) → 5, 8, 10, 13, 21, 29; `BinaryDiff.AreEqualAsync` (9) → 11; `SyncComparison`, `SyncItem`, `SyncAction` (11) → 12, 13; `ConnectionProfile`, `IRemoteSession`, `IRemoteSessionFactory`, `CredentialLoop`, `ITrustDecisions`, `ICredentialSource`, `RemoteProvider`, `FakeRemoteServer` (14) → 16, 17, 20–24; `TestFtpServer` (15) → 16, 22; `NetConnections`, `INetPrompts`, `SecretAnswer` (20) → 21, 22, 28; `TerminalEmulator`, `TerminalInput`, `TerminalSelectionText` (27) и `ITerminalTransport`, `SshConsoles` (28) → 29; `NetCommands.RegisterConsole`, `ToolWindows.AddConsole`, цвета `Tandem.Terminal*` (3) → 29; `AppServices` меняется в задаче 3 (`ToolWindows`) в задаче 21 (`Secrets`, `Net`, `NetDialogs`) и в задаче 29 (`Consoles`) — задача 29 идёт после 21 в том же направлении.
+- **Параллельность.** Одновременно идут только задачи разных рабочих копий; внутри копии — по очереди. После задачи 3 направления не делят ни одного файла, кроме двух файлов ресурсов с отдельными разделами: диалог конфликта (задача 10) вынесен в свой файл, остальные диалоги `ChoiceDialogs.cs` правит только направление net (задача 19); свои тесты каждое направление пишет в новых файлах, существующие тестовые файлы в фазе B не дополняются.
 - **Осознанно вне объёма:** докачка передач и поиск на серверах (не-цели спецификации); режим «зеркало», слияние и правка в окне сравнения, трёхстороннее сравнение, расписание синхронизации; `ssh-agent`, прокси, SCP, WebDAV, облака; ввод адреса сервера в строке пути; журнал отмены на диске; локальный терминал (оболочка этого Mac), запись сеанса консоли, вкладки консоли, передача мыши программам на сервере.
