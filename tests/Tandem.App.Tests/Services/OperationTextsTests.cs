@@ -87,4 +87,18 @@ public class OperationTextsTests : LanguageTestBase
         Assert.Equal("У /dst/a.txt имя, которое архив не может сохранить (в нём есть «:» или «\\»).",
             OperationTexts.ForError(Item, error));
     }
+
+    [Fact]
+    public void Stage_three_skip_reasons_are_full_sentences()
+    {
+        Assert.Equal("Skipped: the item changed after the comparison",
+            Loc.Enum(Tandem.Core.Operations.SkipReason.ChangedSinceCompared));
+        Assert.Equal("Skipped: the new name is already taken", Loc.Enum(Tandem.Core.Operations.SkipReason.NameTaken));
+        Assert.Equal("Skipped: the item is a symbolic link", Loc.Enum(Tandem.Core.Operations.SkipReason.LinkSkipped));
+        Loc.SetLanguage("ru");
+        Assert.Equal("Пропущено: объект изменился после сравнения",
+            Loc.Enum(Tandem.Core.Operations.SkipReason.ChangedSinceCompared));
+        Assert.Equal("Пропущено: новое имя уже занято", Loc.Enum(Tandem.Core.Operations.SkipReason.NameTaken));
+        Assert.Equal("Пропущено: это символическая ссылка", Loc.Enum(Tandem.Core.Operations.SkipReason.LinkSkipped));
+    }
 }

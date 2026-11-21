@@ -25,4 +25,14 @@ public sealed class NameKeyTests
         Assert.True(NameKey.SameOnMacDisk("Notes.txt", "notes.TXT"));
         Assert.False(NameKey.SameOnMacDisk("notes.txt", "notes.md"));
     }
+
+    [Fact]
+    public void Name_with_an_unpaired_surrogate_is_its_own_key()
+    {
+        const string broken = "a\uD800b.txt"; // a lone high surrogate: string.Normalize throws on it
+
+        Assert.Equal(broken, NameKey.Of(broken));
+        Assert.True(NameKey.SameOnMacDisk(broken, "A\uD800B.TXT"));
+        Assert.False(NameKey.SameOnMacDisk(broken, "ab.txt"));
+    }
 }

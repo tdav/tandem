@@ -426,6 +426,27 @@ public class PanelListingTests : IDisposable
     }
 
     [AvaloniaFact]
+    public async Task Reconnect_after_a_failed_navigation_goes_on_to_the_folder_it_was_heading_for()
+    {
+        var remote = new DroppingProvider("net");
+        remote.Inner.AddFile("/d/a.txt");
+        remote.Inner.AddFile("/d/sub/b.txt");
+        await using var app = await TestApp.StartAsync(show: false, extraProviders: [remote]);
+        await app.Left.NavigateToAsync(Net("/d"));
+        remote.Connected = false;
+        await app.Left.NavigateToAsync(Net("/d/sub"));
+        Assert.Equal(Net("/d"), app.Left.CurrentPath);
+        Assert.True(app.Main.Left.IsConnectionLost);
+
+        remote.Connected = true;
+        await ((IAsyncRelayCommand)app.Main.Left.ReconnectCommand).ExecuteAsync(null);
+
+        Assert.False(app.Main.Left.IsConnectionLost);
+        Assert.Equal(Net("/d/sub"), app.Left.CurrentPath);
+        Assert.Equal(["..", "b.txt"], Names(app.Left));
+    }
+
+    [AvaloniaFact]
     public async Task Newer_navigation_cancels_older()
     {
         _fs.AddFile("/slow/s.txt");

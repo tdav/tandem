@@ -51,7 +51,7 @@ public sealed class DroppingProvider : IFileSystemProvider
         set { lock (_lock) _dropAfterBytes = value; }
     }
 
-    /// <summary>The paths opened for reading, in order.</summary>
+    /// <summary>The paths opened for reading, in order; an open that failed is not a read.</summary>
     public IReadOnlyList<VfsPath> Reads
     {
         get { lock (_lock) return _reads.ToArray(); }
@@ -79,8 +79,9 @@ public sealed class DroppingProvider : IFileSystemProvider
 
     public Task<Stream> OpenReadAsync(VfsPath path, CancellationToken ct) => Call(path, async () =>
     {
+        var stream = await Inner.OpenReadAsync(path, ct).ConfigureAwait(false);
         lock (_lock) _reads.Add(path);
-        return Wrap(await Inner.OpenReadAsync(path, ct).ConfigureAwait(false));
+        return Wrap(stream);
     });
 
     public Task<Stream> OpenWriteAsync(VfsPath path, CancellationToken ct) => Call(path, async () =>

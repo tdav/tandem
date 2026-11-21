@@ -117,6 +117,10 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     public partial PanelErrorKind? ErrorKind { get; private set; }
 
+    /// <summary>The folder <see cref="Error"/> is about: the one shown, or the one a failed navigation was heading
+    /// for (the panel stays where it was); null after a successful load.</summary>
+    public VfsPath? ErrorPath { get; private set; }
+
     /// <summary>Raised after the panel has moved to a folder.</summary>
     public event EventHandler<VfsPath>? Navigated;
 
@@ -514,6 +518,7 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
         _showingPreview = false;
         _rowsBeforePreview = [];
         Publish(rows, cursor);
+        ErrorPath = null;
         ErrorKind = null;
         Error = null;
     }
@@ -622,6 +627,7 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
 
     private void SetError(PanelErrorKind kind, VfsPath path)
     {
+        ErrorPath = path;
         ErrorKind = kind;
         var key = kind == PanelErrorKind.ConnectionLost ? "Panel_ConnectionLost" : $"Panel_Error_{kind}";
         Error = Loc.Format(key, DisplayPathOf(path));

@@ -80,6 +80,7 @@
   </data>
   <data name="Panel_ConnectionLost" xml:space="preserve">
     <value>The connection was lost while reading the folder {0}</value>
+    <comment>{0} folder path</comment>
   </data>
   <data name="Panel_Reconnect" xml:space="preserve">
     <value>Reconnect</value>
@@ -207,13 +208,13 @@
     <value>Skipped: an archive cannot store this name (it contains “:” or “\”)</value>
   </data>
   <data name="SkipReason_ChangedSinceCompared" xml:space="preserve">
-    <value>changed after the comparison</value>
+    <value>Skipped: the item changed after the comparison</value>
   </data>
   <data name="SkipReason_NameTaken" xml:space="preserve">
-    <value>name already taken</value>
+    <value>Skipped: the new name is already taken</value>
   </data>
   <data name="SkipReason_LinkSkipped" xml:space="preserve">
-    <value>symbolic link skipped</value>
+    <value>Skipped: the item is a symbolic link</value>
   </data>
 
   <!-- Tandem.Core.Operations.OperationKind (names of operations, not buttons) -->

@@ -8,11 +8,19 @@ namespace Tandem.Core.Tools;
 public static class NameKey
 {
     /// <summary>The name in composed form (<see cref="NormalizationForm.FormC"/>). Keys are compared ordinally, so
-    /// letter case matters (comparing folders, synchronizing).</summary>
+    /// letter case matters (comparing folders, synchronizing). A name that cannot be normalized (it holds an
+    /// unpaired surrogate) is its own key.</summary>
     public static string Of(string name)
     {
         ArgumentNullException.ThrowIfNull(name);
-        return name.Normalize(NormalizationForm.FormC);
+        try
+        {
+            return name.Normalize(NormalizationForm.FormC);
+        }
+        catch (ArgumentException)
+        {
+            return name;
+        }
     }
 
     /// <summary>Whether two names are one on a macOS disk: the same in composed form, ignoring letter case (is the

@@ -3,7 +3,8 @@ using Tandem.Core.Platform;
 namespace Tandem.Core.Tests.Platform;
 
 /// <summary>An <see cref="ISecretStore"/> in memory. <see cref="Calls"/> records every call ("Get", "Set",
-/// "Delete" with the key); while <see cref="Fail"/> is set, every call records itself and throws it. Thread-safe.
+/// "Delete" with the key), cancelled ones too; while <see cref="Fail"/> is set, every call records itself and throws
+/// it. Thread-safe.
 /// </summary>
 public sealed class FakeSecretStore : ISecretStore
 {
@@ -47,10 +48,10 @@ public sealed class FakeSecretStore : ISecretStore
     private Task<T> Run<T>(string method, string key, CancellationToken ct, Func<T> body)
     {
         ArgumentException.ThrowIfNullOrEmpty(key);
-        if (ct.IsCancellationRequested) return Task.FromCanceled<T>(ct);
         lock (_lock)
         {
             _calls.Add((method, key));
+            if (ct.IsCancellationRequested) return Task.FromCanceled<T>(ct);
             if (Fail is { } error) return Task.FromException<T>(error);
             return Task.FromResult(body());
         }

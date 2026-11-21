@@ -75,6 +75,7 @@
   </data>
   <data name="Panel_ConnectionLost" xml:space="preserve">
     <value>Связь потеряна при чтении папки {0}</value>
+    <comment>{0} folder path</comment>
   </data>
   <data name="Panel_Reconnect" xml:space="preserve">
     <value>Переподключиться</value>
@@ -198,13 +199,13 @@
     <value>Пропущено: архив не может сохранить это имя (в нём есть «:» или «\»)</value>
   </data>
   <data name="SkipReason_ChangedSinceCompared" xml:space="preserve">
-    <value>изменён после сравнения</value>
+    <value>Пропущено: объект изменился после сравнения</value>
   </data>
   <data name="SkipReason_NameTaken" xml:space="preserve">
-    <value>имя уже занято</value>
+    <value>Пропущено: новое имя уже занято</value>
   </data>
   <data name="SkipReason_LinkSkipped" xml:space="preserve">
-    <value>символическая ссылка пропущена</value>
+    <value>Пропущено: это символическая ссылка</value>
   </data>
 
   <!-- Tandem.Core.Operations.OperationKind (names of operations, not buttons) -->

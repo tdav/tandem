@@ -34,7 +34,7 @@ public sealed partial class SideViewModel : ObservableObject
         {
             if (tab is not null) CloseTab(tab);
         });
-        ReconnectCommand = new AsyncRelayCommand(() => _panel?.RefreshAsync() ?? Task.CompletedTask);
+        ReconnectCommand = new AsyncRelayCommand(ReconnectAsync);
         tabs.PropertyChanged += OnTabsPropertyChanged;
     }
 
@@ -124,8 +124,18 @@ public sealed partial class SideViewModel : ObservableObject
     /// <summary>The panel's source lost its connection: the status row offers <see cref="ReconnectCommand"/>.</summary>
     public bool IsConnectionLost => Message is null && _panel?.ErrorKind == PanelErrorKind.ConnectionLost;
 
-    /// <summary>The reconnect button: reads the folder again, which makes the source connect again (as Cmd+R).</summary>
+    /// <summary>The reconnect button: reads the folder again, which makes the source connect again (as Cmd+R). When
+    /// the connection was lost on the way to another folder, it goes on to that folder instead.</summary>
     public IRelayCommand ReconnectCommand { get; }
+
+    private Task ReconnectAsync()
+    {
+        if (_panel is not { } panel) return Task.CompletedTask;
+        return panel.ErrorKind == PanelErrorKind.ConnectionLost && panel.ErrorPath is { } target &&
+               target != panel.CurrentPath
+            ? panel.NavigateToAsync(target)
+            : panel.RefreshAsync();
+    }
 
     public string NameSortMark => SortMark(SortColumn.Name);
     public string ExtensionSortMark => SortMark(SortColumn.Extension);
