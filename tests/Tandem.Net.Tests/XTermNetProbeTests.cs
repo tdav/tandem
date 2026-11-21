@@ -26,7 +26,8 @@ namespace Tandem.Net.Tests;
 /// 0xRRGGBB). <b>Not</b> <c>GetFgColorMode()</c>: contrary to the package README it gives 0 for both palettes and 1
 /// for RGB. Styles: <c>IsBold()</c>, <c>IsDim()</c>, <c>IsItalic()</c>, <c>IsUnderline()</c>, <c>IsInverse()</c>,
 /// <c>IsInvisible()</c>, <c>IsStrikethrough()</c>.</item>
-/// <item>Cursor: <c>Buffer.X</c>, <c>Buffer.Y</c> (0-based, on the screen); <c>CursorVisible</c>.</item>
+/// <item>Cursor: <c>Buffer.X</c>, <c>Buffer.Y</c> (0-based, on the screen); <c>CursorVisible</c> (true at start,
+/// ESC[?25l hides, ESC[?25h shows).</item>
 /// <item>Alternate screen: <c>IsAlternateBufferActive</c> / <c>ActiveBuffer</c> (<c>BufferType</c>), event
 /// <c>BufferChanged</c> (<c>e.Buffer</c>). Scroll region: <c>Buffer.ScrollTop</c>, <c>Buffer.ScrollBottom</c> (0-based, inclusive).
 /// Scrollback: <c>Buffer.Lines.Length</c> lines in all, <c>Buffer.YBase</c> of them above the screen.</item>
@@ -177,6 +178,30 @@ public sealed class XTermNetProbeTests
         Feed(terminal, "\e[?1l\e[?2004l");
         Assert.False(terminal.ApplicationCursorKeys);
         Assert.False(terminal.BracketedPasteMode);
+    }
+
+    [Fact]
+    public void Hides_and_shows_the_cursor()
+    {
+        using var terminal = Create();
+
+        Assert.True(terminal.CursorVisible);
+        Feed(terminal, "\e[?25l");
+        Assert.False(terminal.CursorVisible);
+        Feed(terminal, "\e[?25h");
+        Assert.True(terminal.CursorVisible);
+    }
+
+    [Fact]
+    public void Writes_a_string_like_bytes()
+    {
+        using var terminal = Create();
+
+        terminal.Write("\e[1mй中\e[0mx");
+
+        Assert.Equal("й中x", ScreenLine(terminal, 0).TranslateToString(trimRight: true));
+        Assert.True(ScreenLine(terminal, 0)[0].Attributes.IsBold());
+        Assert.Equal(4, terminal.Buffer.X);
     }
 
     [Fact]

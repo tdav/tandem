@@ -8,14 +8,40 @@ internal static class ProbeSupport
 {
     public static string KeyPath(string name) => Path.Combine(AppContext.BaseDirectory, "Fixtures", "keys", name);
 
-    /// <summary>A port on 127.0.0.1 that nothing listens on: the system hands it out, and it is closed again.</summary>
+    /// <summary>A port on 127.0.0.1 that refuses connections: the system hands one out, it is closed again, and a
+    /// connect to it is seen refused before it is returned (up to five fresh ports, against another process taking it
+    /// in between). A socket bound without listening does not do: on macOS a connect to it hangs instead of being
+    /// refused.</summary>
     public static int ClosedPort()
     {
-        var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var port = ((IPEndPoint)listener.LocalEndpoint).Port;
-        listener.Stop();
-        return port;
+        for (var attempt = 0; ; attempt++)
+        {
+            var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            var port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            listener.Stop();
+            if (IsRefused(port)) return port;
+            if (attempt == 4) throw new InvalidOperationException("No closed port found on 127.0.0.1.");
+        }
+    }
+
+    private static bool IsRefused(int port)
+    {
+        using var probe = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        try
+        {
+            probe.ConnectAsync(IPAddress.Loopback, port, timeout.Token).AsTask().GetAwaiter().GetResult();
+            return false;
+        }
+        catch (SocketException e)
+        {
+            return e.SocketErrorCode == SocketError.ConnectionRefused;
+        }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
     }
 }
 

@@ -124,7 +124,7 @@ public sealed class SshNetProbeTests
     [Fact]
     public void Timeouts_are_infinite_until_set()
     {
-        using var client = new SftpClient(Info(ProbeSupport.ClosedPort(), TimeSpan.FromSeconds(15)));
+        using var client = new SftpClient(Info(22, TimeSpan.FromSeconds(15))); // never connects
 
         Assert.Equal(Timeout.InfiniteTimeSpan, client.OperationTimeout);
         Assert.Equal(Timeout.InfiniteTimeSpan, client.KeepAliveInterval);
@@ -132,7 +132,8 @@ public sealed class SshNetProbeTests
     }
 
     /// <summary>ShellStream.ChangeWindowSize(columns, rows, widthPixels, heightPixels) sends the new size ("window-change"
-    /// request); a column/row size wins over the pixel size when nonzero, so pass 0 for the pixels.</summary>
+    /// request). That a column/row size wins over the pixel size when nonzero is protocol knowledge (RFC 4254, 6.7) and the
+    /// method's doc, not probed: pass 0 for the pixels.</summary>
     [Fact]
     public void Shell_stream_can_be_resized()
     {

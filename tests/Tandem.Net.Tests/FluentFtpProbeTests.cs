@@ -86,7 +86,9 @@ public sealed class FluentFtpProbeTests
 }
 
 /// <summary>
-/// Never called: it only has to compile, which pins the FluentFTP 55.1.0 API later tasks use.
+/// Never called: it only has to compile, which pins the FluentFTP 55.1.0 API later tasks use. The facts below are read
+/// from the assembly (its IL) and the package's XML docs, not probed against a server; task 16 checks them against its
+/// in-process test server.
 /// <list type="bullet">
 /// <item>Every call on <c>AsyncFtpClient</c> takes a <c>CancellationToken</c> (named <c>token</c>, default none).</item>
 /// <item>Certificate check: the <c>ValidateCertificate</c> <b>event on the client</b> (<c>BaseFtpClient</c>), not a
@@ -96,10 +98,20 @@ public sealed class FluentFtpProbeTests
 /// <item><c>FtpEncryptionMode</c>: None, Implicit, Explicit, Auto (Auto may fall back to plain FTP: never use it).</item>
 /// <item><c>GetListing(path, FtpListOption.AllFiles, ct)</c> lists hidden files; <c>FtpListItem.Type</c> is File,
 /// Directory or Link (<c>LinkTarget</c> holds the target when the server says).</item>
-/// <item><c>GetObjectInfo(path, dateModified, ct)</c> returns null when the path does not exist.</item>
+/// <item><c>GetObjectInfo(path, dateModified, ct)</c> (docs and IL disagree). The XML doc says it throws
+/// <c>InvalidOperationException</c> when the server lacks MLST (check <c>HasFeature(FtpCapability.MLST)</c>) and
+/// returns null for <b>any</b> failure completion code or unparsable reply, not only "does not exist". The IL of 55.1.0
+/// has no such throw: with MLST it sends <c>MLST path</c> and returns null on any failure; without MLST it lists the
+/// parent folder and returns the entry whose <c>FullName</c> equals the path, or null. It never exposes the reply code.
+/// <b>For task 16:</b> an existence check must never take null or an exception for "absent". When MLST is supported,
+/// send <c>Execute("MLST " + path, ct)</c> itself and count only a 550 reply for that path as absent; otherwise list
+/// the parent folder with <c>GetListing</c> and count as absent only a name missing from a listing that succeeded.
+/// Any other failure is an error.</item>
 /// <item><c>OpenRead</c>/<c>OpenWrite</c> take an <c>FtpDataType</c> (Binary by default); after the stream is disposed,
 /// <c>GetReply(ct)</c> reads the transfer's final reply (<c>FtpReply.Success</c>, <c>Code</c>, <c>Message</c>).</item>
-/// <item><c>Rename(path, dest, ct)</c> is RNFR/RNTO: it does not check whether <c>dest</c> exists.</item>
+/// <item><c>Rename(path, dest, ct)</c> is RNFR/RNTO and nothing else (IL): it does not check whether <c>dest</c>
+/// exists, contrary to its doc comment ("throws … if the destination file already exists"); many servers replace.
+/// </item>
 /// </list>
 /// </summary>
 internal static class FluentFtpApiShape
