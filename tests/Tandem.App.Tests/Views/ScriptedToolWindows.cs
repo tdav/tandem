@@ -1,3 +1,4 @@
+using System.Reflection;
 using Avalonia.Controls;
 using Tandem.App.Services;
 
@@ -7,18 +8,22 @@ namespace Tandem.App.Tests.Views;
 /// Tool windows without windows: records every model shown and answers the modal ones through
 /// <see cref="OnDialog"/>. A non-modal model stays "open" until <see cref="CloseAsync"/> or
 /// <see cref="CloseAllAsync"/>, which ask its <see cref="ICloseGuard"/> and dispose it as the real
-/// <see cref="ToolWindows"/> does; a modal one is disposed once answered.
+/// <see cref="ToolWindows"/> does, or until it raises <see cref="IDialogModel{TResult}.CloseRequested"/> (closed and
+/// disposed at once, no guard asked); a modal one is disposed once answered.
 /// </summary>
 internal sealed class ScriptedToolWindows : IToolWindows
 {
+    private static readonly MethodInfo CloseOnRequestMethod =
+        typeof(ScriptedToolWindows).GetMethod(nameof(CloseOnRequest), BindingFlags.NonPublic | BindingFlags.Instance)!;
+
     private readonly List<object> _open = [];
 
     /// <summary>Every model shown, modal or not, in order.</summary>
     public List<object> Shown { get; } = [];
 
-    /// <summary>The models shown modally, in order, with the window they were to be modal to (null: the main
-    /// window).</summary>
-    public List<(object Model, Window? Owner)> Dialogs { get; } = [];
+    /// <summary>The models shown modally, in order, with the window and the model whose window they were to be
+    /// modal to (both null: the main window).</summary>
+    public List<(object Model, Window? Owner, object? OwnerModel)> Dialogs { get; } = [];
 
     /// <summary>Answers a modal window: the model in, the dialog's result out (null: closed without an answer, the
     /// default). Unset, every modal window answers the default.</summary>
@@ -33,14 +38,34 @@ internal sealed class ScriptedToolWindows : IToolWindows
     {
         ArgumentNullException.ThrowIfNull(viewModel);
         Shown.Add(viewModel);
-        if (!_open.Contains(viewModel)) _open.Add(viewModel);
+        if (_open.Contains(viewModel)) return;
+        _open.Add(viewModel);
+        foreach (var type in viewModel.GetType().GetInterfaces())
+        {
+            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IDialogModel<>))
+                CloseOnRequestMethod.MakeGenericMethod(type.GetGenericArguments()[0]).Invoke(this, [viewModel]);
+        }
     }
 
-    public async Task<TResult?> ShowDialogAsync<TResult>(IDialogModel<TResult> viewModel, Window? owner = null)
+    private void CloseOnRequest<TResult>(object viewModel)
+    {
+        var model = (IDialogModel<TResult>)viewModel;
+        void OnCloseRequested(object? sender, TResult? answer)
+        {
+            model.CloseRequested -= OnCloseRequested;
+            if (!_open.Remove(viewModel)) return;
+            _ = DisposeAsync(viewModel);
+        }
+
+        model.CloseRequested += OnCloseRequested;
+    }
+
+    public async Task<TResult?> ShowDialogAsync<TResult>(IDialogModel<TResult> viewModel, Window? owner = null,
+        object? ownerModel = null)
     {
         ArgumentNullException.ThrowIfNull(viewModel);
         Shown.Add(viewModel);
-        Dialogs.Add((viewModel, owner));
+        Dialogs.Add((viewModel, owner, ownerModel));
         var answer = OnDialog?.Invoke(viewModel);
         await DisposeAsync(viewModel);
         return answer is null ? default : (TResult)answer;

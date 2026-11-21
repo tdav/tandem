@@ -95,11 +95,18 @@ public sealed partial class ToolWindows : IToolWindows
         window.Show();
     }
 
-    public async Task<TResult?> ShowDialogAsync<TResult>(IDialogModel<TResult> viewModel, Window? owner = null)
+    public async Task<TResult?> ShowDialogAsync<TResult>(IDialogModel<TResult> viewModel, Window? owner = null,
+        object? ownerModel = null)
     {
         ArgumentNullException.ThrowIfNull(viewModel);
+        if (_open.Find(e => ReferenceEquals(e.Model, viewModel)) is { } open)
+        {
+            Activate(open.Window);
+            return await open.Done.Task is TResult answered ? answered : default;
+        }
         var factory = FactoryFor(viewModel);
-        if ((owner ?? Owner) is not { IsVisible: true } shownOwner)
+        var modelWindow = ownerModel is null ? null : _open.Find(e => ReferenceEquals(e.Model, ownerModel))?.Window;
+        if ((owner ?? modelWindow ?? Owner) is not { IsVisible: true } shownOwner)
         {
             await DisposeAsync(viewModel);
             return default;
@@ -107,10 +114,9 @@ public sealed partial class ToolWindows : IToolWindows
 
         var entry = Attach(viewModel, factory);
         var window = entry.Window;
-        TResult? result = default;
         void OnCloseRequested(object? sender, TResult? answer)
         {
-            result = answer;
+            entry.Result = answer;
             entry.CloseApproved = true; // the model's own answer needs no question
             window.Close();
         }
@@ -131,7 +137,7 @@ public sealed partial class ToolWindows : IToolWindows
         {
             viewModel.CloseRequested -= OnCloseRequested;
         }
-        return result;
+        return entry.Result is TResult result ? result : default;
     }
 
     public async Task<bool> CloseAllAsync()
@@ -161,13 +167,16 @@ public sealed partial class ToolWindows : IToolWindows
     }
 
     /// <summary>One open window and its model. <see cref="CloseApproved"/>: the window may close without asking
-    /// the model's guard (it agreed, or the model asked to close).</summary>
+    /// the model's guard (it agreed, or the model asked to close). <see cref="Result"/>: the model's answer, if it
+    /// gave one; <see cref="Done"/> completes with it once the window has closed.</summary>
     private sealed class Entry(object model, Window window)
     {
         public object Model { get; } = model;
         public Window Window { get; } = window;
         public bool CloseApproved { get; set; }
         public bool Asking { get; set; }
+        public object? Result { get; set; }
+        public TaskCompletionSource<object?> Done { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
     private Func<object, Window> FactoryFor(object viewModel)
@@ -189,6 +198,7 @@ public sealed partial class ToolWindows : IToolWindows
         window.Closed += (_, _) =>
         {
             _open.Remove(entry);
+            entry.Done.TrySetResult(entry.Result);
             _ = DisposeAsync(viewModel);
         };
         return entry;
@@ -222,12 +232,13 @@ public sealed partial class ToolWindows : IToolWindows
     }
 
     /// <summary>A model shown without <see cref="ShowDialogAsync{TResult}"/> that asks to close: its window closes
-    /// (the answer is not needed).</summary>
+    /// (its answer goes to a later <see cref="ShowDialogAsync{TResult}"/> of the same model, if any).</summary>
     private void CloseOnRequest<TResult>(Entry entry)
     {
         var model = (IDialogModel<TResult>)entry.Model;
         void OnCloseRequested(object? sender, TResult? answer)
         {
+            entry.Result = answer;
             entry.CloseApproved = true;
             entry.Window.Close();
         }

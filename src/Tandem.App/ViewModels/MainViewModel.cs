@@ -115,7 +115,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Archives = new ArchiveCommands(workspace, services, ArchiveMounts, Files, Interaction, Commands,
             ReportFailure);
         Tools = new ToolsCommands(workspace, services, Files, Interaction, Commands, ReportFailure);
-        Net = new NetCommands(workspace, services, Files, Commands, ReportFailure);
+        Net = new NetCommands(workspace, services, Files, Commands, ReportFailure, OnEscape);
         Commands.RaiseCanExecuteChanged();
         workspace.PropertyChanged += OnWorkspacePropertyChanged;
         QuickView.PropertyChanged += OnQuickViewPropertyChanged;

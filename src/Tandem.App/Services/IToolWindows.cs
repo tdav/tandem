@@ -21,11 +21,15 @@ public interface IToolWindows
     /// <see cref="IDisposable"/>).</summary>
     void Show(object viewModel);
 
-    /// <summary>A modal window for <paramref name="viewModel"/> (to <paramref name="owner"/>, else to the main
-    /// window), completing when it closes: with the answer of <see cref="IDialogModel{TResult}.CloseRequested"/>, or
-    /// default when the window is closed with its close button or Esc (or there is no window to be modal to). The model
-    /// is disposed when the window closes.</summary>
-    Task<TResult?> ShowDialogAsync<TResult>(IDialogModel<TResult> viewModel, Window? owner = null);
+    /// <summary>A modal window for <paramref name="viewModel"/>, completing when it closes: with the answer of
+    /// <see cref="IDialogModel{TResult}.CloseRequested"/>, or default when the window is closed with its close button
+    /// or Esc (or there is no window to be modal to). The model is disposed when the window closes. The window is
+    /// modal to <paramref name="owner"/>, else to the open window of <paramref name="ownerModel"/> (a tool asking
+    /// from its own window: the question centres over it), else to the main window. When
+    /// <paramref name="viewModel"/> already has an open window, that window comes forward and its answer is awaited
+    /// instead of a second window.</summary>
+    Task<TResult?> ShowDialogAsync<TResult>(IDialogModel<TResult> viewModel, Window? owner = null,
+        object? ownerModel = null);
 
     /// <summary>True while any window of this service is open.</summary>
     bool HasOpenWindows { get; }

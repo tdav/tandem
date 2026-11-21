@@ -19,11 +19,13 @@ public class ToolWindowsTests : LanguageTestBase
     {
         public event EventHandler<string?>? CloseRequested;
 
-        public bool Disposed { get; private set; }
+        public bool Disposed => Disposals > 0;
+
+        public int Disposals { get; private set; }
 
         public void Finish(string? result) => CloseRequested?.Invoke(this, result);
 
-        public void Dispose() => Disposed = true;
+        public void Dispose() => Disposals++;
     }
 
     private sealed class ToolModel : IAsyncDisposable
@@ -141,6 +143,47 @@ public class ToolWindowsTests : LanguageTestBase
         model.Finish(null);
         Assert.Null(await Finish(showing));
         owner.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task A_dialog_asked_for_a_model_belongs_to_that_model_s_window()
+    {
+        await using var app = await StartAsync();
+        var tools = app.ToolWindows;
+        var tool = new ToolModel();
+        tools.Show(tool);
+        var toolWindow = Assert.Single(tools.Open);
+
+        var asking = tools.ShowDialogAsync(new ConfirmModel("Synchronize?", null, "Synchronize"), ownerModel: tool);
+        var dialog = Owned<ConfirmDialog>(toolWindow);
+        Assert.Empty(app.Window.OwnedWindows.OfType<ConfirmDialog>());
+        Press(dialog, Key.Escape);
+        Assert.False(await Finish(asking));
+
+        // A model without an open window: the main window.
+        asking = tools.ShowDialogAsync(new ConfirmModel("Go?", null, "Go"), ownerModel: new ToolModel());
+        Press(Owned<ConfirmDialog>(app.Window), Key.Escape);
+        Assert.False(await Finish(asking));
+    }
+
+    [AvaloniaFact]
+    public async Task Asking_the_same_dialog_model_again_brings_its_window_forward()
+    {
+        await using var app = await StartAsync();
+        var tools = app.ToolWindows;
+        var model = new DialogModel();
+
+        var first = tools.ShowDialogAsync(model);
+        var window = Owned<ModelWindow>(app.Window);
+        var second = tools.ShowDialogAsync(model);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Same(window, Owned<ModelWindow>(app.Window)); // still one window
+        Assert.Single(tools.Open);
+        model.Finish("done");
+        Assert.Equal("done", await Finish(first));
+        Assert.Equal("done", await Finish(second));
+        Assert.Equal(1, model.Disposals);
     }
 
     [AvaloniaFact]
@@ -293,5 +336,27 @@ public class ToolWindowsTests : LanguageTestBase
         Assert.True(await tools.CloseAllAsync());
         Assert.Equal(1, model.Disposals);
         Assert.False(tools.HasOpenWindows);
+
+        // A model shown non-modally that asks to close is closed and disposed, as by the real windows.
+        var dialogModel = new DialogModel();
+        tools.Show(dialogModel);
+        Assert.True(tools.HasOpenWindows);
+        dialogModel.Finish("done");
+        Assert.False(tools.HasOpenWindows);
+        Assert.Equal(1, dialogModel.Disposals);
+
+        // The owner model is recorded.
+        await tools.ShowDialogAsync(question, ownerModel: model);
+        Assert.Same(model, tools.Dialogs[^1].OwnerModel);
+    }
+
+    [AvaloniaFact]
+    public async Task Disposing_the_test_app_fails_when_a_tool_window_refuses_to_close()
+    {
+        var app = await StartAsync();
+        app.ToolWindows.Show(new GuardedModel()); // says no to every close
+
+        var failure = await Assert.ThrowsAsync<Xunit.Sdk.FailException>(() => app.DisposeAsync().AsTask());
+        Assert.Contains("refused to close", failure.Message);
     }
 }

@@ -165,6 +165,18 @@ public class DialogViewModelTests : LanguageTestBase
     }
 
     [Fact]
+    public void Conflict_dialog_model_gives_the_two_entries_it_was_made_with()
+    {
+        var source = File("/src/a.txt", 2048, DateTimeOffset.UnixEpoch);
+        var existing = File("/dst/a.txt", 10, DateTimeOffset.UnixEpoch);
+
+        var vm = new ConflictDialogViewModel(source, existing);
+
+        Assert.Same(source, vm.Source);
+        Assert.Same(existing, vm.Existing);
+    }
+
+    [Fact]
     public void Error_dialog_offers_retry_skip_skip_all_and_abort()
     {
         var vm = new ErrorDialogViewModel(VfsPath.Local("/a.txt"), "message", "raw detail");

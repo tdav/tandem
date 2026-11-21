@@ -22,6 +22,8 @@ public sealed partial class NetCommands : IDisposable
     private readonly FileCommands _files;
     private readonly CommandRegistry _commands;
     private readonly Action<Exception> _reportFailure;
+    private readonly Func<Func<bool>, IDisposable> _onEscape;
+    private readonly List<IDisposable> _escapeHandlers = [];
     private readonly List<string> _ids = [];
     private readonly List<Action> _cleanups = [];
     private readonly List<Func<Task>> _closes = [];
@@ -29,14 +31,17 @@ public sealed partial class NetCommands : IDisposable
     private bool[] _available = [];
     private bool _disposed;
 
+    /// <param name="onEscape">Adds an Esc handler asked before the panel's keys (the main view model's
+    /// <c>OnEscape</c>); disposing its result removes it.</param>
     public NetCommands(WorkspaceViewModel workspace, AppServices services, FileCommands files, CommandRegistry commands,
-        Action<Exception> reportFailure)
+        Action<Exception> reportFailure, Func<Func<bool>, IDisposable> onEscape)
     {
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
         _services = services ?? throw new ArgumentNullException(nameof(services));
         _files = files ?? throw new ArgumentNullException(nameof(files));
         _commands = commands ?? throw new ArgumentNullException(nameof(commands));
         _reportFailure = reportFailure ?? throw new ArgumentNullException(nameof(reportFailure));
+        _onEscape = onEscape ?? throw new ArgumentNullException(nameof(onEscape));
 
         RegisterConsole();
         workspace.PropertyChanged += OnWorkspacePropertyChanged;
@@ -63,6 +68,28 @@ public sealed partial class NetCommands : IDisposable
         _closes.Add(close);
     }
 
+    /// <summary>Lets <paramref name="handler"/> take Esc before the panel does (while a connection is being made, so
+    /// Esc cancels it): true takes the key. Disposing the result removes the handler; <see cref="Dispose"/> removes
+    /// every one still registered.</summary>
+    public IDisposable OnEscapeKey(Func<bool> handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        var registration = _onEscape(handler);
+        _escapeHandlers.Add(registration);
+        return new Registration(() =>
+        {
+            _escapeHandlers.Remove(registration);
+            registration.Dispose();
+        });
+    }
+
+    private sealed class Registration(Action remove) : IDisposable
+    {
+        private Action? _remove = remove;
+
+        public void Dispose() => Interlocked.Exchange(ref _remove, null)?.Invoke();
+    }
+
     /// <summary>Registers the command <paramref name="id"/> and includes it in the availability checks.</summary>
     private void On(string id, Func<Task> run, Func<bool> canRun)
     {
@@ -84,7 +111,7 @@ public sealed partial class NetCommands : IDisposable
     private PanelViewModel? Active => _workspace.IsLoaded ? _workspace.ActivePanel : null;
 
     /// <summary>Runs the cleanups (last added first; one that throws is reported and the others still run) and stops
-    /// watching the panel. Closes no connection: that is <see cref="CloseAsync"/>.</summary>
+    /// watching the panel and its Esc handlers. Closes no connection: that is <see cref="CloseAsync"/>.</summary>
     public void Dispose()
     {
         if (_disposed) return;
@@ -92,6 +119,8 @@ public sealed partial class NetCommands : IDisposable
         _workspace.PropertyChanged -= OnWorkspacePropertyChanged;
         if (_watched is not null) _watched.PropertyChanged -= OnPanelPropertyChanged;
         _watched = null;
+        foreach (var registration in _escapeHandlers.ToArray()) registration.Dispose();
+        _escapeHandlers.Clear();
         for (var i = _cleanups.Count - 1; i >= 0; i--)
         {
             try

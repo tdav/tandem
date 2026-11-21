@@ -169,8 +169,9 @@ internal sealed class TestApp : IAsyncDisposable
             foreach (var _ in windows.Open) Dialogs.SaveChangesAnswers.Enqueue(SaveChangesAnswer.Discard);
             await windows.CloseAllAsync();
         }
-        await Main.Services.ToolWindows.CloseAllAsync();
-        if (Window is { } window) window.Close();
+        // A tool window whose guard refuses would hold the main window open: the test left it so.
+        var toolWindowsClosed = await Main.Services.ToolWindows.CloseAllAsync();
+        if (toolWindowsClosed && Window is { } window) window.Close();
         Main.Dispose();
         Main.Services.Dispose();
         await Task.Yield();
@@ -182,6 +183,9 @@ internal sealed class TestApp : IAsyncDisposable
         {
             // nothing saved
         }
+        if (!toolWindowsClosed)
+            Assert.Fail("A tool window refused to close when the test app was disposed: the test left a close " +
+                        "guard that says no open. Answer it (or close the window) before the test ends.");
     }
 
     /// <summary>Runs queued UI work and layout.</summary>

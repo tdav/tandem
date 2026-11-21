@@ -562,6 +562,39 @@ public class MainViewModelTests : LanguageTestBase
     }
 
     [AvaloniaFact]
+    public async Task An_escape_handler_registered_through_the_network_commands_gets_the_key_until_removed()
+    {
+        await using var app = await TestApp.StartAsync(show: false);
+        var escape = new KeyChord(Key.Escape, KeyModifiers.None);
+        var calls = 0;
+        var registration = app.Main.Net.OnEscapeKey(() =>
+        {
+            calls++;
+            return true;
+        });
+        Assert.True(app.Left.QuickSearchInput("n"));
+
+        Assert.True(await app.Main.HandleKeyAsync(escape));
+        Assert.Equal(1, calls);
+        Assert.Equal("n", app.Left.QuickSearchText); // taken before the panel
+
+        registration.Dispose();
+        await app.Main.HandleKeyAsync(escape);
+        Assert.Equal(1, calls);
+        Assert.Equal("", app.Left.QuickSearchText);
+
+        // Disposing the network commands removes a handler still registered.
+        app.Main.Net.OnEscapeKey(() =>
+        {
+            calls++;
+            return true;
+        });
+        app.Main.Net.Dispose();
+        await app.Main.HandleKeyAsync(escape);
+        Assert.Equal(1, calls);
+    }
+
+    [AvaloniaFact]
     public async Task Quit_waits_for_the_network_close_but_not_longer_than_the_limit()
     {
         await using var app = await TestApp.StartAsync(show: false);

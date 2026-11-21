@@ -68,13 +68,19 @@ public sealed class ConfirmDeleteDialogViewModel(int itemCount, string? singleNa
 /// <summary>The destination of a file exists: both files' size and date, the choices, and "apply to all".</summary>
 public sealed partial class ConflictDialogViewModel(FileEntry source, FileEntry existing) : ObservableObject
 {
+    /// <summary>The item being copied or moved.</summary>
+    public FileEntry Source { get; } = source;
+
+    /// <summary>The item already at the destination.</summary>
+    public FileEntry Existing { get; } = existing;
+
     public string Title => Loc.Get("Conflict_Title");
 
-    public string Message => Loc.Format("Conflict_Message", existing.Name, existing.Path.Parent?.Path ?? "/");
+    public string Message => Loc.Format("Conflict_Message", Existing.Name, Existing.Path.Parent?.Path ?? "/");
 
-    public string SourceDetails => Loc.Format("Conflict_Source", Describe(source));
+    public string SourceDetails => Loc.Format("Conflict_Source", Describe(Source));
 
-    public string ExistingDetails => Loc.Format("Conflict_Existing", Describe(existing));
+    public string ExistingDetails => Loc.Format("Conflict_Existing", Describe(Existing));
 
     /// <summary>The buttons, in order; the first is the default, the last is Esc.</summary>
     public IReadOnlyList<ConflictAction> Actions { get; } =
