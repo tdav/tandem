@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
 using Renci.SshNet.Common;
 using Tandem.Core.Platform;
 using Tandem.Core.Vfs;
@@ -19,16 +20,19 @@ public sealed class NetConnections : IAsyncDisposable
     private readonly INetPrompts _prompts;
     private readonly IReadOnlyDictionary<NetProtocol, IRemoteSessionFactory> _factories;
     private readonly Func<string, CancellationToken, Task<byte[]>> _readKeyFile;
+    private readonly CredentialVault? _vault;
     private readonly SemaphoreSlim _lifecycle = new(1);
+    private readonly SemaphoreSlim _vaultEdits = new(1);
     private readonly ConcurrentDictionary<Guid, Credentials> _credentials = new();
     private readonly ConcurrentDictionary<string, RemoteProvider> _open = new(StringComparer.Ordinal);
     private static long s_nextProvider;
     private IReadOnlyList<ConnectionProfile> _profiles = [];
+    private volatile bool _vaultProfilesPublished;
     private bool _disposed;
 
     public NetConnections(ProviderRegistry providers, ConnectionStore store, TrustStore trust, ISecretStore secrets,
         INetPrompts prompts, IReadOnlyDictionary<NetProtocol, IRemoteSessionFactory> factories,
-        Func<string, CancellationToken, Task<byte[]>> readKeyFile)
+        Func<string, CancellationToken, Task<byte[]>> readKeyFile, CredentialVault? vault = null)
     {
         _providers = providers;
         _store = store;
@@ -36,11 +40,16 @@ public sealed class NetConnections : IAsyncDisposable
         _prompts = prompts;
         _factories = factories;
         _readKeyFile = readKeyFile;
+        _vault = vault;
         Trust = new SharedTrust(trust, prompts);
     }
 
-    public IReadOnlyList<ConnectionProfile> Profiles => Volatile.Read(ref _profiles);
+    public IReadOnlyList<ConnectionProfile> Profiles =>
+        VaultConfigured && !_vaultProfilesPublished ? [] : Volatile.Read(ref _profiles);
     public bool HasOpenConnections => _open.Values.Any(provider => provider.HasOpenConnections);
+    public string? VaultPath => _vault?.FilePath;
+    public bool VaultConfigured => _vault is { IsConfigured: true };
+    public bool VaultUnlocked => _vault is { IsUnlocked: true };
     public ITrustDecisions Trust { get; }
 
     public event EventHandler? Changed;
@@ -52,13 +61,80 @@ public sealed class NetConnections : IAsyncDisposable
         try
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            Volatile.Write(ref _profiles, Sorted(_store.Load()));
+            if (!VaultConfigured)
+                Volatile.Write(ref _profiles, Sorted(_store.Load()));
+            else if (VaultUnlocked)
+                ReadVaultProfilesAsync(RequireUnlockedVault()).GetAwaiter().GetResult();
         }
         finally
         {
             _lifecycle.Release();
         }
         Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    public async Task EnableVaultAsync(string password, CancellationToken ct)
+    {
+        await _lifecycle.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            var vault = RequireVault();
+            if (vault.IsConfigured)
+                throw new CredentialVaultException("The credential vault already exists.");
+
+            var profiles = Sorted(_store.LoadForMigration());
+            var sources = profiles.Concat(Profiles).Select(profile => profile.Id).Distinct().Select(SourceOf).ToArray();
+            var entries = new List<VaultEntry>(profiles.Count);
+            var committed = false;
+            try
+            {
+                // Let queued Keychain writes finish before taking the migration snapshot.
+                await Task.WhenAll(sources.Select(source => source.BeginUpdate())).WaitAsync(ct).ConfigureAwait(false);
+                foreach (var profile in profiles)
+                    entries.Add(await ReadLegacyEntryAsync(profile, ct).ConfigureAwait(false));
+                await vault.CreateAsync(password, entries, ct).ConfigureAwait(false);
+                committed = true;
+                PublishVaultProfiles(profiles);
+            }
+            finally
+            {
+                foreach (var entry in entries)
+                    ClearKey(entry.PrivateKey);
+                foreach (var source in sources)
+                    source.EndUpdate(committed);
+            }
+        }
+        finally
+        {
+            _lifecycle.Release();
+        }
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    public async Task UnlockVaultAsync(string password, CancellationToken ct)
+    {
+        await _lifecycle.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            var vault = RequireVault();
+            await vault.UnlockAsync(password, ct).ConfigureAwait(false);
+            await ReadVaultProfilesAsync(vault).ConfigureAwait(false);
+        }
+        finally
+        {
+            _lifecycle.Release();
+        }
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    public async Task<bool> HasStoredPrivateKeyAsync(Guid id, CancellationToken ct)
+    {
+        if (!VaultUnlocked) return false;
+        var entry = await ReadVaultEntryAsync(id, ct).ConfigureAwait(false);
+        ClearKey(entry?.PrivateKey);
+        return entry?.PrivateKey is not null;
     }
 
     public static string SecretKey(Guid profileId, SecretKind kind) =>
@@ -74,29 +150,13 @@ public sealed class NetConnections : IAsyncDisposable
         try
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            var previous = Profiles.FirstOrDefault(item => item.Id == profile.Id);
-            var updated = Sorted(Profiles.Where(item => item.Id != profile.Id).Append(profile));
-            _store.Save(updated);
-            var credentialsChanged = password is not null || passphrase is not null ||
-                previous is null || !SameSession(previous, profile);
-            if (credentialsChanged)
+            if (VaultConfigured)
             {
-                var credentials = SourceOf(profile.Id);
-                await credentials.BeginUpdate().ConfigureAwait(false);
-                try
-                {
-                    await SetStoredAsync(profile.Id, SecretKind.Password, password).ConfigureAwait(false);
-                    await SetStoredAsync(profile.Id, SecretKind.Passphrase, passphrase).ConfigureAwait(false);
-                    Volatile.Write(ref _profiles, updated);
-                }
-                finally
-                {
-                    credentials.EndUpdate();
-                }
+                await SaveVaultProfileAsync(profile, password, passphrase, ct).ConfigureAwait(false);
             }
             else
             {
-                Volatile.Write(ref _profiles, updated);
+                await SaveLegacyProfileAsync(profile, password, passphrase).ConfigureAwait(false);
             }
         }
         finally
@@ -113,13 +173,34 @@ public sealed class NetConnections : IAsyncDisposable
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             var updated = Sorted(Profiles.Where(item => item.Id != profileId));
-            _store.Save(updated);
-            Volatile.Write(ref _profiles, updated);
-
-            if (_credentials.TryRemove(profileId, out var credentials))
-                await credentials.ResetAsync(retire: true).ConfigureAwait(false);
-            await SetStoredAsync(profileId, SecretKind.Password, "").ConfigureAwait(false);
-            await SetStoredAsync(profileId, SecretKind.Passphrase, "").ConfigureAwait(false);
+            if (VaultConfigured)
+            {
+                var vault = RequireUnlockedVault();
+                var credentials = SourceOf(profileId);
+                var removed = false;
+                try
+                {
+                    await credentials.BeginUpdate().WaitAsync(ct).ConfigureAwait(false);
+                    await vault.RemoveAsync(profileId, ct).ConfigureAwait(false);
+                    removed = true;
+                    Volatile.Write(ref _profiles, updated);
+                    _credentials.TryRemove(profileId, out _);
+                    await credentials.ResetAsync(retire: true).ConfigureAwait(false);
+                }
+                finally
+                {
+                    credentials.EndUpdate(removed);
+                }
+            }
+            else
+            {
+                _store.Save(updated);
+                Volatile.Write(ref _profiles, updated);
+                if (_credentials.TryRemove(profileId, out var credentials))
+                    await credentials.ResetAsync(retire: true).ConfigureAwait(false);
+                await SetLegacyStoredAsync(profileId, SecretKind.Password, "").ConfigureAwait(false);
+                await SetLegacyStoredAsync(profileId, SecretKind.Passphrase, "").ConfigureAwait(false);
+            }
             var matching = _open.Values.Where(provider => provider.Profile.Id == profileId).ToArray();
             foreach (var provider in matching)
             {
@@ -137,8 +218,15 @@ public sealed class NetConnections : IAsyncDisposable
     public Task<bool> HasSavedPasswordAsync(Guid profileId, CancellationToken ct) =>
         HasSavedSecretAsync(profileId, SecretKind.Password, ct);
 
-    public async Task<bool> HasSavedSecretAsync(Guid profileId, SecretKind kind, CancellationToken ct) =>
-        await GetStoredAsync(profileId, kind, ct).ConfigureAwait(false) is not null;
+    public async Task<bool> HasSavedSecretAsync(Guid profileId, SecretKind kind, CancellationToken ct)
+    {
+        if (!VaultConfigured)
+            return await GetLegacyStoredAsync(profileId, kind, ct).ConfigureAwait(false) is not null;
+        if (!VaultUnlocked) return false;
+        var entry = await ReadVaultEntryAsync(profileId, ct).ConfigureAwait(false);
+        ClearKey(entry?.PrivateKey);
+        return SecretOf(entry, kind) is not null;
+    }
 
     public async Task<VfsPath> ConnectAsync(Guid profileId, VfsPath origin, CancellationToken ct)
     {
@@ -216,12 +304,19 @@ public sealed class NetConnections : IAsyncDisposable
         {
             if (_disposed) return;
             _disposed = true;
-            await Task.WhenAll(_credentials.Values.Select(source => source.ResetAsync(retire: true)))
-                .ConfigureAwait(false);
-            _credentials.Clear();
-            var close = _open.Values.Select(provider => provider.DisposeAsync().AsTask()).ToArray();
-            _open.Clear();
-            await Task.WhenAll(close).ConfigureAwait(false);
+            try
+            {
+                await Task.WhenAll(_credentials.Values.Select(source => source.ResetAsync(retire: true)))
+                    .ConfigureAwait(false);
+                _credentials.Clear();
+                var close = _open.Values.Select(provider => provider.DisposeAsync().AsTask()).ToArray();
+                _open.Clear();
+                await Task.WhenAll(close).ConfigureAwait(false);
+            }
+            finally
+            {
+                _vault?.Dispose();
+            }
         }
         finally
         {
@@ -241,7 +336,192 @@ public sealed class NetConnections : IAsyncDisposable
     private static IReadOnlyList<ConnectionProfile> Sorted(IEnumerable<ConnectionProfile> profiles) =>
         Array.AsReadOnly(profiles.OrderBy(profile => profile.Name, StringComparer.CurrentCultureIgnoreCase).ToArray());
 
-    private async Task<string?> GetStoredAsync(Guid id, SecretKind kind, CancellationToken ct)
+    private CredentialVault RequireVault() =>
+        _vault ?? throw new CredentialVaultException("The credential vault is unavailable.");
+
+    private CredentialVault RequireUnlockedVault() =>
+        _vault is { IsUnlocked: true } vault ? vault : throw new CredentialVaultException("The credential vault is locked.");
+
+    private void PublishVaultProfiles(IReadOnlyList<ConnectionProfile> profiles)
+    {
+        Volatile.Write(ref _profiles, profiles);
+        _vaultProfilesPublished = true;
+    }
+
+    private async Task ReadVaultProfilesAsync(CredentialVault vault) =>
+        PublishVaultProfiles(Sorted(await vault.ReadProfilesAsync(CancellationToken.None).ConfigureAwait(false)));
+
+    private Task<VaultEntry?> ReadVaultEntryAsync(Guid id, CancellationToken ct) =>
+        RequireUnlockedVault().FindAsync(id, ct);
+
+    private async Task<VaultEntry> ReadLegacyEntryAsync(ConnectionProfile profile, CancellationToken ct)
+    {
+        string? password;
+        string? passphrase;
+        try
+        {
+            password = await _secrets.GetAsync(SecretKey(profile.Id, SecretKind.Password), ct).ConfigureAwait(false);
+            passphrase = await _secrets.GetAsync(SecretKey(profile.Id, SecretKind.Passphrase), ct).ConfigureAwait(false);
+        }
+        catch (SecretStoreException)
+        {
+            throw new CredentialVaultException("The legacy credential store could not be read.");
+        }
+        var key = profile.Auth == NetAuth.PrivateKey
+            ? await ReadVaultKeyFileAsync(profile.PrivateKeyPath, ct).ConfigureAwait(false) : null;
+        return new VaultEntry(profile, password, key, passphrase);
+    }
+
+    private async Task<byte[]> ReadVaultKeyFileAsync(string? path, CancellationToken ct)
+    {
+        if (path is null)
+            throw new CredentialVaultException("No private key file was selected.");
+        byte[] key;
+        try
+        {
+            key = await _readKeyFile(path, ct).ConfigureAwait(false);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            throw new CredentialVaultException("The private key file could not be read.");
+        }
+        if (key.Length <= CredentialVault.MaxKeyBytes) return key;
+        ClearKey(key);
+        throw new CredentialVaultException("The private key file exceeds the supported size.");
+    }
+
+    private async Task SaveLegacyProfileAsync(ConnectionProfile profile, string? password, string? passphrase)
+    {
+        var updated = Sorted(Profiles.Where(item => item.Id != profile.Id).Append(profile));
+        var previous = Profiles.FirstOrDefault(item => item.Id == profile.Id);
+        _store.Save(updated);
+        if (!CredentialsChanged(previous, profile, password, passphrase))
+        {
+            Volatile.Write(ref _profiles, updated);
+            return;
+        }
+
+        var credentials = SourceOf(profile.Id);
+        try
+        {
+            await credentials.BeginUpdate().ConfigureAwait(false);
+            await SetLegacyStoredAsync(profile.Id, SecretKind.Password, password).ConfigureAwait(false);
+            await SetLegacyStoredAsync(profile.Id, SecretKind.Passphrase, passphrase).ConfigureAwait(false);
+            Volatile.Write(ref _profiles, updated);
+        }
+        finally
+        {
+            credentials.EndUpdate();
+        }
+    }
+
+    private async Task SaveVaultProfileAsync(ConnectionProfile profile, string? password, string? passphrase,
+        CancellationToken ct)
+    {
+        var vault = RequireUnlockedVault();
+        var profiles = Profiles;
+        var previous = profiles.FirstOrDefault(item => item.Id == profile.Id);
+        var credentials = SourceOf(profile.Id);
+        var invalidate = CredentialsChanged(previous, profile, password, passphrase);
+        var committed = false;
+        try
+        {
+            var pendingWrites = invalidate ? credentials.BeginUpdate() : credentials.FlushAsync();
+            await pendingWrites.WaitAsync(ct).ConfigureAwait(false);
+            await _vaultEdits.WaitAsync(ct).ConfigureAwait(false);
+            try
+            {
+                await UpdateVaultEntryAsync(vault, profile, password, passphrase, ct).ConfigureAwait(false);
+                committed = true;
+                PublishVaultProfiles(Sorted(profiles.Where(item => item.Id != profile.Id).Append(profile)));
+            }
+            finally
+            {
+                _vaultEdits.Release();
+            }
+        }
+        finally
+        {
+            if (invalidate) credentials.EndUpdate(committed);
+        }
+    }
+
+    private async Task UpdateVaultEntryAsync(CredentialVault vault, ConnectionProfile profile, string? password,
+        string? passphrase, CancellationToken ct)
+    {
+        var existing = await ReadVaultEntryAsync(profile.Id, ct).ConfigureAwait(false);
+        byte[]? key = null;
+        try
+        {
+            if (profile.Auth == NetAuth.PrivateKey)
+                key = existing is { PrivateKey: not null } &&
+                      existing.Profile.Normalized().PrivateKeyPath == profile.PrivateKeyPath
+                    ? existing.PrivateKey : await ReadVaultKeyFileAsync(profile.PrivateKeyPath, ct).ConfigureAwait(false);
+            await vault.UpsertAsync(new VaultEntry(profile, EditSecret(existing?.Password, password), key,
+                EditSecret(existing?.Passphrase, passphrase)), ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (!ReferenceEquals(key, existing?.PrivateKey)) ClearKey(key);
+            ClearKey(existing?.PrivateKey);
+        }
+    }
+
+    private async Task RememberAcceptedAsync(ConnectionProfile profile, SecretKind kind, string? value)
+    {
+        if (value is null) return;
+        if (!VaultConfigured)
+        {
+            await SetLegacyStoredAsync(profile.Id, kind, value, allowEmpty: true).ConfigureAwait(false);
+            return;
+        }
+
+        try
+        {
+            await _vaultEdits.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                var vault = RequireUnlockedVault();
+                var existing = await ReadVaultEntryAsync(profile.Id, CancellationToken.None).ConfigureAwait(false);
+                try
+                {
+                    if (existing is null || !SameSession(existing.Profile, profile)) return;
+                    var edited = kind == SecretKind.Password ? existing with { Password = value } :
+                        existing with { Passphrase = value };
+                    await vault.UpsertAsync(edited, CancellationToken.None).ConfigureAwait(false);
+                }
+                finally
+                {
+                    ClearKey(existing?.PrivateKey);
+                }
+            }
+            finally
+            {
+                _vaultEdits.Release();
+            }
+        }
+        catch (CredentialVaultException error)
+        {
+            SecretSaveFailed?.Invoke(this, error);
+        }
+    }
+
+    private static bool CredentialsChanged(ConnectionProfile? previous, ConnectionProfile profile,
+        string? password, string? passphrase) =>
+        password is not null || passphrase is not null || previous is null || !SameSession(previous, profile);
+
+    private static string? EditSecret(string? existing, string? update) =>
+        update is { Length: 0 } ? null : update ?? existing;
+
+    private static string? SecretOf(VaultEntry? entry, SecretKind kind) =>
+        kind == SecretKind.Password ? entry?.Password : entry?.Passphrase;
+
+    private static void ClearKey(byte[]? key)
+    {
+        if (key is not null) CryptographicOperations.ZeroMemory(key);
+    }
+
+    private async Task<string?> GetLegacyStoredAsync(Guid id, SecretKind kind, CancellationToken ct)
     {
         try
         {
@@ -253,7 +533,7 @@ public sealed class NetConnections : IAsyncDisposable
         }
     }
 
-    private async Task SetStoredAsync(Guid id, SecretKind kind, string? value, bool allowEmpty = false)
+    private async Task SetLegacyStoredAsync(Guid id, SecretKind kind, string? value, bool allowEmpty = false)
     {
         if (value is null) return;
         try
@@ -307,27 +587,50 @@ public sealed class NetConnections : IAsyncDisposable
 
             if (profile.Auth == NetAuth.Anonymous) return new NetCredentials(null, null, null);
             var kind = profile.Auth == NetAuth.PrivateKey ? SecretKind.Passphrase : SecretKind.Password;
-            var key = kind == SecretKind.Passphrase ? await ReadKeyAsync(profile, ct).ConfigureAwait(false) : null;
-            var needsSecret = key is null || NeedsPassphrase(profile, key);
-            var secret = needsSecret && !previousWasWrong
-                ? await owner.GetStoredAsync(profile.Id, kind, ct).ConfigureAwait(false)
-                : null;
-            var remember = false;
-            if (secret is null && needsSecret)
+            var useVault = owner.VaultConfigured;
+            if (useVault && !owner.VaultUnlocked) return null;
+            var entry = useVault ? await owner.ReadVaultEntryAsync(profile.Id, ct).ConfigureAwait(false) : null;
+            byte[]? key = entry?.PrivateKey;
+            try
             {
-                var answer = await owner._prompts.AskSecretAsync(profile, kind, previousWasWrong, ct).ConfigureAwait(false);
-                if (answer is null) return null;
-                secret = answer.Secret;
-                remember = answer.Remember;
-            }
+                if (kind == SecretKind.Passphrase && key is null)
+                    key = useVault ? throw new NetAuthenticationException("No private key is stored for this connection.") :
+                        await ReadKeyAsync(profile, ct).ConfigureAwait(false);
+                var needsSecret = kind == SecretKind.Password || NeedsPassphrase(profile, key!, useVault);
+                var secret = needsSecret && !previousWasWrong ? SecretOf(entry, kind) : null;
+                if (needsSecret && !previousWasWrong && !useVault)
+                {
+                    Task<string?> lookup;
+                    lock (_gate)
+                    {
+                        // A key file may finish reading after its authentication attempt was invalidated.
+                        if (_retired || version != _version || !IsCurrent(profile) || owner.VaultConfigured) return null;
+                        lookup = owner.GetLegacyStoredAsync(profile.Id, kind, ct);
+                    }
+                    secret = await lookup.ConfigureAwait(false);
+                }
+                var remember = false;
+                if (secret is null && needsSecret)
+                {
+                    var answer = await owner._prompts.AskSecretAsync(profile, kind, previousWasWrong, ct).ConfigureAwait(false);
+                    if (answer is null) return null;
+                    secret = answer.Secret;
+                    remember = answer.Remember;
+                }
 
-            lock (_gate)
+                lock (_gate)
+                {
+                    if (_retired || version != _version || !IsCurrent(profile)) return null;
+                    var credentials = kind == SecretKind.Password ? new NetCredentials(secret, null, null) :
+                        new NetCredentials(null, key, secret);
+                    if (kind == SecretKind.Passphrase) key = null; // Ownership passed to the credentials.
+                    _attempts.Add(credentials, new Attempt(version, remember, kind));
+                    return credentials;
+                }
+            }
+            finally
             {
-                if (_retired || version != _version || !IsCurrent(profile)) return null;
-                var credentials = kind == SecretKind.Password ? new NetCredentials(secret, null, null) :
-                    new NetCredentials(null, key, secret);
-                _attempts.Add(credentials, new Attempt(version, remember, kind));
-                return credentials;
+                if (useVault) ClearKey(key);
             }
         }
 
@@ -347,8 +650,7 @@ public sealed class NetConnections : IAsyncDisposable
                     _writes = Task.Run(async () =>
                     {
                         await previous.ConfigureAwait(false);
-                        await owner.SetStoredAsync(profile.Id, attempt.Kind, secret, allowEmpty: true)
-                            .ConfigureAwait(false);
+                        await owner.RememberAcceptedAsync(profile, attempt.Kind, secret).ConfigureAwait(false);
                     });
                 }
             }
@@ -364,14 +666,20 @@ public sealed class NetConnections : IAsyncDisposable
             lock (_gate)
             {
                 _update = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-                return ResetAsync();
+                ++_version;
+                return _writes;
             }
         }
 
-        public void EndUpdate()
+        public void EndUpdate(bool clearCache = true)
         {
             lock (_gate)
             {
+                if (clearCache)
+                {
+                    _accepted = null;
+                    _acceptedProfile = null;
+                }
                 _update?.TrySetResult();
                 _update = null;
             }
@@ -403,7 +711,7 @@ public sealed class NetConnections : IAsyncDisposable
             }
         }
 
-        private static bool NeedsPassphrase(ConnectionProfile profile, byte[] key)
+        private static bool NeedsPassphrase(ConnectionProfile profile, byte[] key, bool fromVault)
         {
             try
             {
@@ -411,7 +719,8 @@ public sealed class NetConnections : IAsyncDisposable
             }
             catch (Exception error) when (error is SshException or IOException or ArgumentException or FormatException)
             {
-                throw new NetAuthenticationException($"Cannot read the private key file '{profile.PrivateKeyPath}'.");
+                throw new NetAuthenticationException(fromVault ? "The stored private key could not be read." :
+                    $"Cannot read the private key file '{profile.PrivateKeyPath}'.");
             }
         }
 

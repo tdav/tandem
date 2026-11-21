@@ -1815,7 +1815,7 @@ Folder</value>
   <data name="Connection_Browse" xml:space="preserve"><value>Browse…</value></data>
   <data name="Connection_Password" xml:space="preserve"><value>Password</value></data>
   <data name="Connection_Passphrase" xml:space="preserve"><value>Key passphrase</value></data>
-  <data name="Connection_Remember" xml:space="preserve"><value>Save in Keychain</value></data>
+  <data name="Connection_Remember" xml:space="preserve"><value>Save for future connections</value></data>
   <data name="Connection_InitialPath" xml:space="preserve"><value>Initial folder</value></data>
   <data name="Connection_Passive" xml:space="preserve"><value>Passive mode</value></data>
   <data name="Connection_FtpEncoding" xml:space="preserve"><value>File name encoding</value></data>
@@ -1825,6 +1825,23 @@ Folder</value>
   <data name="Connection_KeyRequired" xml:space="preserve"><value>Choose a private key file.</value></data>
   <data name="Connection_InvalidAuth" xml:space="preserve"><value>Choose an authentication method for this protocol.</value></data>
   <data name="Connection_SaveFailed" xml:space="preserve"><value>Could not update the saved connections.</value></data>
+  <data name="Vault_CreateTitle" xml:space="preserve"><value>Create encrypted connection vault</value></data>
+  <data name="Vault_UnlockTitle" xml:space="preserve"><value>Unlock connection vault</value></data>
+  <data name="Vault_Setup" xml:space="preserve"><value>Create Vault…</value></data>
+  <data name="Vault_Create" xml:space="preserve"><value>Create Vault</value></data>
+  <data name="Vault_Unlock" xml:space="preserve"><value>Unlock Vault</value></data>
+  <data name="Vault_SetupPath" xml:space="preserve"><value>Tandem will copy saved connections and their credentials to this encrypted vault and use it for future changes.&#10;{0}</value></data>
+  <data name="Vault_ActivePath" xml:space="preserve"><value>Connections and their saved credentials are stored in this encrypted vault.&#10;{0}</value></data>
+  <data name="Vault_LockedPath" xml:space="preserve"><value>Unlock this vault to use its saved connections.&#10;{0}</value></data>
+  <data name="Vault_MasterPassword" xml:space="preserve"><value>Master password</value></data>
+  <data name="Vault_NewPassword" xml:space="preserve"><value>Master password (at least 12 characters)</value></data>
+  <data name="Vault_ConfirmPassword" xml:space="preserve"><value>Confirm master password</value></data>
+  <data name="Vault_PasswordRequired" xml:space="preserve"><value>Enter the master password.</value></data>
+  <data name="Vault_PasswordTooShort" xml:space="preserve"><value>Enter at least 12 characters.</value></data>
+  <data name="Vault_PasswordMismatch" xml:space="preserve"><value>The master passwords do not match.</value></data>
+  <data name="Vault_CreateFailed" xml:space="preserve"><value>Could not create the vault. Check access to the vault folder, Keychain, and saved private key files.</value></data>
+  <data name="Vault_UnlockFailed" xml:space="preserve"><value>Could not unlock this vault. Check the master password and make sure the vault file is intact and readable.</value></data>
+  <data name="Vault_StoredKey" xml:space="preserve"><value>The private key is saved in the vault. Choose another file to replace it.</value></data>
   <data name="Connection_SecretTitle" xml:space="preserve"><value>Connect to {0}</value></data>
   <data name="Connection_SecretRefused" xml:space="preserve"><value>The server rejected the previous credentials.</value></data>
   <data name="Connection_TrustHostKey" xml:space="preserve"><value>Trust this SSH host key?</value></data>
@@ -1864,6 +1881,7 @@ Folder</value>
   <data name="Net_SecretSaveFailed" xml:space="preserve">
     <value>The password or key passphrase could not be saved in the Keychain.</value>
   </data>
+  <data name="Vault_SecretSaveFailed" xml:space="preserve"><value>Could not save the password or key passphrase in the encrypted vault.</value></data>
   <data name="Net_SidebarConnections" xml:space="preserve">
     <value>Network Connections</value>
   </data>

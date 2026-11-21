@@ -50,9 +50,18 @@ open dist/Tandem.app              # запуск
 
 Настройки: `~/Library/Application Support/Tandem/` — `state.json` (вкладки, избранное, окно, меню «Вид»; формат
 этапа 1), `settings.json` (клавиши, тема, цвета, столбцы, шрифт, панель кнопок, внешний редактор),
-`connections.json` (подключения) и `known-hosts.json` (подтверждённые ключи и сертификаты).
-Пароли и ключевые фразы можно сохранить в связке ключей macOS, служба `Tandem`. Временные файлы:
+`known-hosts.json` (подтверждённые ключи и сертификаты) и `connections.json` (подключения до перехода
+на зашифрованное хранилище). Временные файлы:
 `~/Library/Caches/Tandem/tmp`. Журнал ошибок: `~/Library/Logs/Tandem/tandem.log`.
+
+### Зашифрованное хранилище подключений
+
+Откройте «Сеть → Подключиться к серверу…» и выберите создание хранилища. Tandem поместит профили FTP, FTPS
+и SFTP, сохранённые пароли, закрытые SSH-ключи и ключевые фразы в `credentials.tandemvault` в папке настроек.
+После перехода Tandem читает и обновляет этот файл. Ранее сохранённые записи macOS Keychain и исходные файлы
+ключей сохраняются. Для переноса нужен зашифрованный файл и мастер-пароль. Хранилище открывается по
+мастер-паролю в каждом запуске Tandem, когда требуются подключения.
+[Спецификация формата для совместимых приложений](docs/superpowers/specs/2026-11-21-credential-vault-design.md).
 
 ## Проверки на настоящем сервере
 
@@ -112,8 +121,12 @@ open dist/Tandem.app
 that macOS folder permissions survive rebuilds; without it the app is signed ad-hoc and works the same.
 
 Settings live in `~/Library/Application Support/Tandem/`: `state.json` (tabs, favourites, window; stage 1 format) and
-`settings.json` (stage 2 settings), `connections.json` (profiles) and `known-hosts.json` (trusted keys and
-certificates). Saved passwords and passphrases are stored in the macOS Keychain. Projects: `src/Tandem.Core`,
+`settings.json` (stage 2 settings), `credentials.tandemvault` (the portable encrypted vault after setup),
+`connections.json` (legacy profiles) and `known-hosts.json` (trusted keys and certificates).
+Enable the vault from the Network connection manager. A compatible reader uses the encrypted file and master
+password. [Vault format specification](docs/superpowers/specs/2026-11-21-credential-vault-design.md).
+
+Projects: `src/Tandem.Core`,
 `src/Tandem.Archives` (archives over SharpCompress), `src/Tandem.Net` (files over FTP/FTPS/SFTP and SSH consoles),
 `src/Tandem.Platform.Mac`, `src/Tandem.App`.
 

@@ -3,6 +3,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Tandem.App.Commands;
 using Tandem.App.Resources;
 using Tandem.App.Services;
 using Tandem.App.ViewModels.Net;
@@ -12,12 +13,141 @@ using Tandem.Core.Vfs;
 using Tandem.Net;
 using Tandem.Net.Connections;
 using Tandem.Net.Remote;
+using Tandem.Net.Ssh;
 
 namespace Tandem.App.Tests.Views;
 
 [Collection(LanguageCollection.Name)]
 public sealed class ConnectionDialogTests : LanguageTestBase
 {
+    private const string TestMasterPassword = "synthetic vault password";
+    private static readonly ConnectionProfile VaultProfile = new(Guid.NewGuid(), "Vault SFTP", NetProtocol.Sftp,
+        "vault.test", 22, "test", NetAuth.PrivateKey);
+
+    [AvaloniaFact]
+    public async Task Manager_command_prompts_before_showing_profiles_and_unlock_refreshes_available_connections()
+    {
+        await using var app = await StartVaultAppAsync(configured: true);
+        var commands = app.Main.Commands;
+        Assert.True(commands.CanExecute(CommandIds.NetConnect));
+        Assert.False(commands.CanExecute(CommandIds.NetConsole));
+        Assert.Empty(app.Main.Net.Connections);
+
+        var opening = commands.ExecuteAsync(CommandIds.NetConnect);
+        var prompt = Assert.Single(app.Window.OwnedWindows);
+        Assert.IsNotType<ConnectionListDialog>(prompt);
+        try
+        {
+            var password = Named<TextBox>(prompt, "MasterPassword");
+            Assert.NotEqual('\0', password.PasswordChar);
+            Assert.Contains(prompt.GetVisualDescendants().OfType<TextBlock>(), block =>
+                block.Text?.Contains(Path.Combine(app.StateDirectory, CredentialVault.FileName), StringComparison.Ordinal) == true);
+            password.Text = "wrong synthetic password";
+            Click(prompt, "Confirm");
+            await TestApp.WaitUntil(() => Named<TextBlock>(prompt, "Error").IsVisible);
+            Assert.Equal(Loc.Get("Vault_UnlockFailed"), Named<TextBlock>(prompt, "Error").Text);
+            Assert.True(string.IsNullOrEmpty(password.Text));
+            Assert.Empty(app.Main.Net.Connections);
+            Assert.False(commands.CanExecute(CommandIds.NetConsole));
+            Click(prompt, "Cancel");
+            Assert.True(await opening);
+            Assert.Empty(app.Window.OwnedWindows);
+
+            opening = commands.ExecuteAsync(CommandIds.NetConnect);
+            prompt = Assert.Single(app.Window.OwnedWindows);
+            var committed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var service = app.Main.Services.Net!;
+            service.Changed += HoldCommittedUnlock;
+            try
+            {
+                Named<TextBox>(prompt, "MasterPassword").Text = TestMasterPassword;
+                Click(prompt, "Confirm");
+                await committed.Task.WaitAsync(TestContext.Current.CancellationToken);
+                Click(prompt, "Cancel");
+                Assert.True(prompt.IsVisible);
+            }
+            finally
+            {
+                service.Changed -= HoldCommittedUnlock;
+                release.TrySetResult();
+            }
+            await TestApp.WaitUntil(() => app.Window.OwnedWindows.OfType<ConnectionListDialog>().Any());
+            var manager = Assert.Single(app.Window.OwnedWindows.OfType<ConnectionListDialog>());
+            Assert.Equal(VaultProfile, Assert.Single(app.Main.Net.Connections));
+            Assert.True(commands.CanExecute(CommandIds.NetConsole));
+            Assert.True(Named<Button>(manager, "Connect").IsEnabled);
+            Assert.False(Named<Button>(manager, "VaultAction").IsVisible);
+
+            Click(manager, "Edit");
+            await TestApp.WaitUntil(() => manager.OwnedWindows.OfType<ConnectionEditDialog>().Any());
+            var editor = Assert.Single(manager.OwnedWindows.OfType<ConnectionEditDialog>());
+            Assert.True(string.IsNullOrEmpty(Named<TextBox>(editor, "Secret").Text));
+            Assert.True(string.IsNullOrEmpty(Named<TextBox>(editor, "PrivateKeyPath").Text));
+            Named<TextBox>(editor, "Name").Text = "Renamed vault SFTP";
+            Click(editor, "Save");
+            await TestApp.WaitUntil(() => app.Main.Net.Connections.Single().Name == "Renamed vault SFTP");
+            Click(manager, "Close");
+            Assert.True(await opening);
+
+            void HoldCommittedUnlock(object? sender, EventArgs args)
+            {
+                committed.SetResult();
+                release.Task.GetAwaiter().GetResult();
+            }
+        }
+        finally
+        {
+            foreach (var window in app.Window.OwnedWindows.ToArray()) window.Close();
+        }
+    }
+
+    [AvaloniaFact]
+    public async Task Manager_setup_requires_matching_masked_passwords_and_migrates_only_when_confirmed()
+    {
+        await using var app = await StartVaultAppAsync(configured: false);
+        var opening = app.Main.Commands.ExecuteAsync(CommandIds.NetConnect);
+        var manager = Assert.Single(app.Window.OwnedWindows.OfType<ConnectionListDialog>());
+        var path = Path.Combine(app.StateDirectory, CredentialVault.FileName);
+        try
+        {
+            Click(manager, "VaultAction");
+            var prompt = Assert.Single(manager.OwnedWindows);
+            var password = Named<TextBox>(prompt, "MasterPassword");
+            var confirmation = Named<TextBox>(prompt, "MasterPasswordConfirmation");
+            Assert.NotEqual('\0', password.PasswordChar);
+            Assert.NotEqual('\0', confirmation.PasswordChar);
+            password.Text = confirmation.Text = "test";
+            Click(prompt, "Confirm");
+            Assert.Equal(Loc.Get("Vault_PasswordTooShort"), Named<TextBlock>(prompt, "Error").Text);
+            Assert.False(File.Exists(path));
+            password.Text = TestMasterPassword;
+            confirmation.Text = "different synthetic password";
+            Click(prompt, "Confirm");
+            Assert.Equal(Loc.Get("Vault_PasswordMismatch"), Named<TextBlock>(prompt, "Error").Text);
+            Assert.False(File.Exists(path));
+            Click(prompt, "Cancel");
+            Assert.False(File.Exists(path));
+            Assert.Empty(manager.OwnedWindows);
+
+            Click(manager, "VaultAction");
+            prompt = Assert.Single(manager.OwnedWindows);
+            Named<TextBox>(prompt, "MasterPassword").Text = TestMasterPassword;
+            Named<TextBox>(prompt, "MasterPasswordConfirmation").Text = TestMasterPassword;
+            Click(prompt, "Confirm");
+            await TestApp.WaitUntil(() => !Named<Button>(manager, "VaultAction").IsVisible);
+            Assert.True(File.Exists(path));
+            Assert.Equal("Legacy FTP", Assert.Single(app.Main.Net.Connections).Name);
+            Click(manager, "Close");
+            Assert.True(await opening);
+        }
+        finally
+        {
+            foreach (var window in manager.OwnedWindows.ToArray()) window.Close();
+            if (manager.IsVisible) manager.Close();
+        }
+    }
+
     [AvaloniaFact]
     public async Task Real_manager_creates_and_edits_a_profile_with_a_masked_password()
     {
@@ -138,6 +268,31 @@ public sealed class ConnectionDialogTests : LanguageTestBase
         {
             if (dialog.IsVisible) dialog.Close();
         }
+    }
+
+    private static async Task<TestApp> StartVaultAppAsync(bool configured)
+    {
+        TestApp? app = null;
+        app = await TestApp.StartAsync(configureServices: (services, directory) =>
+        {
+            var store = new ConnectionStore(directory);
+            store.Save([new ConnectionProfile(Guid.NewGuid(), "Legacy FTP", NetProtocol.Ftp, "legacy.test", 21,
+                "test", NetAuth.Anonymous)]);
+            if (configured)
+            {
+                using var seed = new CredentialVault(directory);
+                seed.CreateAsync(TestMasterPassword, [new VaultEntry(VaultProfile, null, [1, 2, 3], null)],
+                    CancellationToken.None).GetAwaiter().GetResult();
+            }
+            var dialogs = new NetDialogs(() => app?.Window);
+            var secrets = new FakeSecretStore();
+            var connections = new NetConnections(services.Providers, store, new TrustStore(directory), secrets,
+                new DialogNetPrompts(dialogs), new Dictionary<NetProtocol, IRemoteSessionFactory>(),
+                (_, _) => throw new InvalidOperationException("The stored key must be used."), new CredentialVault(directory));
+            return services with { Net = connections, NetDialogs = dialogs, Secrets = secrets,
+                Consoles = new SshConsoles(connections, new SshShellTransportFactory()) };
+        });
+        return app;
     }
 
     private static void SelectTag(Window window, string control, object value)

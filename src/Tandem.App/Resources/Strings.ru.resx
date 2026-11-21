@@ -1806,7 +1806,7 @@
   <data name="Connection_Browse" xml:space="preserve"><value>Выбрать…</value></data>
   <data name="Connection_Password" xml:space="preserve"><value>Пароль</value></data>
   <data name="Connection_Passphrase" xml:space="preserve"><value>Ключевая фраза</value></data>
-  <data name="Connection_Remember" xml:space="preserve"><value>Хранить в связке ключей</value></data>
+  <data name="Connection_Remember" xml:space="preserve"><value>Запомнить для следующих подключений</value></data>
   <data name="Connection_InitialPath" xml:space="preserve"><value>Начальная папка</value></data>
   <data name="Connection_Passive" xml:space="preserve"><value>Пассивный режим</value></data>
   <data name="Connection_FtpEncoding" xml:space="preserve"><value>Кодировка имён</value></data>
@@ -1816,6 +1816,23 @@
   <data name="Connection_KeyRequired" xml:space="preserve"><value>Выберите файл закрытого ключа.</value></data>
   <data name="Connection_InvalidAuth" xml:space="preserve"><value>Выберите способ входа для этого протокола.</value></data>
   <data name="Connection_SaveFailed" xml:space="preserve"><value>Не удалось обновить сохранённые подключения.</value></data>
+  <data name="Vault_CreateTitle" xml:space="preserve"><value>Создание зашифрованного хранилища подключений</value></data>
+  <data name="Vault_UnlockTitle" xml:space="preserve"><value>Разблокировка хранилища подключений</value></data>
+  <data name="Vault_Setup" xml:space="preserve"><value>Создать хранилище…</value></data>
+  <data name="Vault_Create" xml:space="preserve"><value>Создать хранилище</value></data>
+  <data name="Vault_Unlock" xml:space="preserve"><value>Разблокировать</value></data>
+  <data name="Vault_SetupPath" xml:space="preserve"><value>Tandem скопирует сохранённые подключения и данные для входа в зашифрованное хранилище. Дальнейшие изменения будут сохраняться в нём.&#10;{0}</value></data>
+  <data name="Vault_ActivePath" xml:space="preserve"><value>Подключения и сохранённые данные для входа находятся в зашифрованном хранилище.&#10;{0}</value></data>
+  <data name="Vault_LockedPath" xml:space="preserve"><value>Разблокируйте хранилище, чтобы открыть сохранённые подключения.&#10;{0}</value></data>
+  <data name="Vault_MasterPassword" xml:space="preserve"><value>Мастер-пароль</value></data>
+  <data name="Vault_NewPassword" xml:space="preserve"><value>Мастер-пароль (не менее 12 символов)</value></data>
+  <data name="Vault_ConfirmPassword" xml:space="preserve"><value>Подтвердите мастер-пароль</value></data>
+  <data name="Vault_PasswordRequired" xml:space="preserve"><value>Введите мастер-пароль.</value></data>
+  <data name="Vault_PasswordTooShort" xml:space="preserve"><value>Введите не менее 12 символов.</value></data>
+  <data name="Vault_PasswordMismatch" xml:space="preserve"><value>Мастер-пароли не совпадают.</value></data>
+  <data name="Vault_CreateFailed" xml:space="preserve"><value>Не удалось создать хранилище. Проверьте доступ к папке хранилища, связке ключей и указанным файлам закрытых ключей.</value></data>
+  <data name="Vault_UnlockFailed" xml:space="preserve"><value>Не удалось разблокировать хранилище. Проверьте мастер-пароль, целостность файла и доступ к нему.</value></data>
+  <data name="Vault_StoredKey" xml:space="preserve"><value>Закрытый ключ сохранён в хранилище. Чтобы заменить ключ, выберите другой файл.</value></data>
   <data name="Connection_SecretTitle" xml:space="preserve"><value>Подключение к {0}</value></data>
   <data name="Connection_SecretRefused" xml:space="preserve"><value>Сервер не принял данные для входа.</value></data>
   <data name="Connection_TrustHostKey" xml:space="preserve"><value>Доверять этому ключу SSH?</value></data>
@@ -1855,6 +1872,7 @@
   <data name="Net_SecretSaveFailed" xml:space="preserve">
     <value>Не удалось сохранить пароль или ключевую фразу в связке ключей.</value>
   </data>
+  <data name="Vault_SecretSaveFailed" xml:space="preserve"><value>Не удалось сохранить пароль или ключевую фразу в зашифрованном хранилище.</value></data>
   <data name="Net_SidebarConnections" xml:space="preserve">
     <value>Сетевые подключения</value>
   </data>

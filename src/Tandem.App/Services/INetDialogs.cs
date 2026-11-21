@@ -14,6 +14,7 @@ public sealed record ConnectionEdit(ConnectionProfile Profile, string? Password)
 public interface INetDialogs
 {
     Task<Guid?> ShowConnectionsAsync(ConnectionListViewModel list);
+    Task<bool> OpenVaultAsync(ConnectionVaultViewModel vault, Window? owner = null);
     Task<ConnectionEdit?> EditConnectionAsync(ConnectionEditViewModel edit, Window? owner = null);
     Task<SecretAnswer?> AskSecretAsync(string connectionName, string address, SecretKind kind, bool previousWasWrong,
         CancellationToken ct);

@@ -13,6 +13,9 @@ public sealed class NetDialogs(Func<Window?> mainWindow) : INetDialogs
     public async Task<Guid?> ShowConnectionsAsync(ConnectionListViewModel list) =>
         await ShowAsync(new ConnectionListDialog(list)) is Guid id ? id : null;
 
+    public async Task<bool> OpenVaultAsync(ConnectionVaultViewModel vault, Window? owner = null) =>
+        await ShowAsync(new ConnectionVaultDialog(vault), owner: owner) is true;
+
     public async Task<ConnectionEdit?> EditConnectionAsync(ConnectionEditViewModel edit, Window? owner = null) =>
         await ShowAsync(new ConnectionEditDialog(edit), owner: owner) as ConnectionEdit;
 

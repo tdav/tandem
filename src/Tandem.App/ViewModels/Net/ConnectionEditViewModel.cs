@@ -14,7 +14,7 @@ public sealed partial class ConnectionEditViewModel : ObservableObject
     private bool _defaultPort;
     private bool _settingProtocol;
 
-    public ConnectionEditViewModel(ConnectionProfile? profile = null, bool hasSavedSecret = false)
+    public ConnectionEditViewModel(ConnectionProfile? profile = null, bool hasSavedSecret = false, bool hasStoredKey = false)
     {
         _original = profile;
         _id = profile?.Id ?? Guid.NewGuid();
@@ -30,6 +30,7 @@ public sealed partial class ConnectionEditViewModel : ObservableObject
         PassiveMode = profile?.PassiveMode ?? true;
         NameEncoding = profile?.NameEncoding ?? TextEncodings.Utf8.Id;
         Remember = hasSavedSecret;
+        HasStoredKey = hasStoredKey;
     }
 
     [ObservableProperty] public partial string Name { get; set; } = "";
@@ -46,6 +47,7 @@ public sealed partial class ConnectionEditViewModel : ObservableObject
     [ObservableProperty] public partial string NameEncoding { get; set; } = TextEncodings.Utf8.Id;
 
     public bool IsFtp => Protocol != NetProtocol.Sftp;
+    public bool HasStoredKey { get; }
     public IReadOnlyList<NetAuth> AuthenticationMethods => IsFtp ? [NetAuth.Password, NetAuth.Anonymous] :
         [NetAuth.Password, NetAuth.PrivateKey];
 
@@ -75,14 +77,15 @@ public sealed partial class ConnectionEditViewModel : ObservableObject
         else if (!int.TryParse(Port, NumberStyles.None, CultureInfo.InvariantCulture, out var port)
                  || port is < 1 or > 65535)
             error = Loc.Get("Connection_InvalidPort");
-        else if (Auth == NetAuth.PrivateKey && string.IsNullOrWhiteSpace(PrivateKeyPath))
+        else if (Auth == NetAuth.PrivateKey && !HasStoredKey && string.IsNullOrWhiteSpace(PrivateKeyPath))
             error = Loc.Get("Connection_KeyRequired");
         else if (!AuthenticationMethods.Contains(Auth))
             error = Loc.Get("Connection_InvalidAuth");
         else
         {
+            var keyPath = string.IsNullOrWhiteSpace(PrivateKeyPath) && HasStoredKey ? _original?.PrivateKeyPath : PrivateKeyPath;
             var profile = new ConnectionProfile(_id, string.IsNullOrWhiteSpace(Name) ? Host : Name, Protocol, Host,
-                port, User, Auth, Auth == NetAuth.PrivateKey ? PrivateKeyPath : null, InitialPath, PassiveMode,
+                port, User, Auth, Auth == NetAuth.PrivateKey ? keyPath : null, InitialPath, PassiveMode,
                 IsFtp && NameEncoding != TextEncodings.Utf8.Id ? NameEncoding : null).Normalized();
             var secret = !Remember ? "" : Secret.Length == 0 && _original?.Auth == Auth ? null :
                 Secret.Length == 0 ? null : Secret;

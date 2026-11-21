@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
 using Avalonia.Data;
@@ -38,14 +39,18 @@ public sealed class ConnectionListDialog : DialogWindow
         var add = MakeButton(Loc.Get("Connection_New"), name: "Create");
         var edit = MakeButton(Loc.Get("Connection_Edit"), name: "Edit");
         var delete = MakeButton(Loc.Get("Button_Delete"), name: "Delete");
+        var vaultAction = MakeButton("", name: "VaultAction");
+        vaultAction.HorizontalAlignment = HorizontalAlignment.Left;
+        var vaultStatus = Text(null, secondary: true);
         var close = MakeButton(Loc.Get("Connection_Close"), isCancel: true, name: "Close");
         var error = ErrorText("Error");
 
-        connect.Click += (_, _) => { if (model.Selected is { } item) Close(item.Id); };
-        list.DoubleTapped += (_, _) => { if (model.Selected is { } item) Close(item.Id); };
+        connect.Click += (_, _) => Connect();
+        list.DoubleTapped += (_, _) => Connect();
         add.Click += async (_, _) => await model.EditAsync(create: true, this);
         edit.Click += async (_, _) => await model.EditAsync(create: false, this);
         delete.Click += async (_, _) => await model.DeleteAsync(this);
+        vaultAction.Click += async (_, _) => await model.OpenVaultAsync(this);
         close.Click += (_, _) => Close();
         model.PropertyChanged += (_, _) => Refresh();
         Refresh();
@@ -54,11 +59,23 @@ public sealed class ConnectionListDialog : DialogWindow
         actions.Children.Add(add);
         actions.Children.Add(edit);
         actions.Children.Add(delete);
-        SetContent(list, [list, actions, error], connect, close);
+        SetContent(list, [list, actions, vaultStatus, vaultAction, error], connect, close);
+
+        void Connect()
+        {
+            if (connect.IsEnabled && model.Selected is { } item) Close(item.Id);
+        }
 
         void Refresh()
         {
-            connect.IsEnabled = edit.IsEnabled = delete.IsEnabled = model.Selected is not null;
+            add.IsEnabled = model.CanManageProfiles && !model.IsBusy;
+            connect.IsEnabled = edit.IsEnabled = delete.IsEnabled = add.IsEnabled && model.Selected is not null;
+            var action = model.VaultAction;
+            vaultAction.Content = action;
+            vaultAction.IsVisible = action is not null;
+            vaultAction.IsEnabled = !model.IsBusy;
+            vaultStatus.Text = model.VaultStatus;
+            vaultStatus.IsVisible = vaultStatus.Text is not null;
             ShowError(error, model.Error);
         }
     }
@@ -119,6 +136,7 @@ public sealed class ConnectionEditDialog : DialogWindow
         fields.Children.Add(userField);
         fields.Children.Add(Field("Connection_Auth", authentication));
         var privateKey = Field("Connection_Key", keyField);
+        if (model.HasStoredKey) privateKey.Children.Add(Text(Loc.Get("Vault_StoredKey"), secondary: true));
         fields.Children.Add(privateKey);
         var secretLabel = Text(null);
         var secretField = new StackPanel { Spacing = 4, Children = { secretLabel, secret, remember } };
@@ -199,6 +217,80 @@ public sealed class ConnectionEditDialog : DialogWindow
 
     private static void Select<T>(ComboBox box, T value) =>
         box.SelectedItem = box.Items.OfType<ComboBoxItem>().FirstOrDefault(item => Equals(item.Tag, value));
+}
+
+internal sealed class ConnectionVaultDialog : DialogWindow
+{
+    public ConnectionVaultDialog(ConnectionVaultViewModel model)
+        : base(Loc.Get(model.IsCreating ? "Vault_CreateTitle" : "Vault_UnlockTitle"))
+    {
+        var passwordLabel = Loc.Get(model.IsCreating ? "Vault_NewPassword" : "Vault_MasterPassword");
+        var confirmLabel = Loc.Get("Vault_ConfirmPassword");
+        var password = PasswordBox("MasterPassword", passwordLabel);
+        var confirm = PasswordBox("MasterPasswordConfirmation", confirmLabel);
+        var body = new List<Control>
+        {
+            Text(Loc.Format(model.IsCreating ? "Vault_SetupPath" : "Vault_LockedPath", model.Path), secondary: true),
+            Text(passwordLabel),
+            password,
+        };
+        if (model.IsCreating)
+        {
+            body.Add(Text(confirmLabel));
+            body.Add(confirm);
+        }
+        var error = ErrorText("Error");
+        body.Add(error);
+        var submit = MakeButton(Loc.Get(model.IsCreating ? "Vault_Create" : "Vault_Unlock"), isDefault: true,
+            name: "Confirm");
+        var cancel = CancelButton();
+        CancellationTokenSource? operation = null;
+        model.PropertyChanged += (_, _) => ShowError(error, model.Error);
+
+        submit.Click += async (_, _) =>
+        {
+            if (operation is not null || !model.Validate(password.Text ?? "", confirm.Text ?? "")) return;
+            using var cancellation = new CancellationTokenSource();
+            operation = cancellation;
+            password.IsEnabled = confirm.IsEnabled = submit.IsEnabled = false;
+            var submission = model.SubmitAsync(password.Text ?? "", cancellation.Token);
+            ClearPasswords();
+            bool unlocked;
+            try { unlocked = await submission; }
+            catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { unlocked = false; }
+            finally
+            {
+                operation = null;
+                password.IsEnabled = confirm.IsEnabled = submit.IsEnabled = true;
+            }
+            if (unlocked || cancellation.IsCancellationRequested) Close(unlocked);
+            else password.Focus();
+        };
+        cancel.Click += (_, _) => Close(false);
+        Closing += (_, e) =>
+        {
+            if (operation is null) return;
+            e.Cancel = true;
+            operation.Cancel();
+        };
+        Closed += (_, _) => ClearPasswords();
+        SetContent(password, body, submit, cancel);
+
+        void ClearPasswords()
+        {
+            password.Text = null;
+            confirm.Text = null;
+        }
+    }
+
+    private static TextBox PasswordBox(string name, string label)
+    {
+        var box = new TextBox { PasswordChar = '●', IsUndoEnabled = false, Name = name };
+        AutomationProperties.SetName(box, label);
+        box.CopyingToClipboard += (_, e) => e.Handled = true;
+        box.CuttingToClipboard += (_, e) => e.Handled = true;
+        return box;
+    }
 }
 
 internal sealed class ConnectionSecretDialog : DialogWindow

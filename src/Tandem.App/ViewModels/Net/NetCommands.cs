@@ -7,6 +7,7 @@ using Tandem.App.Resources;
 using Tandem.App.Services;
 using Tandem.Core.Vfs;
 using Tandem.Net;
+using Tandem.Net.Connections;
 
 namespace Tandem.App.ViewModels.Net;
 
@@ -160,6 +161,9 @@ public sealed partial class NetCommands : ObservableObject, IDisposable
     private async Task OpenConnectionsAsync()
     {
         if (!CanOpenConnections() || _services.Net is not { } net || _services.NetDialogs is not { } dialogs) return;
+        if (net.VaultConfigured && !net.VaultUnlocked &&
+            !await dialogs.OpenVaultAsync(new ConnectionVaultViewModel(net, create: false))) return;
+        if (!CanOpenConnections()) return;
         var list = new ConnectionListViewModel(net, dialogs, BeforeDeleteAsync) { Selected = Connections.FirstOrDefault() };
         if (await dialogs.ShowConnectionsAsync(list) is { } id) await ConnectAsync(id);
     }
@@ -303,7 +307,11 @@ public sealed partial class NetCommands : ObservableObject, IDisposable
     private void OnSecretSaveFailed(object? sender, Exception e) => Dispatcher.UIThread.Post(async () =>
     {
         if (_disposed || _closing) return;
-        try { await _services.Dialogs.ShowMessageAsync(Loc.Get("Net_SecretSaveFailed")); }
+        try
+        {
+            var message = e is CredentialVaultException ? "Vault_SecretSaveFailed" : "Net_SecretSaveFailed";
+            await _services.Dialogs.ShowMessageAsync(Loc.Get(message));
+        }
         catch (Exception error) { _reportFailure(error); }
     });
 

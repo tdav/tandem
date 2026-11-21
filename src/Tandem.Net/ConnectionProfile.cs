@@ -8,9 +8,8 @@ public enum NetProtocol { Ftp, FtpsExplicit, FtpsImplicit, Sftp }
 public enum NetAuth { Password, PrivateKey, Anonymous }
 
 /// <summary>
-/// The saved settings of one server connection. It holds no secret: a password or key passphrase lives only in the
-/// keychain and in memory (<see cref="NetCredentials"/>). Only the constructor parameters are written to
-/// <c>connections.json</c>.
+/// The saved settings of one server connection. Passwords, key bytes and passphrases are stored separately from
+/// this type. The legacy settings file and the credential vault serialize its constructor parameters.
 /// </summary>
 /// <param name="PrivateKeyPath">The key file, for <see cref="NetAuth.PrivateKey"/>.</param>
 /// <param name="InitialPath">The folder a new connection opens in.</param>

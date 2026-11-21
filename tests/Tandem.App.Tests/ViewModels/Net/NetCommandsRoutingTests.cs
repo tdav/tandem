@@ -223,6 +223,9 @@ public sealed class NetCommandsRoutingTests : LanguageTestBase
         public Task<ConnectionEdit?> EditConnectionAsync(ConnectionEditViewModel edit, Window? owner = null) =>
             throw new InvalidOperationException("The connection editor was not expected.");
 
+        public Task<bool> OpenVaultAsync(ConnectionVaultViewModel vault, Window? owner = null) =>
+            throw new InvalidOperationException("A vault prompt was not expected.");
+
         public Task<SecretAnswer?> AskSecretAsync(string name, string address, SecretKind kind, bool previousWasWrong,
             CancellationToken ct) => throw new InvalidOperationException("An authentication prompt was not expected.");
 

@@ -28,6 +28,31 @@ public sealed class ConnectionStore(string directory)
         lock (_gate) _file.Save(new Document(1, profiles));
     }
 
+    internal IReadOnlyList<ConnectionProfile> LoadForMigration()
+    {
+        lock (_gate)
+        {
+            try
+            {
+                var document = _file.Read(checkQuarantine: true);
+                if (document is not { Version: 1, Profiles: not null } ||
+                    document.Profiles.Any(profile => !IsValid(profile)) ||
+                    document.Profiles.DistinctBy(profile => profile.Id).Count() != document.Profiles.Count)
+                    throw new CredentialVaultException("The legacy connection profiles are invalid.");
+                return document.Profiles.Select(profile => profile.Normalized()).ToArray();
+            }
+            catch (Exception error) when (error is FileNotFoundException or DirectoryNotFoundException)
+            {
+                return [];
+            }
+            catch (Exception error) when (error is IOException and not CredentialVaultException or
+                                          UnauthorizedAccessException or JsonException or InvalidDataException)
+            {
+                throw new CredentialVaultException("The legacy connection profiles could not be read.");
+            }
+        }
+    }
+
     private static bool IsValid(ConnectionProfile profile) => profile is not null &&
         profile.Id != Guid.Empty && !string.IsNullOrWhiteSpace(profile.Host) &&
         profile.Name is not null && profile.User is not null &&
@@ -47,12 +72,39 @@ internal sealed class ConnectionFile<T>(string directory, string fileName) where
 
     private readonly string _path = Path.Combine(directory, fileName);
 
-    public T? Load(Func<T, bool> validate)
+    public T? Read(bool checkQuarantine = false)
     {
         try
         {
             using var file = File.OpenRead(_path);
-            if (JsonSerializer.Deserialize<T>(file, Options) is { } data && validate(data)) return data;
+            return JsonSerializer.Deserialize<T>(file, Options);
+        }
+        catch (Exception error) when (checkQuarantine && error is (FileNotFoundException or DirectoryNotFoundException))
+        {
+            // Regular startup may have quarantined an invalid document before migration was requested.
+            if (HasQuarantinedFile()) throw new InvalidDataException();
+            throw;
+        }
+    }
+
+    private bool HasQuarantinedFile()
+    {
+        try
+        {
+            _ = File.GetAttributes(_path + ".bad");
+            return true;
+        }
+        catch (Exception error) when (error is FileNotFoundException or DirectoryNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    public T? Load(Func<T, bool> validate)
+    {
+        try
+        {
+            if (Read() is { } data && validate(data)) return data;
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {

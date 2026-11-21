@@ -1,4 +1,6 @@
+using System.Buffers;
 using System.Runtime.Versioning;
+using System.Security.Cryptography;
 using Tandem.App.Commands;
 using Tandem.App.Resources;
 using Tandem.App.Services;
@@ -76,7 +78,8 @@ public static class Composition
         var secrets = new MacKeychainSecretStore();
         var stateDirectory = Path.Combine(homeDirectory, "Library", "Application Support", "Tandem");
         var net = new NetConnections(providers, new ConnectionStore(stateDirectory), new TrustStore(stateDirectory),
-            secrets, new DialogNetPrompts(netDialogs), CreateSessionFactories(), CreateKeyReader(providers, homeDirectory));
+            secrets, new DialogNetPrompts(netDialogs), CreateSessionFactories(), CreateKeyReader(providers, homeDirectory),
+            new CredentialVault(stateDirectory));
         return new AppServices(providers, new MacVolumeService(), new MacShellIntegration(processes),
             new MacQuickLook(processes), new MacFileMetadataService(broker), new MacTrash(broker),
             new MacNativeCopy(broker), processes, new OperationQueue(), broker, log, dialogs,
@@ -109,9 +112,20 @@ public static class Composition
         };
         var file = VfsPath.Local(absolute);
         await using var input = await providers.For(file).OpenReadAsync(file, ct).ConfigureAwait(false);
-        using var output = new MemoryStream();
-        await input.CopyToAsync(output, ct).ConfigureAwait(false);
-        return output.ToArray();
+        var buffer = ArrayPool<byte>.Shared.Rent(CredentialVault.MaxKeyBytes + 1);
+        try
+        {
+            var length = await input.ReadAtLeastAsync(buffer.AsMemory(0, CredentialVault.MaxKeyBytes + 1),
+                CredentialVault.MaxKeyBytes + 1, throwOnEndOfStream: false, cancellationToken: ct).ConfigureAwait(false);
+            if (length > CredentialVault.MaxKeyBytes)
+                throw new IOException("The private key file exceeds the supported size.");
+            return buffer.AsSpan(0, length).ToArray();
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(buffer.AsSpan(0, CredentialVault.MaxKeyBytes + 1));
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
     };
 
     /// <summary>Where the app writes unexpected errors: <c>~/Library/Logs/Tandem/tandem.log</c>.</summary>
