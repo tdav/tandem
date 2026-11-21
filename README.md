@@ -18,6 +18,9 @@ Tandem — двухпанельный файловый менеджер для m
 - настройки (Cmd+,): переназначение клавиш, темы (светлая, тёмная, как в системе), цвета по типам файлов, столбцы
   отдельно для каждой панели, шрифт и высота строк, панель кнопок с пользовательскими командами.
 
+Чтение RAR и 7z с зашифрованным списком файлов не проверено автоматическими тестами: таких тестовых архивов в
+проекте нет, их можно проверить только на своих файлах. Остальные ограничения — в конце `docs/checklists/stage-2.md`.
+
 ## Требования
 
 - Mac с Apple Silicon (arm64), macOS 14 или новее;
@@ -70,7 +73,8 @@ search with results shown in a panel; a built-in viewer (text in several encodin
 files), a quick-view panel and a text editor; archives (zip, 7z, tar, tar.gz/bz2/xz, rar) browsed as folders,
 zip editing, packing into zip/tar/tar.gz and unpacking; and settings: rebindable shortcuts, light/dark/system themes,
 file-type colours, per-panel columns, font and row height, and a user button bar. The UI is available in English and
-Russian.
+Russian. Reading RAR archives and 7z archives with encrypted headers is untested: the project has no such test
+archives, so only your own files can check it.
 
 Requirements: Apple Silicon Mac, macOS 14+, .NET 11 SDK.
 
