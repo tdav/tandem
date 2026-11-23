@@ -3,6 +3,10 @@ namespace Tandem.Core.Settings;
 /// <summary>The colour scheme: the system's, or always light or dark.</summary>
 public enum ThemeChoice { System, Light, Dark }
 
+public enum SshConsolePlacement { SeparateWindow, PanelTab }
+
+public enum SshConsoleSide { Right, Left }
+
 /// <summary>A file-list column that may be hidden, moved or resized; "Name" is always shown, first.</summary>
 public enum ColumnId { Extension, Size, Modified, Mode }
 
@@ -29,6 +33,9 @@ public sealed record AppSettings(int Version, ThemeChoice Theme, double FontSize
     IReadOnlyList<FileColorRule> FileColors, IReadOnlyList<KeyBindingOverride> KeyBindings,
     IReadOnlyList<UserButton> Buttons, string? ExternalEditor)
 {
+    public SshConsolePlacement SshConsolePlacement { get; init; }
+    public SshConsoleSide SshConsolePanel { get; init; }
+
     public const int CurrentVersion = 1;
     public const double DefaultFontSize = 14, MinFontSize = 10, MaxFontSize = 24;
     public const double DefaultRowHeight = 22, MinRowHeight = 16, MaxRowHeight = 48;
@@ -68,6 +75,8 @@ public sealed record AppSettings(int Version, ThemeChoice Theme, double FontSize
         var rowHeight = Math.Max(Clamp(RowHeight, MinRowHeight, MaxRowHeight, DefaultRowHeight), fontSize + RowPadding);
         return this with
         {
+            SshConsolePlacement = Enum.IsDefined(SshConsolePlacement) ? SshConsolePlacement : SshConsolePlacement.SeparateWindow,
+            SshConsolePanel = Enum.IsDefined(SshConsolePanel) ? SshConsolePanel : SshConsoleSide.Right,
             FontSize = fontSize,
             RowHeight = rowHeight,
             LeftColumns = NormalizedColumns(LeftColumns),

@@ -116,7 +116,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             ReportFailure);
         Tools = new ToolsCommands(workspace, services, Files, Interaction, Commands, ReportFailure);
         Net = new NetCommands(workspace, services, Files, Commands, ReportFailure, OnEscape)
-        { ConsoleFontSize = () => Settings.Current.FontSize };
+        { ConsoleSettings = () => Settings.Current };
         Commands.RaiseCanExecuteChanged();
         workspace.PropertyChanged += OnWorkspacePropertyChanged;
         QuickView.PropertyChanged += OnQuickViewPropertyChanged;
@@ -377,7 +377,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     [RelayCommand]
     public Task OpenFavoriteAsync(string path) =>
         SideViewModel.ParsePath(path, VfsPath.LocalProviderId, Workspace.HomeDirectory) is { } target
-            ? Workspace.ActivePanel.NavigateToAsync(target)
+            ? ActiveSide.OpenFolderAsync(target)
             : Task.CompletedTask;
 
     /// <summary>Opens a volume's root in the active panel.</summary>
@@ -463,6 +463,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     {
         if (!await Services.Windows.CloseAllAsync()) return false;
         if (!await Services.ToolWindows.CloseAllAsync()) return false;
+        if (!await Net.ConfirmConsoleTabsCloseAsync()) return false;
         if (!await StopOperationsAsync(timeout)) return false;
         await CloseNetworkAsync(networkCloseTimeout ?? NetworkCloseTimeout);
         return true;
@@ -597,15 +598,16 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Commands.Register(CommandIds.TabDuplicate, () => ActiveTabs().NewTabAsync());
         // A pinned tab, and the only one, cannot be closed: PanelTabsViewModel.CanClose decides, and the commands are
         // off then (no error is shown).
-        On(CommandIds.TabClose, () => ActiveTabs().CloseActive(),
+        Commands.Register(CommandIds.TabClose, () => ActiveTabs().CloseAsync(ActiveTabs().Active),
             () => Workspace.IsLoaded && ActiveTabs().CanClose(ActiveTabs().Active));
-        On(CommandIds.TabCloseOthers, () => ActiveTabs().CloseOthers(ActiveTabs().Active),
+        Commands.Register(CommandIds.TabCloseOthers, () => ActiveTabs().CloseOthersAsync(ActiveTabs().Active),
             () => Workspace.IsLoaded && ActiveTabs().CanCloseOthers(ActiveTabs().Active));
         On(CommandIds.TabTogglePin, () => ActiveTabs().Active.IsPinned = !ActiveTabs().Active.IsPinned,
-            () => Workspace.IsLoaded);
+            () => Workspace.IsLoaded && !ActiveTabs().Active.IsTerminal);
         On(CommandIds.TabNext, () => ActiveTabs().Next());
         On(CommandIds.TabPrev, () => ActiveTabs().Previous());
-        On(CommandIds.FavoritesShow, () => FavoritesMenuRequested?.Invoke(this, EventArgs.Empty));
+        On(CommandIds.FavoritesShow, () => FavoritesMenuRequested?.Invoke(this, EventArgs.Empty),
+            () => Workspace.IsLoaded && !ActiveTabs().Active.IsTerminal);
         On(CommandIds.ViewToggleHidden, () => Workspace.ShowHidden = !Workspace.ShowHidden);
         On(CommandIds.ViewQuickView, QuickView.Toggle, () => Workspace.IsLoaded);
         On(CommandIds.SortByName, () => ActiveSide.SortBy(SortColumn.Name));
@@ -682,7 +684,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// impossible.</summary>
     private void UpdateTabAvailability()
     {
-        bool[] available = [Commands.CanExecute(CommandIds.TabClose), Commands.CanExecute(CommandIds.TabCloseOthers)];
+        bool[] available = [Commands.CanExecute(CommandIds.TabClose), Commands.CanExecute(CommandIds.TabCloseOthers),
+            Commands.CanExecute(CommandIds.TabTogglePin), Commands.CanExecute(CommandIds.FavoritesShow)];
         if (available.SequenceEqual(_tabAvailable)) return;
         _tabAvailable = available;
         Commands.RaiseCanExecuteChanged();

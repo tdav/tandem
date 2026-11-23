@@ -1,11 +1,18 @@
+using System.Threading.Channels;
+using Avalonia;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
+using Avalonia.VisualTree;
 using Avalonia.Controls;
 using Tandem.App.Commands;
 using Tandem.App.Services;
 using Tandem.App.Tests.Views;
 using Tandem.App.ViewModels;
 using Tandem.App.ViewModels.Net;
+using Tandem.App.Views.Net;
 using Tandem.Core.Tests.Platform;
+using Tandem.Core.Settings;
 using Tandem.Core.Vfs;
 using Tandem.Net;
 using Tandem.Net.Connections;
@@ -164,11 +171,130 @@ public sealed class ConsoleCommandTests : LanguageTestBase
         Assert.Equal(3, app.Tools.Dialogs.Count);
     }
 
+    [AvaloniaFact]
+    public async Task Embedded_consoles_open_on_the_configured_side_and_preserve_file_tabs()
+    {
+        await using var app = await ConsoleApp.StartAsync();
+        var workspace = app.Main.Workspace;
+        var leftFolder = workspace.Left.Active;
+        var rightFolder = workspace.Right.Active;
+        await app.SaveAsync("Shell", NetProtocol.Ssh);
+
+        app.Main.Settings.Update(app.Main.Settings.Current with { SshConsolePlacement = SshConsolePlacement.PanelTab });
+        Assert.True(await app.Main.Commands.ExecuteAsync(CommandIds.NetConsole));
+        var first = workspace.Right.Active;
+        Assert.NotNull(first.Terminal);
+        Assert.True(await app.Main.Commands.ExecuteAsync(CommandIds.NetConsole));
+        var second = workspace.Right.Active;
+        Assert.NotNull(second.Terminal);
+        Assert.NotSame(first.Terminal, second.Terminal);
+        Assert.Equal(PanelSide.Right, workspace.ActiveSide);
+        Assert.Empty(app.Tools.Open);
+        Assert.Single(workspace.Right.ToState().Tabs);
+        Assert.Equal(0, workspace.Right.ToState().ActiveTab);
+
+        app.Main.Settings.Update(app.Main.Settings.Current with { SshConsolePanel = SshConsoleSide.Left });
+        Assert.True(await app.Main.Commands.ExecuteAsync(CommandIds.NetConsole));
+        Assert.NotNull(workspace.Left.Active.Terminal);
+        Assert.Equal(PanelSide.Left, workspace.ActiveSide);
+        Assert.Same(second, workspace.Right.Active);
+        Assert.True(await app.Main.Commands.ExecuteAsync(CommandIds.TabClose));
+        Assert.Same(leftFolder, workspace.Left.Active);
+
+        workspace.Right.Activate(rightFolder);
+        Assert.True(await app.Main.Commands.ExecuteAsync(CommandIds.NetShowConsole));
+        Assert.Same(second, workspace.Right.Active);
+        Assert.Equal(PanelSide.Right, workspace.ActiveSide);
+    }
+
+    [AvaloniaFact]
+    public async Task Closing_a_connected_terminal_tab_and_quitting_honor_confirmation()
+    {
+        await using var app = await ConsoleApp.StartAsync();
+        await app.SaveAsync("Shell", NetProtocol.Ssh);
+        var right = app.Main.Workspace.Right;
+        var folder = right.Active;
+        app.Main.Settings.Update(app.Main.Settings.Current with { SshConsolePlacement = SshConsolePlacement.PanelTab });
+        Assert.True(await app.Main.Commands.ExecuteAsync(CommandIds.NetConsole));
+        var terminal = Assert.IsType<TerminalViewModel>(right.Active.Terminal);
+        app.Ui.Pump();
+        await TestApp.WaitUntil(() => terminal.State == TerminalState.Connected);
+
+        app.Tools.OnDialog = model =>
+        {
+            Assert.IsType<ConfirmModel>(model);
+            return false;
+        };
+        await app.Main.Commands.ExecuteAsync(CommandIds.TabClose);
+        Assert.Same(terminal, right.Active.Terminal);
+        Assert.False(await app.Main.ConfirmCloseAsync());
+        Assert.False(app.Transport.Disposed);
+        Assert.Empty(app.Tools.Open);
+
+        app.Tools.OnDialog = _ => true;
+        Assert.True(await app.Main.ConfirmCloseAsync());
+        Assert.True(app.Transport.Disposed);
+        Assert.Same(folder, right.Active);
+    }
+
+    [AvaloniaFact]
+    public async Task The_embedded_terminal_receives_input_and_resizes_with_the_main_splitter()
+    {
+        await using var app = await ConsoleApp.StartAsync();
+        await app.SaveAsync("Shell", NetProtocol.Ssh);
+        var right = app.Main.Workspace.Right;
+        var folder = right.Active;
+        app.Main.Settings.Update(app.Main.Settings.Current with { SshConsolePlacement = SshConsolePlacement.PanelTab });
+
+        Assert.True(await app.Main.Commands.ExecuteAsync(CommandIds.NetConsole));
+        var tab = right.Active;
+        var terminal = Assert.IsType<TerminalViewModel>(tab.Terminal);
+        var ui = app.Ui;
+        ui.Pump();
+        await TestApp.WaitUntil(() => terminal.State == TerminalState.Connected);
+        var control = ui.PanelView(PanelSide.Right).GetVisualDescendants().OfType<TerminalControl>().Single();
+        Assert.True(control.IsEffectivelyVisible);
+        Assert.False(ui.FileList(PanelSide.Right).IsEffectivelyVisible);
+        Assert.Same(control, ui.Focused);
+
+        app.Main.Workspace.ActiveSide = PanelSide.Left;
+        ui.Pump();
+        ui.Click(control);
+        Assert.Equal(PanelSide.Right, app.Main.Workspace.ActiveSide);
+        Assert.Same(control, ui.Focused);
+        ui.Type("a");
+        Assert.Equal("a", await app.Transport.Written.Reader.ReadAsync(Ct).AsTask().WaitAsync(TimeSpan.FromSeconds(3)));
+
+        var columns = terminal.Screen.Columns;
+        var splitter = ui.Find<GridSplitter>("Splitter");
+        var start = ui.CenterOf(splitter);
+        var end = start - new Point(90, 0);
+        ui.Window.MouseDown(start, MouseButton.Left);
+        ui.Window.MouseMove(end, RawInputModifiers.LeftMouseButton);
+        ui.Window.MouseUp(end, MouseButton.Left);
+        ui.Pump();
+        Assert.True(terminal.Screen.Columns > columns);
+        var size = await app.Transport.Resized.Reader.ReadAsync(Ct).AsTask().WaitAsync(TimeSpan.FromSeconds(3));
+        Assert.Equal(terminal.Screen.Columns, size.Columns);
+
+        right.Activate(folder);
+        ui.Pump();
+        Assert.False(control.IsEffectivelyVisible);
+        Assert.True(ui.FileList(PanelSide.Right).IsEffectivelyVisible);
+        right.Activate(tab);
+        ui.Pump();
+        Assert.Same(terminal, right.Active.Terminal);
+        Assert.Equal(TerminalState.Connected, terminal.State);
+        Assert.Equal(1, app.Transport.SessionsCreated);
+        Assert.Empty(ui.Failures);
+    }
+
     private sealed class ConsoleApp : IAsyncDisposable
     {
         private TestApp _app = null!;
 
         public MainViewModel Main => _app.Main;
+        public TestApp Ui => _app;
         public NetConnections Connections => Main.Services.Net!;
         public ScriptedToolWindows Tools => _app.ScriptedToolWindows;
         public ScriptedPrompts Prompts { get; } = new();
@@ -290,9 +416,13 @@ public sealed class ConsoleCommandTests : LanguageTestBase
         public ITrustDecisions? Trust { get; private set; }
         public string? ReceivedPassword { get; private set; }
         public bool Disposed { get; private set; }
+        public int SessionsCreated { get; private set; }
+        public Channel<string> Written { get; } = Channel.CreateUnbounded<string>();
+        public Channel<(int Columns, int Rows)> Resized { get; } = Channel.CreateUnbounded<(int, int)>();
 
         public ITerminalTransport Create(ConnectionProfile profile, ICredentialSource credentials, ITrustDecisions trust)
         {
+            SessionsCreated++;
             Profile = profile;
             Credentials = credentials;
             Trust = trust;
@@ -317,8 +447,11 @@ public sealed class ConsoleCommandTests : LanguageTestBase
                 return 0;
             }
 
-            public Task WriteAsync(ReadOnlyMemory<byte> data, CancellationToken ct) => Task.CompletedTask;
-            public Task ResizeAsync(int columns, int rows, CancellationToken ct) => Task.CompletedTask;
+            public Task WriteAsync(ReadOnlyMemory<byte> data, CancellationToken ct) =>
+                owner.Written.Writer.WriteAsync(System.Text.Encoding.UTF8.GetString(data.Span), ct).AsTask();
+
+            public Task ResizeAsync(int columns, int rows, CancellationToken ct) =>
+                owner.Resized.Writer.WriteAsync((columns, rows), ct).AsTask();
             public ValueTask DisposeAsync()
             {
                 owner.Disposed = true;

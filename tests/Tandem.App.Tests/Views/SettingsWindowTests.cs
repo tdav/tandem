@@ -81,7 +81,7 @@ public class SettingsWindowTests : LanguageTestBase, IDisposable
         Assert.True(window.IsVisible);
         Assert.True(app.Main.HasOpenWindows);
         var tabs = Named<TabControl>(window, "Tabs");
-        Assert.Equal(5, tabs.ItemCount);
+        Assert.Equal(6, tabs.ItemCount);
 
         // The command again (from the menu) while the window is open does nothing: the command is still running,
         // and the registry does not start it twice. No second window opens.
@@ -95,6 +95,34 @@ public class SettingsWindowTests : LanguageTestBase, IDisposable
         Assert.Empty(app.Windows.Open);
         Assert.Same(before, app.Main.Settings.Current);
         Assert.Empty(app.Failures);
+    }
+
+    [AvaloniaFact]
+    public async Task Ssh_console_settings_enable_the_side_and_save_the_choices()
+    {
+        await using var app = await TestApp.StartAsync();
+        var window = await OpenAsync(app);
+        Named<TabControl>(window, "Tabs").SelectedIndex = 5;
+        Pump(window);
+
+        var side = Named<ComboBox>(window, "SshPanelChoice");
+        Assert.False(side.IsEffectivelyEnabled);
+        Assert.Equal(1, side.SelectedIndex);
+        Named<RadioButton>(window, "SshPanelTab").IsChecked = true;
+        Pump(window);
+        Assert.True(side.IsEffectivelyEnabled);
+        side.SelectedIndex = 0;
+        Click(window, Named<Button>(window, "Apply"));
+
+        var saved = new JsonSettingsStore(app.StateDirectory).Load();
+        Assert.Equal(SshConsolePlacement.PanelTab, saved.SshConsolePlacement);
+        Assert.Equal(SshConsoleSide.Left, saved.SshConsolePanel);
+
+        Named<RadioButton>(window, "SshSeparateWindow").IsChecked = true;
+        Pump(window);
+        Assert.False(side.IsEffectivelyEnabled);
+        Click(window, Named<Button>(window, "Cancel"));
+        Assert.Equal(SshConsolePlacement.PanelTab, app.Main.Settings.Current.SshConsolePlacement);
     }
 
     [AvaloniaFact]

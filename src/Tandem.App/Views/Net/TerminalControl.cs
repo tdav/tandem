@@ -21,7 +21,6 @@ public sealed class TerminalControl : Control
     {
         Focusable = true;
         ClipToBounds = true;
-        SizeChanged += (_, _) => ResizeToBounds();
         GotFocus += (_, _) => InvalidateVisual();
         LostFocus += (_, _) => InvalidateVisual();
     }
@@ -33,12 +32,16 @@ public sealed class TerminalControl : Control
         _cellWidth = Math.Ceiling(letter.Width);
         _cellHeight = Math.Ceiling(letter.Height);
         model.ScreenChanged += OnScreenChanged;
+        InvalidateVisual();
     }
 
     internal void Detach()
     {
         if (_model is not null) _model.ScreenChanged -= OnScreenChanged;
         _model = null;
+        _anchor = null;
+        _dragging = false;
+        InvalidateVisual();
     }
 
     internal (int Columns, int Rows) GridSize => (Math.Clamp((int)(Bounds.Width / _cellWidth), 2, 500),
@@ -218,14 +221,6 @@ public sealed class TerminalControl : Control
         if (_model is not { } model || e.Delta.Y == 0) return;
         e.Handled = true;
         model.ScrollOffset += Math.Sign(e.Delta.Y) * 3;
-    }
-
-    private void ResizeToBounds()
-    {
-        if (_model is not { } model) return;
-        var grid = GridSize;
-        model.Resize(grid.Columns, grid.Rows);
-        InvalidateVisual();
     }
 
     private void OnScreenChanged(object? sender, EventArgs e) => InvalidateVisual();

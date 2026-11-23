@@ -50,8 +50,9 @@ public sealed class TerminalViewModelTests
         window.Show(parent);
         try
         {
-            var terminal = window.FindControl<TerminalControl>("Terminal")!;
-            var pin = window.FindControl<Avalonia.Controls.Primitives.ToggleButton>("KeepOnTop")!;
+            var terminal = window.FindControl<TerminalView>("ConsoleView")!.FindControl<TerminalControl>("Terminal")!;
+            var pin = window.FindControl<TerminalView>("ConsoleView")!
+                .FindControl<Avalonia.Controls.Primitives.ToggleButton>("KeepOnTop")!;
             Assert.Equal(ThemeVariant.Dark, terminal.ActualThemeVariant);
             Assert.True(terminal.TryFindResource("Tandem.TerminalBackground", terminal.ActualThemeVariant, out var brush));
             Assert.Equal(Colors.Black, Assert.IsAssignableFrom<ISolidColorBrush>(brush).Color);
@@ -108,7 +109,7 @@ public sealed class TerminalViewModelTests
             lock (model.ScreenLock) model.Screen.Feed("first\r\nsecond\r\n"u8);
             model.SelectRange((0, 0), (0, 2));
 
-            var terminal = window.FindControl<TerminalControl>("Terminal")!;
+            var terminal = window.FindControl<TerminalView>("ConsoleView")!.FindControl<TerminalControl>("Terminal")!;
             var point = terminal.TranslatePoint(new Point(5, 5), window)!.Value;
             window.MouseDown(point, MouseButton.Right);
             window.MouseUp(point, MouseButton.Right);

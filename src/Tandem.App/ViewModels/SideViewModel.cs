@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Tandem.App.Resources;
 using Tandem.App.Services;
+using Tandem.App.ViewModels.Net;
 using Tandem.App.ViewModels.Viewing;
 using Tandem.Core.Listing;
 using Tandem.Core.Platform;
@@ -30,9 +31,12 @@ public sealed partial class SideViewModel : ObservableObject
         _main = main;
         Side = side;
         Tabs = tabs;
-        CloseTabCommand = new RelayCommand<TabViewModel>(tab =>
+        CloseTabCommand = new AsyncRelayCommand<TabViewModel>(async tab =>
         {
-            if (tab is not null) CloseTab(tab);
+            if (tab is null) return;
+            Activate();
+            try { await Tabs.CloseAsync(tab); }
+            catch (Exception error) { _main.ReportFailure(error); }
         });
         ReconnectCommand = new AsyncRelayCommand(ReconnectAsync);
         tabs.PropertyChanged += OnTabsPropertyChanged;
@@ -57,6 +61,12 @@ public sealed partial class SideViewModel : ObservableObject
             Tabs.Activate(value);
         }
     }
+
+    public TerminalViewModel? Terminal => SelectedTab?.Terminal;
+
+    public bool ShowsTerminal => Terminal is not null;
+
+    public bool ShowsVolumeBarForFiles => ShowVolumeBar && !ShowsTerminal;
 
     public bool IsActive => _main.Workspace.ActiveSide == Side;
 
@@ -257,7 +267,7 @@ public sealed partial class SideViewModel : ObservableObject
     }
 
     /// <summary>The tabs' close buttons: <see cref="CloseTab"/> with the button's tab.</summary>
-    public IRelayCommand<TabViewModel> CloseTabCommand { get; }
+    public IAsyncRelayCommand<TabViewModel> CloseTabCommand { get; }
 
     /// <summary>A tab's close button: activates this side and closes that tab, unless
     /// <see cref="PanelTabsViewModel.CanClose"/> refuses (a pinned tab, the only one). True when it was closed.</summary>
@@ -355,10 +365,13 @@ public sealed partial class SideViewModel : ObservableObject
 
     /// <summary>Opens the volume's root in this side's panel.</summary>
     [RelayCommand]
-    public Task OpenVolumeAsync(VolumeInfo volume)
+    public Task OpenVolumeAsync(VolumeInfo volume) => OpenFolderAsync(VfsPath.Local(volume.MountPoint));
+
+    internal Task OpenFolderAsync(VfsPath path)
     {
         Activate();
-        return _panel?.NavigateToAsync(VfsPath.Local(volume.MountPoint)) ?? Task.CompletedTask;
+        if (ShowsTerminal) Tabs.ActivateLastFileTab();
+        return _panel?.NavigateToAsync(path) ?? Task.CompletedTask;
     }
 
     [RelayCommand]
@@ -390,7 +403,11 @@ public sealed partial class SideViewModel : ObservableObject
         OnPropertyChanged(nameof(QuickViewer));
     }
 
-    internal void OnViewChanged() => OnPropertyChanged(nameof(ShowVolumeBar));
+    internal void OnViewChanged()
+    {
+        OnPropertyChanged(nameof(ShowVolumeBar));
+        OnPropertyChanged(nameof(ShowsVolumeBarForFiles));
+    }
 
     /// <summary>Takes this side's part of the settings: the layout of its list and the colour rules.</summary>
     internal void OnSettingsChanged(AppSettings settings, bool fileColorsChanged)
@@ -420,6 +437,9 @@ public sealed partial class SideViewModel : ObservableObject
         if (IsEditingPath) CancelPathEdit();
         OnPropertyChanged(nameof(Panel));
         OnPropertyChanged(nameof(SelectedTab));
+        OnPropertyChanged(nameof(Terminal));
+        OnPropertyChanged(nameof(ShowsTerminal));
+        OnPropertyChanged(nameof(ShowsVolumeBarForFiles));
         RaiseStatusChanged();
         RaiseSortChanged();
         OnPropertyChanged(nameof(VolumeText));

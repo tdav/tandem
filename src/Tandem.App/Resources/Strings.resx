@@ -1117,6 +1117,24 @@ Folder</value>
   <data name="Settings_Tab_Editing" xml:space="preserve">
     <value>Editing</value>
   </data>
+  <data name="Settings_Tab_SshConsole" xml:space="preserve">
+    <value>SSH console</value>
+  </data>
+  <data name="Settings_SshPlacement" xml:space="preserve">
+    <value>Open SSH consoles</value>
+  </data>
+  <data name="Settings_SshPanelTab" xml:space="preserve">
+    <value>In a file panel tab</value>
+  </data>
+  <data name="Settings_SshSeparateWindow" xml:space="preserve">
+    <value>In a separate window</value>
+  </data>
+  <data name="Settings_SshPanel" xml:space="preserve">
+    <value>Panel for new tabs</value>
+  </data>
+  <data name="Settings_SshPlacementHint" xml:space="preserve">
+    <value>Applies to new connections. Drag the divider to resize the panels.</value>
+  </data>
   <data name="Settings_Filter" xml:space="preserve">
     <value>Search commands and shortcuts</value>
   </data>

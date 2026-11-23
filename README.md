@@ -2,7 +2,7 @@
 
 Tandem — двухпанельный файловый менеджер для macOS: две панели с вкладками, управление с клавиатуры, копирование
 и перенос через очередь операций с окном прогресса, корзина, Quick Look, перетаскивание из Finder и в Finder,
-права и теги, встроенная командная строка. На приёмке этап 3, версия 0.3.0.
+права и теги, встроенная командная строка, FTP/FTPS/SFTP и SSH-консоль. Текущая версия — 0.4.0.
 
 ![Главное окно Tandem: две панели с вкладками](docs/screenshots/main-window.jpg)
 
@@ -29,6 +29,15 @@ Tandem — двухпанельный файловый менеджер для m
 | --- | --- | --- |
 | ![Поиск файлов](docs/screenshots/find-files.jpg) | ![Встроенный просмотр в режиме hex](docs/screenshots/viewer-hex.jpg) | ![Переназначение клавиш](docs/screenshots/settings-keys.jpg) |
 
+## Что нового в 0.4.0
+
+- SSH-консоль можно открывать прямо во вкладке файловой панели, рядом с обычными вкладками папок. Режим
+  выбирается в «Настройки → SSH-консоль»: во вкладке панели или в отдельном окне, а также в какой панели
+  (левой или правой) появляются новые вкладки. Ширину панелей меняет перетаскивание разделителя.
+- Кнопка «Показать SSH-консоль» под панелями возвращает к открытой консоли.
+
+![SSH-консоль во вкладке правой панели: htop на удалённом сервере](docs/screenshots/ssh-console-tab.jpg)
+
 Возможности этапа 3:
 
 - групповое переименование с предварительным просмотром и отменой последней операции;
@@ -36,7 +45,8 @@ Tandem — двухпанельный файловый менеджер для m
   подсчёт размеров папок;
 - FTP, FTPS и SFTP в панелях, сохранённые подключения, восстановление связи после обрыва, правка через F4
   с сохранением на сервер;
-- отдельные подключения через «Сеть → Подключиться по SSH…» открываются в окне консоли. SSH-консоль
+- отдельные подключения через «Сеть → Подключиться по SSH…» открываются в консоли — в отдельном окне или
+  во вкладке панели (см. 0.4.0). SSH-консоль
   также доступна для сохранённых SFTP-подключений (Cmd+Alt+K). Правый щелчок копирует выделение, следующий
   вставляет его без Enter.
 
@@ -131,11 +141,15 @@ file-type colours, per-panel columns, font and row height, and a user button bar
 Russian. Reading RAR archives and 7z archives with encrypted headers is untested: the project has no such test
 archives, so only your own files can check it.
 
-Stage 3 (0.3.0, in acceptance testing) adds batch rename with preview and undo, folder and file comparison,
+Stage 3 (0.3.0) adds batch rename with preview and undo, folder and file comparison,
 folder synchronization, checksums and directory sizes. FTP, FTPS and SFTP connections can appear in either pane,
 reconnect after a dropped connection and upload edits made in the built-in editor. Use Network → Connect via SSH…
 for console-only profiles. Saved SFTP profiles can also open an SSH console. Right-click copies a selection, then
 right-click again to paste without pressing Enter. [Stage 3 acceptance checklist](docs/checklists/stage-3.md).
+
+Version 0.4.0 can open an SSH console as a tab in a file panel, next to folder tabs. Settings → SSH console
+chooses between a panel tab and a separate window, and which panel (left or right) gets new console tabs; drag
+the divider to resize the panels. ![SSH console in a panel tab](docs/screenshots/ssh-console-tab.jpg)
 
 **Download.** A Native AOT build for Apple Silicon Macs (macOS 14+) is attached to the
 [latest release](https://github.com/tdav/tandem/releases/latest) as `Tandem-<version>-macOS-arm64.zip`; no .NET

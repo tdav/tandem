@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Tandem.App.ViewModels"
              xmlns:v="using:Tandem.App.Views"
+             xmlns:net="using:Tandem.App.Views.Net"
              xmlns:vv="using:Tandem.App.Views.Viewing"
              xmlns:loc="using:Tandem.App.Resources"
              xmlns:platform="using:Tandem.Core.Platform"
@@ -40,7 +41,7 @@
 
     <DockPanel>
         <!-- Volumes, with the free space of the one holding this folder. -->
-        <Border x:Name="VolumeBar" DockPanel.Dock="Top" IsVisible="{Binding ShowVolumeBar}"
+        <Border x:Name="VolumeBar" DockPanel.Dock="Top" IsVisible="{Binding ShowsVolumeBarForFiles}"
                 Background="{DynamicResource Tandem.BarBackground}">
             <DockPanel>
                 <TextBlock DockPanel.Dock="Right" Classes="secondary" Text="{Binding VolumeText}"
@@ -67,6 +68,7 @@
 
         <!-- Tabs. -->
         <ListBox x:Name="TabStrip" DockPanel.Dock="Top" Focusable="False"
+                 ScrollViewer.HorizontalScrollBarVisibility="Auto"
                  ItemsSource="{Binding Tabs.Tabs}" SelectedItem="{Binding SelectedTab}"
                  Background="{DynamicResource Tandem.BarBackground}">
             <ListBox.ItemsPanel>
@@ -90,6 +92,10 @@
                                   Stroke="{DynamicResource Tandem.SecondaryForeground}" StrokeThickness="1.5"
                                   Stretch="Uniform" Width="7" Height="7" />
                         </Button>
+                        <Path DockPanel.Dock="Left" IsVisible="{Binding IsTerminal}"
+                              Data="M 0,0 L 4,4 L 0,8 M 6,8 L 11,8" Stretch="Uniform"
+                              Width="11" Height="8" Margin="0,0,5,0" VerticalAlignment="Center"
+                              Stroke="{DynamicResource Tandem.SecondaryForeground}" StrokeThickness="1.4" />
                         <TextBlock x:Name="TabTitle" Text="{Binding Title}" MaxWidth="180"
                                    TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
                     </DockPanel>
@@ -97,104 +103,111 @@
             </ListBox.ItemTemplate>
         </ListBox>
 
-        <!-- Path row: back and forward (right click or long press: history), the path or its editor. -->
-        <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,Auto,*">
-            <Button x:Name="BackButton" Classes="flat" Content="‹" InputElement.IsHoldWithMouseEnabled="True"
-                    ToolTip.Tip="{loc:Tr Key=View_Back}" Command="{Binding GoBackCommand}">
-                <Button.ContextFlyout>
-                    <MenuFlyout />
-                </Button.ContextFlyout>
-            </Button>
-            <Button x:Name="ForwardButton" Grid.Column="1" Classes="flat" Content="›" InputElement.IsHoldWithMouseEnabled="True"
-                    ToolTip.Tip="{loc:Tr Key=View_Forward}" Command="{Binding GoForwardCommand}">
-                <Button.ContextFlyout>
-                    <MenuFlyout />
-                </Button.ContextFlyout>
-            </Button>
-            <Border x:Name="PathRow" Grid.Column="2" Classes.active="{Binding IsActive}" Padding="6,2">
-                <Panel>
-                    <TextBlock x:Name="PathLabel" Text="{Binding Panel.DisplayPath}" VerticalAlignment="Center"
-                               TextTrimming="CharacterEllipsis" IsVisible="{Binding !IsEditingPath}" />
-                    <TextBox x:Name="PathEditor" Text="{Binding PathText}" IsVisible="{Binding IsEditingPath}"
-                             MinHeight="0" Padding="4,1" />
-                </Panel>
-            </Border>
-        </Grid>
-
-        <!-- Status row: selection, or why the folder cannot be shown. -->
-        <Border DockPanel.Dock="Bottom" Background="{DynamicResource Tandem.BarBackground}" Padding="6,2">
-            <DockPanel>
-                <!-- A local folder that cannot be read for lack of permission: the system's Full Disk Access page. -->
-                <Button x:Name="OpenAccessSettings" DockPanel.Dock="Right" Classes="flat"
-                        Content="{loc:Tr Key=Shell_OpenAccessSettings}" IsVisible="{Binding IsAccessDenied}"
-                        Command="{Binding OpenAccessSettingsCommand}" />
-                <!-- The panel's source lost its connection: read the folder again, which connects again. -->
-                <Button x:Name="Reconnect" DockPanel.Dock="Right" Classes="flat"
-                        Content="{loc:Tr Key=Panel_Reconnect}" IsVisible="{Binding IsConnectionLost}"
-                        Command="{Binding ReconnectCommand}" />
-                <TextBlock x:Name="Status" Text="{Binding StatusLine}" Classes.error="{Binding HasError}"
-                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-            </DockPanel>
-        </Border>
-
-        <!-- Column headers: a click sorts by the column, a second click reverses the order. -->
-        <!-- This side's columns, in its order and widths (the rows use the same layout). The padding is the rows'
-             own (Tandem.ListItemPadding), so each header starts where its cells start; the vertical scroll bar
-             overlays the rows and takes no width from them. The font size is the list's. -->
-        <Border x:Name="HeaderRow" DockPanel.Dock="Top" Background="{DynamicResource Tandem.HeaderBackground}"
-                IsVisible="{Binding !ShowsQuickView}" Padding="{StaticResource Tandem.ListItemPadding}">
-        <Grid x:Name="Headers" ColumnDefinitions="*,0,0,0,0" TextElement.FontSize="{Binding Layout.FontSize}"
-              v:ListLayoutColumns.Layout="{Binding Layout}">
-            <Button x:Name="SortByName" Classes="flat" Command="{Binding SortByCommand}"
-                    CommandParameter="{x:Static listing:SortColumn.Name}">
-                <StackPanel Orientation="Horizontal" Spacing="4">
-                    <TextBlock Text="{loc:Tr Key=Column_Name}" />
-                    <TextBlock Text="{Binding NameSortMark}" />
-                </StackPanel>
-            </Button>
-            <Button x:Name="SortByExtension" v:ListLayoutColumns.Cell="{x:Static settings:ColumnId.Extension}" Classes="flat" Command="{Binding SortByCommand}"
-                    CommandParameter="{x:Static listing:SortColumn.Extension}">
-                <StackPanel Orientation="Horizontal" Spacing="4">
-                    <TextBlock Text="{loc:Tr Key=Column_Ext}" />
-                    <TextBlock Text="{Binding ExtensionSortMark}" />
-                </StackPanel>
-            </Button>
-            <Button x:Name="SortBySize" v:ListLayoutColumns.Cell="{x:Static settings:ColumnId.Size}" Classes="flat" Command="{Binding SortByCommand}"
-                    CommandParameter="{x:Static listing:SortColumn.Size}" HorizontalContentAlignment="Right">
-                <StackPanel Orientation="Horizontal" Spacing="4">
-                    <TextBlock Text="{loc:Tr Key=Column_Size}" />
-                    <TextBlock Text="{Binding SizeSortMark}" />
-                </StackPanel>
-            </Button>
-            <Button x:Name="SortByDate" v:ListLayoutColumns.Cell="{x:Static settings:ColumnId.Modified}" Classes="flat" Command="{Binding SortByCommand}"
-                    CommandParameter="{x:Static listing:SortColumn.Modified}">
-                <StackPanel Orientation="Horizontal" Spacing="4">
-                    <TextBlock Text="{loc:Tr Key=Column_Date}" />
-                    <TextBlock Text="{Binding DateSortMark}" />
-                </StackPanel>
-            </Button>
-            <Button x:Name="SortByMode" v:ListLayoutColumns.Cell="{x:Static settings:ColumnId.Mode}" Classes="flat" Command="{Binding SortByCommand}"
-                    CommandParameter="{x:Static listing:SortColumn.Mode}">
-                <StackPanel Orientation="Horizontal" Spacing="4">
-                    <TextBlock Text="{loc:Tr Key=Column_Mode}" />
-                    <TextBlock Text="{Binding ModeSortMark}" />
-                </StackPanel>
-            </Button>
-        </Grid>
-        </Border>
-
         <Panel>
-            <v:FileListView x:Name="FileList" IsVisible="{Binding !ShowsQuickView}" />
-            <!-- Quick view (Ctrl+Q): the file under the other side's cursor, in place of this side's list. -->
-            <Panel x:Name="QuickViewArea" IsVisible="{Binding ShowsQuickView}">
-                <Panel IsVisible="{Binding QuickViewer, Converter={x:Static ObjectConverters.IsNotNull}}">
-                    <vv:ViewerView x:Name="QuickViewer" DataContext="{Binding QuickViewer}" />
-                </Panel>
-                <TextBlock x:Name="QuickViewMessage" Text="{Binding QuickView.Message}" Classes="secondary"
-                           IsVisible="{Binding QuickView.Message, Converter={x:Static ObjectConverters.IsNotNull}}"
-                           HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
-                           TextWrapping="Wrap" Margin="12" />
+            <Panel IsVisible="{Binding ShowsTerminal}">
+                <net:TerminalView x:Name="SshTerminal" DataContext="{Binding Terminal}" />
             </Panel>
+            <DockPanel IsVisible="{Binding !ShowsTerminal}">
+                <!-- Path row: back and forward (right click or long press: history), the path or its editor. -->
+                <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,Auto,*">
+                    <Button x:Name="BackButton" Classes="flat" Content="‹" InputElement.IsHoldWithMouseEnabled="True"
+                            ToolTip.Tip="{loc:Tr Key=View_Back}" Command="{Binding GoBackCommand}">
+                        <Button.ContextFlyout>
+                            <MenuFlyout />
+                        </Button.ContextFlyout>
+                    </Button>
+                    <Button x:Name="ForwardButton" Grid.Column="1" Classes="flat" Content="›" InputElement.IsHoldWithMouseEnabled="True"
+                            ToolTip.Tip="{loc:Tr Key=View_Forward}" Command="{Binding GoForwardCommand}">
+                        <Button.ContextFlyout>
+                            <MenuFlyout />
+                        </Button.ContextFlyout>
+                    </Button>
+                    <Border x:Name="PathRow" Grid.Column="2" Classes.active="{Binding IsActive}" Padding="6,2">
+                        <Panel>
+                            <TextBlock x:Name="PathLabel" Text="{Binding Panel.DisplayPath}" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" IsVisible="{Binding !IsEditingPath}" />
+                            <TextBox x:Name="PathEditor" Text="{Binding PathText}" IsVisible="{Binding IsEditingPath}"
+                                     MinHeight="0" Padding="4,1" />
+                        </Panel>
+                    </Border>
+                </Grid>
+
+                <!-- Status row: selection, or why the folder cannot be shown. -->
+                <Border DockPanel.Dock="Bottom" Background="{DynamicResource Tandem.BarBackground}" Padding="6,2">
+                    <DockPanel>
+                        <!-- A local folder that cannot be read for lack of permission: the system's Full Disk Access page. -->
+                        <Button x:Name="OpenAccessSettings" DockPanel.Dock="Right" Classes="flat"
+                                Content="{loc:Tr Key=Shell_OpenAccessSettings}" IsVisible="{Binding IsAccessDenied}"
+                                Command="{Binding OpenAccessSettingsCommand}" />
+                        <!-- The panel's source lost its connection: read the folder again, which connects again. -->
+                        <Button x:Name="Reconnect" DockPanel.Dock="Right" Classes="flat"
+                                Content="{loc:Tr Key=Panel_Reconnect}" IsVisible="{Binding IsConnectionLost}"
+                                Command="{Binding ReconnectCommand}" />
+                        <TextBlock x:Name="Status" Text="{Binding StatusLine}" Classes.error="{Binding HasError}"
+                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                    </DockPanel>
+                </Border>
+
+                <!-- Column headers: a click sorts by the column, a second click reverses the order. -->
+                <!-- This side's columns, in its order and widths (the rows use the same layout). The padding is the rows'
+                     own (Tandem.ListItemPadding), so each header starts where its cells start; the vertical scroll bar
+                     overlays the rows and takes no width from them. The font size is the list's. -->
+                <Border x:Name="HeaderRow" DockPanel.Dock="Top" Background="{DynamicResource Tandem.HeaderBackground}"
+                        IsVisible="{Binding !ShowsQuickView}" Padding="{StaticResource Tandem.ListItemPadding}">
+                <Grid x:Name="Headers" ColumnDefinitions="*,0,0,0,0" TextElement.FontSize="{Binding Layout.FontSize}"
+                      v:ListLayoutColumns.Layout="{Binding Layout}">
+                    <Button x:Name="SortByName" Classes="flat" Command="{Binding SortByCommand}"
+                            CommandParameter="{x:Static listing:SortColumn.Name}">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <TextBlock Text="{loc:Tr Key=Column_Name}" />
+                            <TextBlock Text="{Binding NameSortMark}" />
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="SortByExtension" v:ListLayoutColumns.Cell="{x:Static settings:ColumnId.Extension}" Classes="flat" Command="{Binding SortByCommand}"
+                            CommandParameter="{x:Static listing:SortColumn.Extension}">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <TextBlock Text="{loc:Tr Key=Column_Ext}" />
+                            <TextBlock Text="{Binding ExtensionSortMark}" />
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="SortBySize" v:ListLayoutColumns.Cell="{x:Static settings:ColumnId.Size}" Classes="flat" Command="{Binding SortByCommand}"
+                            CommandParameter="{x:Static listing:SortColumn.Size}" HorizontalContentAlignment="Right">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <TextBlock Text="{loc:Tr Key=Column_Size}" />
+                            <TextBlock Text="{Binding SizeSortMark}" />
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="SortByDate" v:ListLayoutColumns.Cell="{x:Static settings:ColumnId.Modified}" Classes="flat" Command="{Binding SortByCommand}"
+                            CommandParameter="{x:Static listing:SortColumn.Modified}">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <TextBlock Text="{loc:Tr Key=Column_Date}" />
+                            <TextBlock Text="{Binding DateSortMark}" />
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="SortByMode" v:ListLayoutColumns.Cell="{x:Static settings:ColumnId.Mode}" Classes="flat" Command="{Binding SortByCommand}"
+                            CommandParameter="{x:Static listing:SortColumn.Mode}">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <TextBlock Text="{loc:Tr Key=Column_Mode}" />
+                            <TextBlock Text="{Binding ModeSortMark}" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+                </Border>
+
+                <Panel>
+                    <v:FileListView x:Name="FileList" IsVisible="{Binding !ShowsQuickView}" />
+                    <!-- Quick view (Ctrl+Q): the file under the other side's cursor, in place of this side's list. -->
+                    <Panel x:Name="QuickViewArea" IsVisible="{Binding ShowsQuickView}">
+                        <Panel IsVisible="{Binding QuickViewer, Converter={x:Static ObjectConverters.IsNotNull}}">
+                            <vv:ViewerView x:Name="QuickViewer" DataContext="{Binding QuickViewer}" />
+                        </Panel>
+                        <TextBlock x:Name="QuickViewMessage" Text="{Binding QuickView.Message}" Classes="secondary"
+                                   IsVisible="{Binding QuickView.Message, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
+                                   TextWrapping="Wrap" Margin="12" />
+                    </Panel>
+                </Panel>
+            </DockPanel>
         </Panel>
     </DockPanel>
 </UserControl>

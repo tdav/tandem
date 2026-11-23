@@ -3,10 +3,12 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Tandem.App.Commands;
 using Tandem.App.Input;
 using Tandem.App.Resources;
 using Tandem.App.ViewModels;
 using Tandem.App.Views.Dialogs;
+using Tandem.App.Views.Net;
 using AppWindowState = Tandem.Core.Settings.WindowState;
 
 namespace Tandem.App.Views;
@@ -179,7 +181,12 @@ public partial class MainWindow : Window
         _modifiers = e.KeyModifiers;
         if (_main is null || e.Handled) return;
         var chord = KeyRouting.ChordFor(e.Key, e.PhysicalKey, e.KeyModifiers);
-        if (KeyRouting.IsTextEditor(FocusManager?.GetFocusedElement()) && !KeyRouting.ShouldRouteWhileEditing(chord))
+        var focused = FocusManager?.GetFocusedElement();
+        if (focused is TerminalControl && _main.KeyMap.Find(chord) is not
+            (CommandIds.TabClose or CommandIds.TabNext or CommandIds.TabPrev or CommandIds.TabNew or
+             CommandIds.NetConsole or CommandIds.NetShowConsole or CommandIds.AppSettings))
+            return;
+        if (KeyRouting.IsTextEditor(focused) && !KeyRouting.ShouldRouteWhileEditing(chord))
             return;
         var handling = _main.HandleKeyAsync(chord);
         // A command still running was found and started: the key is used.
@@ -189,7 +196,8 @@ public partial class MainWindow : Window
     private void OnTextInput(object? sender, TextInputEventArgs e)
     {
         if (_main is null || e.Text is not { Length: > 0 } text) return;
-        if (!KeyRouting.AcceptsQuickSearch(_modifiers) || KeyRouting.IsTextEditor(FocusManager?.GetFocusedElement()))
+        var focused = FocusManager?.GetFocusedElement();
+        if (!KeyRouting.AcceptsQuickSearch(_modifiers) || focused is TerminalControl || KeyRouting.IsTextEditor(focused))
             return;
         if (_main.HandleTextInput(text)) e.Handled = true;
     }

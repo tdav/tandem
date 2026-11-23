@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SSH-консоль · Tandem</title>
+<style>
+  :root {
+    color-scheme: light;
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: #20263a;
+    background: #edf0f6;
+    --line: #dfe3ed;
+    --muted: #59647a;
+    --accent: #4c43af;
+    --wash: #eeecfd;
+    --terminal: #181b2b;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; }
+  button, input, select { font: inherit; }
+  button, select { cursor: pointer; }
+  button:focus-visible, select:focus-visible, a:focus-visible, [tabindex]:focus-visible {
+    outline: 2px solid #7468e6; outline-offset: 2px;
+  }
+  button { color: inherit; }
+  svg { width: 17px; height: 17px; flex: none; vertical-align: middle; }
+  .page { width: min(1480px, 100%); margin: auto; padding: clamp(18px, 4vw, 58px); }
+  .masthead { display: flex; align-items: center; gap: 14px; margin-bottom: 15px; color: var(--muted); }
+  .brand { display: flex; align-items: center; gap: 9px; font-weight: 750; color: #22283b; }
+  .mark { display: grid; place-items: center; width: 30px; height: 30px; background: #dedaf9; color: #473da7; border-radius: 8px; }
+  .masthead > span:last-child { border-left: 1px solid #ced3e2; padding-left: 14px; font-size: 13px; }
+  h1, h2, h3, p { margin: 0; }
+  h1 { font-size: clamp(30px, 5vw, 49px); line-height: 1.08; letter-spacing: -.055em; }
+  .subtitle { margin-top: 9px; color: var(--muted); }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 325px; gap: 20px; align-items: start; margin-top: 26px; }
+  .layout.settings-closed { grid-template-columns: minmax(0, 1fr); }
+  .surface { background: white; border: 1px solid #d9ddeb; border-radius: 13px; overflow: hidden; box-shadow: 0 8px 24px #25305a0b; }
+  .appbar { min-height: 57px; padding: 9px 13px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; background: #fff; border-bottom: 1px solid var(--line); }
+  .appbar strong { margin-left: 4px; }
+  .app-actions { display: flex; gap: 7px; flex-wrap: wrap; }
+  .button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 7px 10px; border: 1px solid #dce0eb; border-radius: 6px; background: #fff; font-weight: 620; white-space: nowrap; }
+  .button:hover { background: #f4f4fa; }
+  .primary { background: var(--accent); border-color: var(--accent); color: white; }
+  .primary:hover { background: #3c338e; }
+  .workspace { --left-width: 43%; display: grid; grid-template-columns: minmax(0, var(--left-width)) 9px minmax(0, 1fr); min-width: 0; height: clamp(325px, 53vh, 485px); }
+  .pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: #fafbfe; }
+  .pane-caption { height: 36px; display: flex; align-items: center; gap: 7px; padding: 0 11px; color: #4c566d; font-size: 12px; font-weight: 650; white-space: nowrap; overflow: hidden; }
+  .pane-caption svg { width: 14px; }
+  .tabs { display: flex; flex: none; align-items: stretch; height: 36px; overflow: auto; background: #f3f5fa; border-block: 1px solid var(--line); scrollbar-width: thin; }
+  .tab { display: flex; flex: none; align-items: stretch; border-right: 1px solid var(--line); color: #555f75; }
+  .tab button { border: 0; background: transparent; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; white-space: nowrap; font-size: 12px; }
+  .tab button:hover { background: #e5e7f5; }
+  .tab svg { width: 14px; }
+  .tab.selected { background: white; color: #242c44; box-shadow: inset 0 -2px #7c71dd; }
+  .tab.selected.ssh { background: var(--wash); color: #41379c; }
+  .tab button.close { padding: 0 8px; margin-left: -5px; font-size: 16px; }
+  .tab button:focus-visible { outline-offset: -2px; }
+  .content { flex: 1; min-height: 0; overflow: auto; }
+  .path { padding: 8px 10px; font: 12px ui-monospace, monospace; color: #4f5970; background: white; border-bottom: 1px solid var(--line); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  table { border-collapse: collapse; width: 100%; table-layout: fixed; text-align: left; font-size: 12px; }
+  th, td { padding: 7px 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  th { color: var(--muted); background: #f1f3f9; font-size: 11px; }
+  th:last-child, td:last-child { width: 65px; text-align: right; }
+  td:first-child svg { margin-right: 7px; color: #5d66a7; width: 15px; }
+  tr:nth-child(even) { background: #f5f7fb; }
+  tr.highlight { background: #e9e9fc; }
+  .splitter { border: 0; padding: 0; position: relative; background: #e0e4ee; cursor: col-resize; touch-action: none; }
+  .splitter::before { content: ''; position: absolute; inset: 0 3px; background: #ccd2e0; }
+  .splitter::after { content: ''; position: absolute; top: calc(50% - 16px); left: 2px; width: 5px; height: 32px; border-radius: 5px; background: #8a82cc; }
+  .splitter:hover, .splitter:focus-visible, .splitter.dragging { background: #c9c3f5; }
+  .terminal { display: flex; flex-direction: column; height: 100%; min-height: 0; color: #e2e5f3; background: var(--terminal); }
+  .terminal-head { display: flex; flex-wrap: wrap; gap: 5px 12px; align-items: center; justify-content: space-between; padding: 8px 12px; background: #24283c; color: #e1e4f3; border-bottom: 1px solid #353b54; font-size: 12px; }
+  .terminal-head strong { overflow-wrap: anywhere; }
+  .connected { display: inline-flex; align-items: center; gap: 6px; color: #a6edc8; }
+  .connected::before { content: ''; width: 6px; height: 6px; background: #74dca8; border-radius: 50%; }
+  .terminal-body { flex: 1; overflow: auto; padding: 15px 13px; font: 12px/1.68 ui-monospace, SFMono-Regular, Consolas, monospace; }
+  pre { font: inherit; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .prompt { color: #a6edc8; overflow-wrap: anywhere; }
+  .dim { color: #a3abc5; }
+  .cursor { display: inline-block; width: 7px; height: 1.1em; background: #ab9fff; vertical-align: -.15em; }
+  .app-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 5px 12px; border-top: 1px solid var(--line); padding: 9px 12px; background: white; color: var(--muted); font-size: 12px; min-height: 38px; }
+  .app-footer span:first-child { color: #393289; }
+  .settings { display: flex; flex-direction: column; }
+  .settings h2 { font-size: 16px; padding: 16px 16px 13px; line-height: 1.1; }
+  .settings-nav { display: flex; flex-wrap: wrap; gap: 5px 10px; padding: 0 16px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+  .settings-nav span { padding: 4px 0 7px; }
+  .settings-nav .current { color: var(--accent); font-weight: 720; border-bottom: 2px solid var(--accent); }
+  .settings-body { padding: 16px; }
+  fieldset { border: 0; padding: 0; margin: 0 0 16px; }
+  legend, .field-label { font-weight: 700; padding: 0; margin-bottom: 7px; }
+  .choice { display: grid; grid-template-columns: auto 1fr; align-items: start; gap: 8px; padding: 9px; border: 1px solid var(--line); border-radius: 7px; margin-bottom: 6px; cursor: pointer; }
+  .choice:last-child { margin-bottom: 0; }
+  .choice:has(:checked) { background: #f4f2fe; border-color: #a69ce3; }
+  .choice input { margin: 3px 0 0; accent-color: var(--accent); }
+  .choice strong { display: block; font-size: 13px; }
+  .choice small, .setting-note { display: block; font-size: 12px; color: var(--muted); }
+  .field-label { display: block; }
+  select { width: 100%; padding: 7px 8px; border: 1px solid #d7dce8; background: #fff; color: inherit; border-radius: 6px; }
+  select:disabled { background: #eff1f6; color: #60697d; cursor: default; }
+  .setting-note { margin-top: 11px; }
+  .settings-actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 12px; justify-content: flex-end; border-top: 1px solid var(--line); background: #fafbfe; }
+  dialog { width: min(365px, calc(100% - 30px)); padding: 18px; color: #20263a; }
+  dialog::backdrop { background: #18203566; }
+  dialog h2 { font-size: 17px; margin-bottom: 13px; }
+  dialog .actions { display: flex; justify-content: flex-end; gap: 7px; margin-top: 15px; }
+  .popup { height: 100vh; display: flex; flex-direction: column; background: var(--terminal); }
+  .popup > header { padding: 10px 14px; color: #ebe8ff; background: #30334a; font-weight: 700; }
+  .popup .terminal { flex: 1; }
+  @media (max-width: 1010px) {
+    .layout { grid-template-columns: minmax(0, 1fr); }
+    .settings { width: min(100%, 465px); }
+  }
+</style>
+</head>
+<body>
+<svg aria-hidden="true" style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <symbol id="panels-icon" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M12 5v14"/></symbol>
+    <symbol id="term-icon" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m7 9 3 3-3 3m6 0h4"/></symbol>
+    <symbol id="file-icon" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z M14 3v5h4 M9 12h6 M9 15h6"/></symbol>
+    <symbol id="folder-icon" viewBox="0 0 24 24"><path d="M3 7h7l2 2h9v10H3z"/></symbol>
+  </defs>
+</svg>
+<main class="page" id="page">
+  <div class="masthead">
+    <span class="brand"><span class="mark"><svg fill="none" stroke="currentColor" stroke-width="1.9"><use href="#panels-icon"/></svg></span>Tandem</span>
+    <span>Интерактивный макет</span>
+  </div>
+  <h1>SSH-консоль</h1>
+  <p class="subtitle">Вкладки в файловых панелях и отдельные окна</p>
+  <div class="layout" id="layout">
+    <section class="surface app" aria-label="Главное окно Tandem">
+      <header class="appbar">
+        <strong>Tandem</strong>
+        <div class="app-actions">
+          <button class="button" id="open-settings" aria-expanded="true" aria-controls="settings">Настройки</button>
+          <button class="button primary" id="new-console"><svg fill="none" stroke="currentColor" stroke-width="1.7"><use href="#term-icon"/></svg>Открыть SSH…</button>
+        </div>
+      </header>
+      <div class="workspace" id="workspace">
+        <section class="pane" id="left-pane" aria-label="Левая панель"></section>
+        <div class="splitter" id="splitter" role="separator" tabindex="0" aria-label="Ширина левой панели" aria-orientation="vertical" aria-controls="left-pane" aria-valuemin="25" aria-valuemax="75" aria-valuenow="43" title="Потяните, чтобы изменить ширину панелей"></div>
+        <section class="pane" id="right-pane" aria-label="Правая панель"></section>
+      </div>
+      <footer class="app-footer">
+        <span id="placement"></span>
+        <span role="status" id="status">Потяните разделитель между панелями</span>
+      </footer>
+    </section>
+    <section class="surface settings" id="settings" aria-labelledby="settings-title">
+      <h2 id="settings-title">Настройки</h2>
+      <div class="settings-nav" aria-label="Вкладки настроек">
+        <span>Клавиши</span><span>Вид</span><span>Столбцы</span><span>Панель кнопок</span><span>Правка</span><span class="current" aria-current="page">SSH-консоль</span>
+      </div>
+      <form id="settings-form">
+        <div class="settings-body">
+          <fieldset>
+            <legend>Открывать SSH-консоль</legend>
+            <label class="choice">
+              <input type="radio" name="mode" value="tab" checked>
+              <span><strong>Во вкладке файловой панели</strong><small>Каждое подключение в своей вкладке.</small></span>
+            </label>
+            <label class="choice">
+              <input type="radio" name="mode" value="window">
+              <span><strong>В отдельном окне</strong><small>У каждого подключения своё окно.</small></span>
+            </label>
+          </fieldset>
+          <label class="field-label" for="side">Панель для новых вкладок</label>
+          <select id="side" name="side"><option value="left">Левая</option><option value="right" selected>Правая</option></select>
+          <p class="setting-note">Настройка применяется к новым подключениям.</p>
+        </div>
+        <div class="settings-actions">
+          <button type="button" class="button" id="apply">Применить</button>
+          <button type="button" class="button" id="cancel">Отмена</button>
+          <button type="submit" class="button primary">ОК</button>
+        </div>
+      </form>
+    </section>
+  </div>
+</main>
+<dialog class="surface" id="picker" aria-labelledby="picker-title">
+  <form id="connection-form">
+    <h2 id="picker-title">Открыть SSH-консоль</h2>
+    <label class="field-label" for="profile">Подключение</label>
+    <select id="profile" autofocus><option>dev-server</option><option>staging</option><option>backup</option></select>
+    <div class="actions">
+      <button class="button" id="cancel-picker" type="button">Отмена</button>
+      <button class="button primary" type="submit">Открыть</button>
+    </div>
+  </form>
+</dialog>
+<script>
+  const byId = (id) => document.getElementById(id);
+  const sessions = {
+    'dev-server': { user: 'deploy', path: '/srv/tandem', listing: 'app/         logs/        releases/\ncompose.yml  README.md    scripts/' },
+    staging: { user: 'deploy', path: '/srv/staging', listing: 'app/    logs/    shared/\nVERSION releases/' },
+    backup: { user: 'ops', path: '/srv/backups', listing: 'daily/    weekly/    restore.log' },
+  };
+  const files = {
+    left: { name: 'Документы', path: '/Users/demo/Documents', rows: [['..', ''], ['Проекты', ''], ['README.md', '4 КБ'], ['notes.txt', '2 КБ'], ['report.pdf', '835 КБ']] },
+    right: { name: 'Загрузки', path: '/Users/demo/Downloads', rows: [['..', ''], ['Архивы', ''], ['deploy.zip', '18 МБ'], ['inventory.csv', '12 КБ']] },
+  };
+  const icon = (name) => '<svg aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.65"><use href="#' + name + '-icon"/></svg>';
+
+  function terminal(host) {
+    const { user, path, listing } = sessions[host];
+    const prompt = '<span class="prompt">' + user + '@' + host + '</span><span class="dim">:</span>' + path + '$ ';
+    return '<div class="terminal"><div class="terminal-head"><strong>' + user + '@' + host +
+      '</strong><span class="connected">Подключено · демо</span></div>' +
+      '<div class="terminal-body"><pre><span class="dim">Пример сеанса SSH</span>\n\n' +
+      prompt + 'pwd\n' + path + '\n\n' + prompt + 'ls\n' + listing + '\n\n' + prompt +
+      '<span class="cursor" aria-hidden="true"></span></pre></div></div>';
+  }
+
+  function startPreview() {
+    const settings = byId('settings-form');
+    const picker = byId('picker');
+    const status = byId('status');
+    const workspace = byId('workspace');
+    const splitter = byId('splitter');
+    let applied = { mode: 'tab', side: 'right' };
+    let nextId = 3;
+    let leftWidth = 43;
+    const panes = {
+      left: { tabs: [], active: 0 },
+      right: { tabs: [{ id: 1, host: 'dev-server' }, { id: 2, host: 'staging' }], active: 1 },
+    };
+
+    function renderPane(side) {
+      const pane = panes[side];
+      const folder = files[side];
+      const label = side === 'left' ? 'Левая панель' : 'Правая панель';
+      const tabs = [{ id: 0, host: null }, ...pane.tabs];
+      const current = tabs.find(({ id }) => id === pane.active);
+      const tabBar = tabs.map(({ id, host }) => {
+        const active = id === pane.active;
+        const name = host ?? folder.name;
+        return '<div class="tab' + (active ? ' selected' : '') + (host ? ' ssh' : '') + '">' +
+          '<button type="button" id="' + side + '-tab-' + id + '" role="tab" aria-controls="' + side + '-content" aria-selected="' + active + '" data-tab="' + id + '">' +
+          (host ? icon('term') : icon('folder')) + name + '</button>' +
+          (host ? '<button type="button" class="close" aria-label="Закрыть ' + host + '" data-close="' + id + '">×</button>' : '') + '</div>';
+      }).join('');
+      const rows = folder.rows.map(([name, size], index) =>
+        '<tr' + (index === 1 ? ' class="highlight"' : '') + '><td>' + icon(size ? 'file' : 'folder') + name + '</td><td>' + size + '</td></tr>'
+      ).join('');
+      const listing = '<div class="path">' + folder.path + '</div><table><thead><tr><th>Имя</th><th>Размер</th></tr></thead><tbody>' + rows + '</tbody></table>';
+      byId(side + '-pane').innerHTML =
+        '<div class="pane-caption">' + icon('panels') + label + '</div>' +
+        '<div class="tabs" role="tablist" aria-label="' + label + ' · вкладки">' + tabBar + '</div>' +
+        '<div class="content" role="tabpanel" id="' + side + '-content" aria-labelledby="' + side + '-tab-' + current.id + '">' +
+        (current.host ? terminal(current.host) : listing) + '</div>';
+    }
+
+    function selectTab(side, id, focus) {
+      panes[side].active = id;
+      renderPane(side);
+      const tab = byId(side + '-tab-' + id);
+      tab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      if (focus) tab.focus({ preventScroll: true });
+    }
+
+    for (const side of Object.keys(panes)) {
+      renderPane(side);
+      byId(side + '-pane').addEventListener('click', (event) => {
+        const button = event.target.closest('button');
+        if (!button) return;
+        if (button.dataset.tab !== undefined) {
+          selectTab(side, Number(button.dataset.tab), true);
+        } else if (button.dataset.close !== undefined) {
+          const pane = panes[side];
+          const id = Number(button.dataset.close);
+          const index = pane.tabs.findIndex((tab) => tab.id === id);
+          const [closed] = pane.tabs.splice(index, 1);
+          const active = pane.active === id ? (pane.tabs[index] ?? pane.tabs[index - 1])?.id ?? 0 : pane.active;
+          selectTab(side, active, true);
+          status.textContent = 'Вкладка ' + closed.host + ' закрыта';
+        }
+      });
+    }
+
+    function updatePlacement() {
+      byId('placement').textContent = applied.mode === 'window' ? 'Новые сеансы открываются в отдельных окнах' :
+        'Новые вкладки открываются ' + (applied.side === 'left' ? 'слева' : 'справа');
+    }
+
+    function showSettings(visible) {
+      byId('settings').hidden = !visible;
+      byId('layout').classList.toggle('settings-closed', !visible);
+      byId('open-settings').setAttribute('aria-expanded', visible);
+    }
+
+    function commitSettings() {
+      applied = { mode: settings.elements.mode.value, side: settings.elements.side.value };
+      updatePlacement();
+      status.textContent = 'Настройки применены';
+    }
+
+    settings.addEventListener('change', () => {
+      settings.elements.side.disabled = settings.elements.mode.value === 'window';
+    });
+    settings.addEventListener('submit', (event) => {
+      event.preventDefault();
+      commitSettings();
+      showSettings(false);
+      byId('open-settings').focus();
+    });
+    byId('apply').addEventListener('click', commitSettings);
+    byId('open-settings').addEventListener('click', () => showSettings(byId('settings').hidden));
+    byId('cancel').addEventListener('click', () => {
+      settings.elements.mode.value = applied.mode;
+      settings.elements.side.value = applied.side;
+      settings.elements.side.disabled = applied.mode === 'window';
+      showSettings(false);
+      byId('open-settings').focus();
+    });
+
+    byId('new-console').addEventListener('click', () => picker.showModal());
+    byId('cancel-picker').addEventListener('click', () => picker.close());
+    byId('connection-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      const host = byId('profile').value;
+      const id = nextId++;
+      picker.close();
+      if (applied.mode === 'window') {
+        const url = new URL(location.href);
+        url.searchParams.set('console', host);
+        const consoleWindow = window.open(url, '_blank', 'popup,width=700,height=440,resizable=yes,scrollbars=yes');
+        if (consoleWindow) {
+          consoleWindow.opener = null;
+          status.textContent = 'Открыто окно ' + host;
+        } else {
+          status.textContent = 'Браузер заблокировал окно ' + host;
+        }
+      } else {
+        panes[applied.side].tabs.push({ id, host });
+        selectTab(applied.side, id, true);
+        status.textContent = 'Открыта вкладка ' + host;
+      }
+    });
+
+    function resize(width) {
+      leftWidth = Math.min(75, Math.max(25, Math.round(width)));
+      workspace.style.setProperty('--left-width', leftWidth + '%');
+      splitter.setAttribute('aria-valuenow', leftWidth);
+    }
+
+    function drag(event) {
+      const area = workspace.getBoundingClientRect();
+      resize((event.clientX - area.left - splitter.clientWidth / 2) / area.width * 100);
+    }
+
+    splitter.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0) return;
+      splitter.setPointerCapture(event.pointerId);
+      splitter.classList.add('dragging');
+    });
+    splitter.addEventListener('pointermove', (event) => {
+      if (splitter.hasPointerCapture(event.pointerId)) drag(event);
+    });
+    splitter.addEventListener('lostpointercapture', () => splitter.classList.remove('dragging'));
+    splitter.addEventListener('keydown', (event) => {
+      const offsets = { ArrowLeft: leftWidth - 3, ArrowRight: leftWidth + 3, Home: 25, End: 75 };
+      if (!Object.hasOwn(offsets, event.key)) return;
+      event.preventDefault();
+      resize(offsets[event.key]);
+    });
+    splitter.addEventListener('dblclick', () => resize(50));
+    updatePlacement();
+  }
+
+  const popupHost = new URLSearchParams(location.search).get('console');
+  if (Object.hasOwn(sessions, popupHost)) {
+    document.title = popupHost + ' · SSH-консоль';
+    byId('page').className = 'popup';
+    byId('page').innerHTML = '<header>SSH-консоль · ' + popupHost + '</header>' + terminal(popupHost);
+  } else {
+    startPreview();
+  }
+</script>
+</body>
+</html>

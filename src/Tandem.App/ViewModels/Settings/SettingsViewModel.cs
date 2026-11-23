@@ -169,6 +169,22 @@ public sealed partial class SettingsViewModel : ObservableObject
     private string _externalEditor;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SshInSeparateWindow))]
+    private bool _sshInPanelTab;
+
+    public bool SshInSeparateWindow
+    {
+        get => !SshInPanelTab;
+        set { if (value) SshInPanelTab = false; }
+    }
+
+    [ObservableProperty]
+    private int _sshPanelIndex;
+
+    public static IReadOnlyList<string> SshPanelOptions =>
+        [Loc.Get("Settings_LeftPanel"), Loc.Get("Settings_RightPanel")];
+
+    [ObservableProperty]
     private ShortcutRow? _selectedShortcut;
 
     /// <summary>Why the last chord recorded was not taken; null when it was, or nothing was recorded yet.</summary>
@@ -192,6 +208,8 @@ public sealed partial class SettingsViewModel : ObservableObject
         _fontSize = current.FontSize;
         _rowHeight = current.RowHeight;
         _externalEditor = current.ExternalEditor ?? "";
+        _sshInPanelTab = current.SshConsolePlacement == SshConsolePlacement.PanelTab;
+        _sshPanelIndex = current.SshConsolePanel == SshConsoleSide.Left ? 0 : 1;
         FileColors = new(current.FileColors.Select(r => new FileColorRuleRow { Mask = r.Mask, Color = r.Color }));
         LeftColumns = new(current.LeftColumns.Select(c => new ColumnRow(c.Column, c.Visible, c.Width)));
         RightColumns = new(current.RightColumns.Select(c => new ColumnRow(c.Column, c.Visible, c.Width)));
@@ -370,6 +388,8 @@ public sealed partial class SettingsViewModel : ObservableObject
         _settings.Update(current with
         {
             Theme = Theme,
+            SshConsolePlacement = SshInPanelTab ? SshConsolePlacement.PanelTab : SshConsolePlacement.SeparateWindow,
+            SshConsolePanel = SshPanelIndex == 0 ? SshConsoleSide.Left : SshConsoleSide.Right,
             FontSize = FontSize,
             RowHeight = RowHeight,
             LeftColumns = LeftColumns.Select(c => c.ToSetting()).ToArray(),

@@ -68,9 +68,7 @@ public sealed partial class TerminalViewModel : ObservableObject, ICloseGuard, I
         }
     }
 
-    public string? StatusText => State == TerminalState.Connected ? null : _errorKey is { } key
-        ? Loc.Get(key) : Loc.Enum(State);
-    public bool HasStatus => StatusText is not null;
+    public string StatusText => _errorKey is { } key ? Loc.Get(key) : Loc.Enum(State);
     public bool CanReconnect => State is TerminalState.Ended or TerminalState.Failed;
 
     public int ScrollOffset
@@ -86,6 +84,12 @@ public sealed partial class TerminalViewModel : ObservableObject, ICloseGuard, I
 
     public ((int Column, int Line) From, (int Column, int Line) To)? Selection { get; private set; }
     public event EventHandler? ScreenChanged;
+
+    internal void ShowAtSize(int columns, int rows)
+    {
+        if (_run is null) _ = StartAsync(columns, rows);
+        else Resize(columns, rows);
+    }
 
     public async Task StartAsync(int columns, int rows)
     {
@@ -351,7 +355,6 @@ public sealed partial class TerminalViewModel : ObservableObject, ICloseGuard, I
         _state = state;
         OnPropertyChanged(nameof(State));
         OnPropertyChanged(nameof(StatusText));
-        OnPropertyChanged(nameof(HasStatus));
         OnPropertyChanged(nameof(CanReconnect));
     }
 }

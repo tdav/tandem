@@ -222,11 +222,12 @@ public class LocalizationTests : LanguageTestBase
     public void Terminal_palette_preserves_contrast_on_the_fixed_black_background()
     {
         var window = new TerminalWindow();
+        var view = window.FindControl<TerminalView>("ConsoleView")!;
         try
         {
             Color TerminalColor(string name)
             {
-                Assert.True(window.TryFindResource("Tandem.Terminal" + name, ThemeVariant.Dark, out var brush));
+                Assert.True(view.TryFindResource("Tandem.Terminal" + name, ThemeVariant.Dark, out var brush));
                 return Assert.IsAssignableFrom<ISolidColorBrush>(brush).Color;
             }
 

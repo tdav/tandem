@@ -86,8 +86,8 @@ if [[ -f "$PLIST" ]]; then
     check_plist CFBundleExecutable Tandem.App
     check_plist CFBundlePackageType APPL
     check_plist CFBundleIconFile Tandem
-    check_plist CFBundleShortVersionString 0.3.0
-    check_plist CFBundleVersion 3
+    check_plist CFBundleShortVersionString 0.4.0
+    check_plist CFBundleVersion 4
     check_plist CFBundleInfoDictionaryVersion 6.0
     check_plist CFBundleDevelopmentRegion en
     check_plist LSMinimumSystemVersion 14.0

@@ -221,6 +221,24 @@
                     <TextBlock Text="{loc:Tr Key=Settings_ExternalEditorHint}" Classes="secondary" TextWrapping="Wrap" />
                 </StackPanel>
             </TabItem>
+            <TabItem Header="{loc:Tr Key=Settings_Tab_SshConsole}">
+                <ScrollViewer>
+                    <StackPanel Spacing="10" Margin="0,12,8,0">
+                        <TextBlock Text="{loc:Tr Key=Settings_SshPlacement}" FontWeight="SemiBold" />
+                        <RadioButton x:Name="SshPanelTab" GroupName="SshPlacement" IsChecked="{Binding SshInPanelTab, Mode=TwoWay}"
+                                     Content="{loc:Tr Key=Settings_SshPanelTab}" />
+                        <RadioButton x:Name="SshSeparateWindow" GroupName="SshPlacement" IsChecked="{Binding SshInSeparateWindow, Mode=TwoWay}"
+                                     Content="{loc:Tr Key=Settings_SshSeparateWindow}" />
+                        <StackPanel Spacing="5" IsEnabled="{Binding SshInPanelTab}">
+                            <TextBlock Text="{loc:Tr Key=Settings_SshPanel}" />
+                            <ComboBox x:Name="SshPanelChoice" Width="200"
+                                      ItemsSource="{x:Static vm:SettingsViewModel.SshPanelOptions}"
+                                      SelectedIndex="{Binding SshPanelIndex}" />
+                        </StackPanel>
+                        <TextBlock Text="{loc:Tr Key=Settings_SshPlacementHint}" Classes="secondary" TextWrapping="Wrap" />
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
         </TabControl>
     </DockPanel>
 

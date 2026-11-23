@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Tandem.App.ViewModels.Net;
 using Tandem.Core.Vfs;
 
 namespace Tandem.App.ViewModels;
@@ -24,7 +25,18 @@ public sealed partial class TabViewModel : ObservableObject, IDisposable
         panel.PropertyChanged += OnPanelPropertyChanged;
     }
 
+    internal TabViewModel(PanelViewModel panel, TerminalViewModel terminal)
+    {
+        Panel = panel;
+        Terminal = terminal;
+        Title = terminal.Title;
+    }
+
     public PanelViewModel Panel { get; }
+
+    public TerminalViewModel? Terminal { get; }
+
+    public bool IsTerminal => Terminal is not null;
 
     public NavigationHistory History { get; } = new();
 
@@ -54,6 +66,7 @@ public sealed partial class TabViewModel : ObservableObject, IDisposable
         Panel.Navigated -= OnNavigated;
         Panel.PropertyChanged -= OnPanelPropertyChanged;
         Panel.Dispose();
+        if (Terminal is { } terminal) _ = terminal.DisposeAsync();
     }
 
     private async Task StepAsync(int step)

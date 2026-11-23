@@ -1108,6 +1108,24 @@
   <data name="Settings_Tab_Editing" xml:space="preserve">
     <value>Правка</value>
   </data>
+  <data name="Settings_Tab_SshConsole" xml:space="preserve">
+    <value>SSH-консоль</value>
+  </data>
+  <data name="Settings_SshPlacement" xml:space="preserve">
+    <value>Открывать SSH-консоль</value>
+  </data>
+  <data name="Settings_SshPanelTab" xml:space="preserve">
+    <value>Во вкладке файловой панели</value>
+  </data>
+  <data name="Settings_SshSeparateWindow" xml:space="preserve">
+    <value>В отдельном окне</value>
+  </data>
+  <data name="Settings_SshPanel" xml:space="preserve">
+    <value>Панель для новых вкладок</value>
+  </data>
+  <data name="Settings_SshPlacementHint" xml:space="preserve">
+    <value>Настройка применяется к новым подключениям. Чтобы изменить ширину панелей, потяните разделитель.</value>
+  </data>
   <data name="Settings_Filter" xml:space="preserve">
     <value>Поиск по командам и сочетаниям</value>
   </data>

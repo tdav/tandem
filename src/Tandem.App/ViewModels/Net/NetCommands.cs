@@ -77,7 +77,8 @@ public sealed partial class NetCommands : ObservableObject, IDisposable
 
     /// <summary>True while a connection to a server is open: quitting then goes through the main view model's
     /// <c>ConfirmCloseAsync</c>, which awaits <see cref="CloseAsync"/>. Never true before connections exist.</summary>
-    public bool HasOpenConnections => IsConnecting || _services.Net?.HasOpenConnections == true;
+    public bool HasOpenConnections => IsConnecting || _services.Net?.HasOpenConnections == true ||
+        ConsoleTabs().Any() || HasConsoleTabShutdowns;
 
     public IReadOnlyList<ConnectionProfile> Connections => _services.Net?.Profiles ?? [];
     public bool HasConnections => Connections.Count > 0;
@@ -153,8 +154,8 @@ public sealed partial class NetCommands : ObservableObject, IDisposable
 
     private bool CanOpenSshConnections() => CanOpenConnections() && _services.Consoles is not null;
 
-    private bool CanDisconnect() => CanConnect() && Active is { } panel &&
-        _services.Net?.ProfileOf(panel.CurrentPath.ProviderId) is not null;
+    private bool CanDisconnect() => CanConnect() && Active?.CurrentPath.ProviderId is { } providerId &&
+        _services.Net?.ProfileOf(providerId) is not null;
 
     private bool CanOpenSavedConnection(ConnectionProfile? profile) => profile is not null && CanConnect() &&
         (profile.Protocol != NetProtocol.Ssh || _services.Consoles is not null);
@@ -182,6 +183,13 @@ public sealed partial class NetCommands : ObservableObject, IDisposable
         {
             OpenConsole(profile);
             return;
+        }
+
+        if (panel.IsTerminalPlaceholder)
+        {
+            var tabs = _workspace.ActiveSide == PanelSide.Left ? _workspace.Left : _workspace.Right;
+            tabs.ActivateLastFileTab();
+            panel = _workspace.ActivePanel;
         }
 
         var from = panel.CurrentPath;
@@ -287,7 +295,8 @@ public sealed partial class NetCommands : ObservableObject, IDisposable
         return false;
     }
 
-    private IEnumerable<PanelViewModel> Panels() => _workspace.Left.Tabs.Concat(_workspace.Right.Tabs).Select(tab => tab.Panel);
+    private IEnumerable<PanelViewModel> Panels() =>
+        _workspace.Left.Tabs.Concat(_workspace.Right.Tabs).Where(tab => !tab.IsTerminal).Select(tab => tab.Panel);
 
     private IEnumerable<string> ProviderChain(VfsPath path)
     {

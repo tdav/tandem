@@ -16,6 +16,7 @@ namespace Tandem.App.Views;
 public partial class PanelView : UserControl
 {
     private SideViewModel? _side;
+    private bool _showedTerminal;
 
     public PanelView()
     {
@@ -31,6 +32,7 @@ public partial class PanelView : UserControl
             };
         }
         PathRow.AddHandler(PointerPressedEvent, (_, _) => _side?.Activate(), RoutingStrategies.Tunnel);
+        SshTerminal.GotFocus += (_, _) => _side?.Activate();
         TabStrip.AddHandler(PointerPressedEvent, OnTabStripPointerPressed, RoutingStrategies.Tunnel);
     }
 
@@ -42,7 +44,11 @@ public partial class PanelView : UserControl
 
     public FileListView List => FileList;
 
-    public void FocusList() => FileList.FocusList();
+    public void FocusList()
+    {
+        if (_side?.ShowsTerminal == true) SshTerminal.FocusTerminal();
+        else FileList.FocusList();
+    }
 
     protected override void OnDataContextChanged(EventArgs e)
     {
@@ -54,7 +60,18 @@ public partial class PanelView : UserControl
 
     private void OnSidePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName != nameof(SideViewModel.IsEditingPath) || _side is not { } side) return;
+        if (_side is not { } side) return;
+        if (e.PropertyName is nameof(SideViewModel.SelectedTab) or nameof(SideViewModel.IsActive))
+        {
+            var showsTerminal = side.ShowsTerminal;
+            var focus = side.IsActive && (showsTerminal || _showedTerminal);
+            _showedTerminal = showsTerminal;
+            if (focus) Dispatcher.UIThread.Post(() =>
+            {
+                if (ReferenceEquals(side, _side) && side.IsActive) FocusList();
+            }, DispatcherPriority.Loaded);
+        }
+        if (e.PropertyName != nameof(SideViewModel.IsEditingPath)) return;
         if (side.IsEditingPath)
         {
             // The editor becomes visible with this change; focus it once it is.

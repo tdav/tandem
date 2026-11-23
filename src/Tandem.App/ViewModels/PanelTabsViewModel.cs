@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Tandem.App.ViewModels.Net;
 using Tandem.Core.Listing;
 using Tandem.Core.Settings;
 using Tandem.Core.Vfs;
@@ -19,6 +20,11 @@ public sealed partial class PanelTabsViewModel : ObservableObject, IDisposable
     private readonly ProviderRegistry _providers;
     private readonly TabCollection _tabs = [];
     private TabViewModel? _active;
+    private TabViewModel? _lastFileTab;
+    private readonly HashSet<TabViewModel> _closingTerminals = [];
+    private readonly HashSet<Task> _terminalShutdowns = [];
+
+    internal IReadOnlyCollection<Task> TerminalShutdowns => _terminalShutdowns;
     private VfsPath _fallback;
     private bool _showHidden;
     private bool _disposed;
@@ -55,7 +61,7 @@ public sealed partial class PanelTabsViewModel : ObservableObject, IDisposable
     /// nothing if that folder can no longer be shown.</summary>
     public async Task NewTabAsync()
     {
-        var source = Active;
+        var source = Active.IsTerminal ? _lastFileTab! : Active;
         if (source.Panel.CurrentPath == default) return;
         var tab = CreateTab(source.Panel.Sort, pinned: false);
         await tab.Panel.NavigateToAsync(source.Panel.CurrentPath);
@@ -69,9 +75,24 @@ public sealed partial class PanelTabsViewModel : ObservableObject, IDisposable
         SetActive(tab);
     }
 
-    /// <summary>Whether <paramref name="tab"/> may be closed: it is one of this side's tabs, not the only one, and not
-    /// pinned. The one rule every way of closing a tab follows.</summary>
-    public bool CanClose(TabViewModel tab) => _tabs.Count > 1 && !tab.IsPinned && _tabs.Contains(tab);
+    internal void ActivateLastFileTab()
+    {
+        if (_lastFileTab is { } tab) Activate(tab);
+    }
+
+    internal TabViewModel OpenTerminal(TerminalViewModel terminal)
+    {
+        var tab = new TabViewModel(new PanelViewModel(_providers) { IsTerminalPlaceholder = true }, terminal);
+        Attach(tab, _tabs.Count);
+        SetActive(tab);
+        return tab;
+    }
+
+    /// <summary>A side always keeps at least one folder tab. Pinned folders and terminals already closing stay open.</summary>
+    public bool CanClose(TabViewModel tab) =>
+        _tabs.Contains(tab) && (tab.IsTerminal
+            ? !_closingTerminals.Contains(tab)
+            : !tab.IsPinned && _tabs.Count(item => !item.IsTerminal) > 1);
 
     /// <summary>Closes the active tab and activates its right neighbour (or the left one if it was the last).
     /// False, and nothing closed, when <see cref="CanClose"/> refuses (the only tab, a pinned one).</summary>
@@ -83,14 +104,56 @@ public sealed partial class PanelTabsViewModel : ObservableObject, IDisposable
     public bool Close(TabViewModel tab)
     {
         ArgumentNullException.ThrowIfNull(tab);
-        if (!CanClose(tab)) return false;
+        if (tab.IsTerminal || !CanClose(tab)) return false;
+        Remove(tab);
+        tab.Dispose();
+        return true;
+    }
+
+    internal async Task<bool> CloseAsync(TabViewModel tab)
+    {
+        if (tab.Terminal is not { } terminal) return Close(tab);
+        if (!CanClose(tab) || !_closingTerminals.Add(tab)) return false;
+        try
+        {
+            if (!await terminal.CanCloseAsync() || _disposed || !_tabs.Contains(tab)) return false;
+            await RemoveTerminalAsync(tab);
+            return true;
+        }
+        finally
+        {
+            _closingTerminals.Remove(tab);
+        }
+    }
+
+    internal async Task RemoveTerminalAsync(TabViewModel tab)
+    {
+        if (!_tabs.Contains(tab) || tab.Terminal is not { } terminal) return;
+        var shutdown = terminal.DisposeAsync().AsTask();
+        _terminalShutdowns.Add(shutdown);
+        Remove(tab);
+        try { await shutdown; }
+        finally
+        {
+            _terminalShutdowns.Remove(shutdown);
+            tab.Dispose();
+        }
+    }
+
+    private void Remove(TabViewModel tab)
+    {
         var index = _tabs.IndexOf(tab);
         Detach(tab);
         _tabs.RemoveAt(index);
-        if (ReferenceEquals(tab, _active)) SetActive(_tabs[Math.Min(index, _tabs.Count - 1)]);
-        else RaiseStateChanged();
-        tab.Dispose();
-        return true;
+        if (ReferenceEquals(tab, _lastFileTab)) _lastFileTab = _tabs.First(item => !item.IsTerminal);
+        if (!ReferenceEquals(tab, _active))
+        {
+            RaiseStateChanged();
+            return;
+        }
+
+        var next = _tabs[Math.Min(index, _tabs.Count - 1)];
+        SetActive(tab.IsTerminal && !next.IsTerminal ? _lastFileTab ?? next : next);
     }
 
     /// <summary>Whether <see cref="CloseOthers"/> would close anything.</summary>
@@ -105,6 +168,13 @@ public sealed partial class PanelTabsViewModel : ObservableObject, IDisposable
         foreach (var tab in _tabs.Where(tab => !ReferenceEquals(tab, keep)).ToList())
             if (Close(tab)) closed++;
         return closed;
+    }
+
+    internal async Task CloseOthersAsync(TabViewModel keep)
+    {
+        Activate(keep);
+        foreach (var tab in _tabs.Where(tab => !ReferenceEquals(tab, keep)).ToArray())
+            if (CanClose(tab) && !await CloseAsync(tab)) break;
     }
 
     /// <summary>Activates the tab to the right, the first after the last.</summary>
@@ -129,14 +199,16 @@ public sealed partial class PanelTabsViewModel : ObservableObject, IDisposable
     /// saved on the fallback folder of the last restore.</summary>
     public PanelState ToState()
     {
-        var active = Active;
-        var tabs = _tabs.Select(tab =>
+        var folders = _tabs.Where(tab => !tab.IsTerminal).ToList();
+        var activeFolder = Active.IsTerminal ? _lastFileTab : Active;
+        var active = activeFolder is null ? 0 : Math.Max(0, folders.IndexOf(activeFolder));
+        var tabs = folders.Select(tab =>
         {
             var path = tab.Panel.CurrentPath == default ? _fallback : PersistentLocationOf(tab.Panel.CurrentPath);
             var sort = tab.Panel.Sort;
             return new TabState(path.ProviderId, path.Path, sort.Column, sort.Descending, tab.IsPinned);
         }).ToList();
-        return new PanelState(tabs, _tabs.IndexOf(active));
+        return new PanelState(tabs, active);
     }
 
     /// <summary>
@@ -174,8 +246,8 @@ public sealed partial class PanelTabsViewModel : ObservableObject, IDisposable
     {
         var aTabs = a.TakeAll();
         var bTabs = b.TakeAll();
-        a.PutAllSilently(bTabs.Tabs, bTabs.Active);
-        b.PutAllSilently(aTabs.Tabs, aTabs.Active);
+        a.PutAllSilently(bTabs.Tabs, bTabs.Active, bTabs.LastFileTab);
+        b.PutAllSilently(aTabs.Tabs, aTabs.Active, aTabs.LastFileTab);
         a.RaiseContentsReplaced();
         b.RaiseContentsReplaced();
     }
@@ -248,6 +320,7 @@ public sealed partial class PanelTabsViewModel : ObservableObject, IDisposable
     {
         if (ReferenceEquals(_active, tab)) return;
         _active = tab;
+        if (tab is { IsTerminal: false }) _lastFileTab = tab;
         OnPropertyChanged(nameof(Active));
         RaiseStateChanged();
     }
@@ -261,18 +334,19 @@ public sealed partial class PanelTabsViewModel : ObservableObject, IDisposable
 
     private void Detach(TabViewModel tab) => tab.StateChanged -= OnTabStateChanged;
 
-    private (List<TabViewModel> Tabs, TabViewModel? Active) TakeAll()
+    private (List<TabViewModel> Tabs, TabViewModel? Active, TabViewModel? LastFileTab) TakeAll()
     {
         var tabs = _tabs.ToList();
         foreach (var tab in tabs) Detach(tab);
-        return (tabs, _active);
+        return (tabs, _active, _lastFileTab);
     }
 
-    private void PutAllSilently(List<TabViewModel> tabs, TabViewModel? active)
+    private void PutAllSilently(List<TabViewModel> tabs, TabViewModel? active, TabViewModel? lastFileTab)
     {
         _tabs.ReplaceSilently(tabs);
         foreach (var tab in tabs) tab.StateChanged += OnTabStateChanged;
         _active = active;
+        _lastFileTab = lastFileTab;
     }
 
     private void RaiseContentsReplaced()

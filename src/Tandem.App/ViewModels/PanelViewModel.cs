@@ -144,10 +144,13 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
     /// cancellation); the panel stays where it is and <see cref="Error"/> is not set.</summary>
     public event EventHandler<Exception>? OpenFailed;
 
+    internal bool IsTerminalPlaceholder { get; init; }
+
     /// <summary>Shows <paramref name="path"/> with the cursor on <paramref name="focusName"/> (or the first row).
     /// On failure the previous folder stays and <see cref="Error"/> says why. Never throws for file-system errors.</summary>
     public async Task NavigateToAsync(VfsPath path, string? focusName = null)
     {
+        if (IsTerminalPlaceholder) return;
         var navigation = LoadAsync(LoadKind.Navigate, path, focusName);
         _navigation = navigation;
         if (await navigation) Navigated?.Invoke(this, path);
