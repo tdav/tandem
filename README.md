@@ -171,3 +171,7 @@ Design: `docs/superpowers/specs/2026-11-19-dual-pane-file-manager-design.md`;
 plans: `docs/superpowers/plans/2026-11-19-stage-1-core-navigation-macos.md`,
 `docs/superpowers/plans/2026-11-19-stage-2-search-view-archives-settings.md`;
 acceptance checklists (Russian): `docs/checklists/stage-1.md`, `docs/checklists/stage-2.md`.
+
+## Лицензия / License
+
+[MIT](LICENSE)
