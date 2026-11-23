@@ -6,7 +6,7 @@ public sealed class TrustStore(string directory)
     public const string FileName = "known-hosts.json";
 
     private readonly Lock _gate = new();
-    private readonly ConnectionFile<Document> _file = new(directory, FileName);
+    private readonly ConnectionFile<Document> _file = new(directory, FileName, ConnectionJsonContext.Format.Trust);
     private Document? _document;
 
     public HostKeyInfo? HostKeyOf(string hostAndPort, string algorithm)
@@ -58,7 +58,7 @@ public sealed class TrustStore(string directory)
     private static bool SameHost(string first, string second) =>
         string.Equals(first, second, StringComparison.OrdinalIgnoreCase);
 
-    private sealed record SavedKey(string Host, HostKeyInfo Key);
-    private sealed record SavedCertificate(string Host, string Sha256);
-    private sealed record Document(int Version, IReadOnlyList<SavedKey> Keys, IReadOnlyList<SavedCertificate> Certificates);
+    internal sealed record SavedKey(string Host, HostKeyInfo Key);
+    internal sealed record SavedCertificate(string Host, string Sha256);
+    internal sealed record Document(int Version, IReadOnlyList<SavedKey> Keys, IReadOnlyList<SavedCertificate> Certificates);
 }

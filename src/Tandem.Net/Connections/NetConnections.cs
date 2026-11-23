@@ -235,6 +235,8 @@ public sealed class NetConnections : IAsyncDisposable
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             var profile = FindProfile(profileId);
+            if (profile.Protocol == NetProtocol.Ssh)
+                throw new NotSupportedException("An SSH-only profile opens in a terminal.");
             var credentials = SourceOf(profileId);
             var existing = _open.Values.FirstOrDefault(provider => SameSession(provider.Profile, profile));
             if (existing is not null)

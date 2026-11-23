@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Runtime.ExceptionServices;
 using Avalonia;
 using Avalonia.Controls;
@@ -28,9 +27,6 @@ public sealed partial class ToolWindows : IToolWindows
     /// <summary>How far each non-modal window opens from the main window's corner.</summary>
     private const int Offset = 40;
 
-    private static readonly MethodInfo CloseOnRequestMethod =
-        typeof(ToolWindows).GetMethod(nameof(CloseOnRequest), BindingFlags.NonPublic | BindingFlags.Instance)!;
-
     private readonly Dictionary<Type, Func<object, Window>> _factories = [];
     private readonly List<Entry> _open = [];
 
@@ -51,6 +47,10 @@ public sealed partial class ToolWindows : IToolWindows
     public IReadOnlyList<Window> Open => _open.Select(e => e.Window).ToArray();
 
     public bool HasOpenWindows => _open.Count > 0;
+
+    public event EventHandler? OpenWindowsChanged;
+
+    public T? LastOpen<T>() where T : class => _open.FindLast(entry => entry.Model is T)?.Model as T;
 
     /// <summary>Models of type <typeparamref name="TViewModel"/> are shown in the window <paramref name="create"/>
     /// makes; registering a type again replaces its window. For the partial methods below and for tests.</summary>
@@ -76,11 +76,7 @@ public sealed partial class ToolWindows : IToolWindows
             return;
         }
         var entry = Attach(viewModel);
-        foreach (var type in viewModel.GetType().GetInterfaces())
-        {
-            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IDialogModel<>))
-                CloseOnRequestMethod.MakeGenericMethod(type.GetGenericArguments()[0]).Invoke(this, [entry]);
-        }
+        if (viewModel is IDialogModel dialog) CloseOnRequest(entry, dialog);
         var window = entry.Window;
         if (Owner is { IsVisible: true } owner)
         {
@@ -200,7 +196,9 @@ public sealed partial class ToolWindows : IToolWindows
             _open.Remove(entry);
             entry.Done.TrySetResult(entry.Result);
             _ = DisposeAsync(viewModel);
+            OpenWindowsChanged?.Invoke(this, EventArgs.Empty);
         };
+        OpenWindowsChanged?.Invoke(this, EventArgs.Empty);
         return entry;
     }
 
@@ -233,18 +231,15 @@ public sealed partial class ToolWindows : IToolWindows
 
     /// <summary>A model shown without <see cref="ShowDialogAsync{TResult}"/> that asks to close: its window closes
     /// (its answer goes to a later <see cref="ShowDialogAsync{TResult}"/> of the same model, if any).</summary>
-    private void CloseOnRequest<TResult>(Entry entry)
+    private static void CloseOnRequest(Entry entry, IDialogModel model)
     {
-        var model = (IDialogModel<TResult>)entry.Model;
-        void OnCloseRequested(object? sender, TResult? answer)
+        var unsubscribe = model.SubscribeToClose(answer =>
         {
             entry.Result = answer;
             entry.CloseApproved = true;
             entry.Window.Close();
-        }
-
-        model.CloseRequested += OnCloseRequested;
-        entry.Window.Closed += (_, _) => model.CloseRequested -= OnCloseRequested;
+        });
+        entry.Window.Closed += (_, _) => unsubscribe();
     }
 
     private static async Task DisposeAsync(object model)

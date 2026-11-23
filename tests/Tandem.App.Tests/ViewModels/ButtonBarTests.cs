@@ -230,11 +230,8 @@ public class ButtonBarTests : LanguageTestBase
         Assert.True(host.IsEffectivelyVisible);
         Assert.True(app.Main.Workspace.View.ButtonBar);
 
-        // No buttons yet: one button leads to the settings (not available before the settings window exists).
-        var configure = Assert.Single(UserButtons(bar));
-        Assert.Equal("ConfigureButtons", configure.Name);
-        Assert.Equal(CommandIds.AppSettings, configure.CommandParameter);
-        Assert.Equal(app.Main.Commands.CanExecute(CommandIds.AppSettings), configure.IsEffectivelyEnabled);
+        Assert.Empty(UserButtons(bar));
+        Assert.Equal(0, host.Bounds.Height);
 
         var changed = 0;
         app.Main.ButtonBar.PropertyChanged += (_, e) =>
@@ -268,6 +265,11 @@ public class ButtonBarTests : LanguageTestBase
         app.Pump();
         Assert.True(host.IsEffectivelyVisible);
         Assert.True(item.IsChecked);
+
+        app.Main.Settings.Update(app.Main.Settings.Current with { Buttons = [] });
+        app.Pump();
+        Assert.Empty(UserButtons(bar));
+        Assert.Equal(0, host.Bounds.Height);
     }
 
     [AvaloniaFact]

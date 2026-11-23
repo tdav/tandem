@@ -1,4 +1,5 @@
 using Avalonia.Headless.XUnit;
+using Avalonia.Controls;
 using Tandem.App.Commands;
 using Tandem.App.Services;
 using Tandem.App.Tests.Views;
@@ -20,7 +21,68 @@ public sealed class ConsoleCommandTests : LanguageTestBase
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     [AvaloniaFact]
-    public async Task Console_command_needs_an_sftp_profile_and_skips_the_picker_for_one_profile()
+    public async Task Show_open_console_brings_existing_session_forward_and_disables_after_close()
+    {
+        const string showOpen = CommandIds.NetShowConsole;
+        await using var app = await ConsoleApp.StartAsync();
+        Assert.True(app.Main.Commands.IsRegistered(showOpen));
+        Assert.False(app.Main.Commands.CanExecute(showOpen));
+        await app.SaveAsync("Shell", NetProtocol.Ssh);
+        var terminal = await app.OpenConsoleAsync();
+        Assert.True(await app.Main.Commands.ExecuteAsync(showOpen));
+        Assert.Same(terminal, Assert.Single(app.Tools.Open));
+        Assert.Same(terminal, app.Tools.Shown.Last());
+
+        app.Tools.OnDialog = _ => true;
+        Assert.True(await app.Tools.CloseAsync(terminal));
+        Assert.False(app.Main.Commands.CanExecute(showOpen));
+    }
+
+    [AvaloniaTheory]
+    [InlineData(CommandIds.NetConnectSsh)]
+    [InlineData(CommandIds.NetConnect)]
+    [InlineData(null)]
+    public async Task A_saved_ssh_profile_opens_only_a_terminal(string? command)
+    {
+        await using var app = await ConsoleApp.StartAsync();
+        var local = app.Main.Workspace.ActivePanel.CurrentPath;
+        var sftp = await app.SaveAsync("Files");
+        var profile = await app.SaveAsync("Shell", NetProtocol.Ssh);
+        app.Dialogs.Selected = profile.Id;
+
+        if (command is null) await app.Main.Net.OpenSavedConnectionCommand.ExecuteAsync(profile);
+        else Assert.True(await app.Main.Commands.ExecuteAsync(command));
+
+        if (command == CommandIds.NetConnectSsh) Assert.Equal([profile], app.Dialogs.Opened!.Profiles);
+        if (command == CommandIds.NetConnect) Assert.Equal([sftp, profile], app.Dialogs.Opened!.Profiles);
+        var terminal = Assert.IsType<TerminalViewModel>(Assert.Single(app.Tools.Open));
+        await terminal.StartAsync(80, 24);
+        Assert.Equal(profile, app.Transport.Profile);
+        Assert.Equal(TerminalState.Connected, terminal.State);
+        Assert.Null(app.Files.Credentials);
+        Assert.Equal(local, app.Main.Workspace.ActivePanel.CurrentPath);
+    }
+
+    [AvaloniaFact]
+    public async Task Ssh_menu_creates_a_saved_profile_with_the_ssh_defaults()
+    {
+        await using var app = await ConsoleApp.StartAsync();
+        app.Dialogs.CreateProfile = true;
+
+        Assert.True(await app.Main.Commands.ExecuteAsync(CommandIds.NetConnectSsh));
+
+        var model = Assert.IsType<ConnectionEditViewModel>(app.Dialogs.Editor);
+        Assert.Equal([NetProtocol.Ssh], model.AvailableProtocols);
+        Assert.Equal([NetAuth.Password, NetAuth.PrivateKey], model.AuthenticationMethods);
+        var profile = Assert.Single(app.Main.Net.Connections);
+        Assert.Equal(NetProtocol.Ssh, profile.Protocol);
+        Assert.Equal("ssh://tester@host.invalid", profile.Address);
+        Assert.Equal(22, profile.Port);
+        Assert.Empty(app.Tools.Open);
+    }
+
+    [AvaloniaFact]
+    public async Task Console_command_needs_an_ssh_capable_profile_and_skips_the_picker_for_one_profile()
     {
         await using var app = await ConsoleApp.StartAsync();
         Assert.False(app.Main.Commands.CanExecute(CommandIds.NetConsole));
@@ -110,6 +172,7 @@ public sealed class ConsoleCommandTests : LanguageTestBase
         public NetConnections Connections => Main.Services.Net!;
         public ScriptedToolWindows Tools => _app.ScriptedToolWindows;
         public ScriptedPrompts Prompts { get; } = new();
+        public ConsoleDialogs Dialogs { get; } = new();
         public RecordingFileFactory Files { get; } = new();
         public RecordingTransportFactory Transport { get; } = new();
 
@@ -126,6 +189,7 @@ public sealed class ConsoleCommandTests : LanguageTestBase
                 return services with
                 {
                     Net = connections,
+                    NetDialogs = app.Dialogs,
                     Secrets = secrets,
                     Consoles = new SshConsoles(connections, app.Transport),
                 };
@@ -154,6 +218,36 @@ public sealed class ConsoleCommandTests : LanguageTestBase
             Tools.OnDialog = _ => true;
             return _app.DisposeAsync();
         }
+    }
+
+    private sealed class ConsoleDialogs : INetDialogs
+    {
+        public Guid? Selected { get; set; }
+        public bool CreateProfile { get; set; }
+        public ConnectionListViewModel? Opened { get; private set; }
+        public ConnectionEditViewModel? Editor { get; private set; }
+        public async Task<Guid?> ShowConnectionsAsync(ConnectionListViewModel list)
+        {
+            Opened = list;
+            if (CreateProfile) await list.EditAsync(create: true);
+            return Selected;
+        }
+
+        public Task<ConnectionEdit?> EditConnectionAsync(ConnectionEditViewModel edit, Window? owner = null)
+        {
+            Editor = edit;
+            edit.Host = "host.invalid";
+            edit.User = "tester";
+            return Task.FromResult(edit.Build(out _));
+        }
+        public Task<bool> OpenVaultAsync(ConnectionVaultViewModel vault, Window? owner = null) => throw new NotSupportedException();
+        public Task<bool> ConfirmDeleteConnectionAsync(string name, Window? owner = null) => throw new NotSupportedException();
+        public Task<SecretAnswer?> AskSecretAsync(string name, string address, SecretKind kind, bool previousWasWrong,
+            CancellationToken ct) => throw new NotSupportedException();
+        public Task<bool> ConfirmHostKeyAsync(string address, HostKeyInfo key, HostKeyInfo? previous, CancellationToken ct) =>
+            throw new NotSupportedException();
+        public Task<bool> ConfirmCertificateAsync(string address, CertificateInfo certificate, CancellationToken ct) =>
+            throw new NotSupportedException();
     }
 
     private sealed class ScriptedPrompts : INetPrompts

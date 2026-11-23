@@ -49,6 +49,27 @@ public class AppearanceWindowTests : LanguageTestBase, IDisposable
             : throw new InvalidOperationException($"No resource {key}.");
 
     [AvaloniaFact]
+    public async Task Both_panels_show_distinct_icons_for_parent_folder_and_file()
+    {
+        await using var app = await TestApp.StartAsync();
+        await app.Right.NavigateToAsync(VfsPath.Local(TestApp.Home));
+        app.Pump();
+
+        IImage Icon(PanelSide side, string name)
+        {
+            var icon = Assert.Single(RowOf(app, side, name).GetVisualDescendants().OfType<Image>());
+            Assert.True(icon.IsEffectivelyVisible);
+            Assert.Equal(new Size(16, 16), icon.Bounds.Size);
+            return Assert.IsAssignableFrom<IImage>(icon.Source);
+        }
+
+        var names = new[] { "..", "docs", "notes.txt" };
+        var leftIcons = names.Select(name => Icon(PanelSide.Left, name)).ToArray();
+        Assert.Equal(names.Length, leftIcons.Distinct().Count());
+        Assert.Equal(names.Length, names.Select(name => Icon(PanelSide.Right, name)).Distinct().Count());
+    }
+
+    [AvaloniaFact]
     public async Task Left_and_right_panels_use_their_own_columns()
     {
         var settings = AppSettings.Default with
@@ -91,11 +112,11 @@ public class AppearanceWindowTests : LanguageTestBase, IDisposable
         Assert.True(scrollBar.IsEffectivelyVisible, "The list should scroll.");
 
         var row = RowOf(app, PanelSide.Left, "file001.txt");
-        foreach (var (header, cell) in new[] { ("SortByName", "RowName"), ("SortByExtension", "RowExtension"),
+        foreach (var (header, cell) in new[] { ("SortByName", "RowNameCell"), ("SortByExtension", "RowExtension"),
                      ("SortBySize", "RowSize"), ("SortByDate", "RowModified"), ("SortByMode", "RowMode") })
         {
             var button = Header(app, PanelSide.Left, header);
-            var block = Cell(row, cell);
+            var block = row.GetVisualDescendants().OfType<Control>().Single(c => c.Name == cell);
             var headerX = button.TranslatePoint(default, app.Window)!.Value.X;
             var cellX = block.TranslatePoint(default, app.Window)!.Value.X - block.Margin.Left;
             Assert.True(Math.Abs(headerX - cellX) <= 1, $"{header}: header at {headerX}, cell at {cellX}.");
@@ -119,14 +140,14 @@ public class AppearanceWindowTests : LanguageTestBase, IDisposable
         var row = RowOf(app, side, "notes.txt");
         (string Header, string Cell)[] columns =
         [
-            ("SortByName", "RowName"), ("SortByExtension", "RowExtension"), ("SortBySize", "RowSize"),
+            ("SortByName", "RowNameCell"), ("SortByExtension", "RowExtension"), ("SortBySize", "RowSize"),
             ("SortByDate", "RowModified"), ("SortByMode", "RowMode"),
         ];
         foreach (var (header, cell) in columns)
         {
             var button = Header(app, side, header);
             if (!button.IsEffectivelyVisible) continue;
-            var block = Cell(row, cell);
+            var block = row.GetVisualDescendants().OfType<Control>().Single(c => c.Name == cell);
             var headerX = button.TranslatePoint(default, app.Window)!.Value.X;
             var cellX = block.TranslatePoint(default, app.Window)!.Value.X - block.Margin.Left;
             Assert.True(Math.Abs(headerX - cellX) <= 1, $"{side} {header}: header at {headerX}, cell at {cellX}.");

@@ -49,7 +49,7 @@ public sealed partial class ButtonBarViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(HasButtons))]
     public partial IReadOnlyList<UserButton> Buttons { get; private set; }
 
-    /// <summary>Whether there is any button; without one the bar offers to set them up.</summary>
+    /// <summary>Whether the button bar has any configured buttons.</summary>
     public bool HasButtons => Buttons.Count > 0;
 
     /// <summary>Whether any configured button can run.</summary>

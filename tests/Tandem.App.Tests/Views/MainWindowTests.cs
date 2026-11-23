@@ -562,7 +562,8 @@ public class MainWindowTests : LanguageTestBase
             CommandIds.ToolsChecksumCreate, CommandIds.ToolsChecksumVerify, "-",
             CommandIds.ToolsFolderSize, CommandIds.ToolsFolderSizeAll,
         ], Entries(menus[3]));
-        Assert.Equal([CommandIds.NetConnect, CommandIds.NetDisconnect, "-", CommandIds.NetConsole], Entries(menus[4]));
+        Assert.Equal([CommandIds.NetConnect, CommandIds.NetConnectSsh, CommandIds.NetDisconnect, "-", CommandIds.NetConsole,
+            CommandIds.NetShowConsole], Entries(menus[4]));
         static List<NativeMenuItem> Commands(NativeMenuItem menu) =>
             menu.Menu!.Items.OfType<NativeMenuItem>().Where(i => i is not NativeMenuItemSeparator).ToList();
 
@@ -572,7 +573,7 @@ public class MainWindowTests : LanguageTestBase
             "Multi-Rename…", "Undo Last Rename", "Compare Folders", "Synchronize Folders…", "Compare Files…",
             "Create Checksums…", "Verify Checksums", "Folder Size", "All Folder Sizes",
         ], tools.Select(i => i.Header));
-        Assert.Equal(["Connect to Server…", "Disconnect", "SSH Console"],
+        Assert.Equal(["Connect to Server…", "Connect via SSH…", "Disconnect", "SSH Console", "Show SSH Console"],
             Commands(menus[4]).Select(i => i.Header));
         Assert.Equal(new KeyGesture(Key.M, KeyModifiers.Meta), tools[0].Gesture);
         Assert.Null(tools.Single(i => i.CommandParameter as string == CommandIds.ToolsChecksumCreate).Gesture);

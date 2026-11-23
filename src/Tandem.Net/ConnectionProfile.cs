@@ -3,7 +3,7 @@ using Tandem.Core.Vfs;
 
 namespace Tandem.Net;
 
-public enum NetProtocol { Ftp, FtpsExplicit, FtpsImplicit, Sftp }
+public enum NetProtocol { Ftp, FtpsExplicit, FtpsImplicit, Sftp, Ssh }
 
 public enum NetAuth { Password, PrivateKey, Anonymous }
 
@@ -26,7 +26,7 @@ public sealed record ConnectionProfile(Guid Id, string Name, NetProtocol Protoco
     {
         NetProtocol.Ftp or NetProtocol.FtpsExplicit => 21,
         NetProtocol.FtpsImplicit => 990,
-        NetProtocol.Sftp => 22,
+        NetProtocol.Sftp or NetProtocol.Ssh => 22,
         _ => throw new ArgumentOutOfRangeException(nameof(protocol), protocol, null),
     };
 
@@ -38,6 +38,7 @@ public sealed record ConnectionProfile(Guid Id, string Name, NetProtocol Protoco
         NetProtocol.FtpsExplicit => "ftpes",
         NetProtocol.FtpsImplicit => "ftps",
         NetProtocol.Sftp => "sftp",
+        NetProtocol.Ssh => "ssh",
         _ => throw new ArgumentOutOfRangeException(nameof(protocol), protocol, null),
     };
 

@@ -10,7 +10,7 @@ public sealed class SshShellTransportFactory(TimeSpan? connectTimeout = null) : 
 {
     public ITerminalTransport Create(ConnectionProfile profile, ICredentialSource credentials, ITrustDecisions trust)
     {
-        if (profile.Protocol != NetProtocol.Sftp) throw new NotSupportedException();
+        if (!SshConsoles.Supports(profile)) throw new NotSupportedException();
         return new SshShellTransport(profile, credentials, trust, connectTimeout ?? TimeSpan.FromSeconds(15));
     }
 }

@@ -97,8 +97,10 @@ public sealed class SshShellLiveTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => draining.WaitAsync(TimeSpan.FromSeconds(5), ct));
     }
 
-    [Fact]
-    public async Task Shell_echoes_commands_resizes_and_exits()
+    [Theory]
+    [InlineData(NetProtocol.Sftp)]
+    [InlineData(NetProtocol.Ssh)]
+    public async Task Shell_echoes_commands_resizes_and_exits(NetProtocol protocol)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(20));
@@ -107,7 +109,8 @@ public sealed class SshShellLiveTests
         await using var local = server is null ? await LocalSshd.StartIfEnabledAsync(ct) : null;
         server ??= local?.Server;
         Assert.SkipWhen(server is null, $"Set {LiveServer.SftpVariable} and its credentials, or TANDEM_TEST_LOCAL_SSHD=1.");
-        await using var shell = new SshShellTransportFactory().Create(server!.Profile, server.Credentials, server.Trust);
+        await using var shell = new SshShellTransportFactory().Create(server!.Profile with { Protocol = protocol },
+            server.Credentials, server.Trust);
         await shell.ConnectAsync(80, 24, ct);
         await shell.ResizeAsync(100, 30, ct);
         await shell.WriteAsync("echo tandem-$((6*7)); stty size; exit\r"u8.ToArray(), ct);

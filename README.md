@@ -4,6 +4,31 @@ Tandem — двухпанельный файловый менеджер для m
 и перенос через очередь операций с окном прогресса, корзина, Quick Look, перетаскивание из Finder и в Finder,
 права и теги, встроенная командная строка. На приёмке этап 3, версия 0.3.0.
 
+![Главное окно Tandem: две панели с вкладками](docs/screenshots/main-window.jpg)
+
+## Скачать
+
+Готовая сборка для Mac с Apple Silicon (M1 и новее), macOS 14 или новее, лежит в
+[релизах](https://github.com/tdav/tandem/releases/latest): `Tandem-<версия>-macOS-arm64.zip`. Это Native AOT —
+приложение скомпилировано в машинный код заранее, .NET устанавливать не нужно.
+
+1. Распакуйте архив и перенесите `Tandem.app` в «Программы».
+2. Сборка подписана ad-hoc, без сертификата Apple Developer, поэтому при первом запуске macOS её не откроет.
+   Снимите карантин одной командой и запускайте как обычно:
+
+   ```sh
+   xattr -dr com.apple.quarantine /Applications/Tandem.app
+   ```
+
+   Или: правый щелчок по `Tandem.app` → «Открыть» → «Открыть»; на macOS 15 и новее — «Системные настройки →
+   Конфиденциальность и безопасность → Всё равно открыть».
+
+## Скриншоты
+
+| Поиск файлов (Alt+F7) | Просмотр, режим hex (F3) | Настройки: клавиши (Cmd+,) |
+| --- | --- | --- |
+| ![Поиск файлов](docs/screenshots/find-files.jpg) | ![Встроенный просмотр в режиме hex](docs/screenshots/viewer-hex.jpg) | ![Переназначение клавиш](docs/screenshots/settings-keys.jpg) |
+
 Возможности этапа 3:
 
 - групповое переименование с предварительным просмотром и отменой последней операции;
@@ -11,7 +36,9 @@ Tandem — двухпанельный файловый менеджер для m
   подсчёт размеров папок;
 - FTP, FTPS и SFTP в панелях, сохранённые подключения, восстановление связи после обрыва, правка через F4
   с сохранением на сервер;
-- SSH-консоль для сохранённых SFTP-подключений (Cmd+Alt+K).
+- отдельные подключения через «Сеть → Подключиться по SSH…» открываются в окне консоли. SSH-консоль
+  также доступна для сохранённых SFTP-подключений (Cmd+Alt+K). Правый щелчок копирует выделение, следующий
+  вставляет его без Enter.
 
 Возможности этапа 2:
 
@@ -29,7 +56,7 @@ Tandem — двухпанельный файловый менеджер для m
 Чтение RAR и 7z с зашифрованным списком файлов не проверено автоматическими тестами: таких тестовых архивов в
 проекте нет, их можно проверить только на своих файлах. Остальные ограничения — в конце `docs/checklists/stage-2.md`.
 
-## Требования
+## Требования для сборки из исходников
 
 - Mac с Apple Silicon (arm64), macOS 14 или новее;
 - .NET 11 SDK (`dotnet --version` → 11.x).
@@ -39,7 +66,8 @@ Tandem — двухпанельный файловый менеджер для m
 ```sh
 dotnet build Tandem.slnx          # сборка
 dotnet test Tandem.slnx           # все тесты
-build/make-app.sh                 # пакет dist/Tandem.app (Release, osx-arm64, самодостаточный)
+build/make-app.sh                 # пакет dist/Tandem.app (Release, osx-arm64, самодостаточный, ReadyToRun)
+build/make-aot-app.sh             # пакет dist/Tandem.app в Native AOT и архив dist/Tandem-<версия>-macOS-arm64.zip
 build/verify-app.sh               # проверка пакета: структура, Info.plist, архитектура, подпись, пробный запуск
 open dist/Tandem.app              # запуск
 ```
@@ -57,7 +85,7 @@ open dist/Tandem.app              # запуск
 ### Зашифрованное хранилище подключений
 
 Откройте «Сеть → Подключиться к серверу…» и выберите создание хранилища. Tandem поместит профили FTP, FTPS
-и SFTP, сохранённые пароли, закрытые SSH-ключи и ключевые фразы в `credentials.tandemvault` в папке настроек.
+и SFTP, профили SSH, сохранённые пароли, закрытые SSH-ключи и ключевые фразы в `credentials.tandemvault` в папке настроек.
 После перехода Tandem читает и обновляет этот файл. Ранее сохранённые записи macOS Keychain и исходные файлы
 ключей сохраняются. Для переноса нужен зашифрованный файл и мастер-пароль. Хранилище открывается по
 мастер-паролю в каждом запуске Tandem, когда требуются подключения.
@@ -105,14 +133,21 @@ archives, so only your own files can check it.
 
 Stage 3 (0.3.0, in acceptance testing) adds batch rename with preview and undo, folder and file comparison,
 folder synchronization, checksums and directory sizes. FTP, FTPS and SFTP connections can appear in either pane,
-reconnect after a dropped connection and upload edits made in the built-in editor. Saved SFTP profiles can also
-open an SSH console. [Stage 3 acceptance checklist](docs/checklists/stage-3.md).
+reconnect after a dropped connection and upload edits made in the built-in editor. Use Network → Connect via SSH…
+for console-only profiles. Saved SFTP profiles can also open an SSH console. Right-click copies a selection, then
+right-click again to paste without pressing Enter. [Stage 3 acceptance checklist](docs/checklists/stage-3.md).
 
-Requirements: Apple Silicon Mac, macOS 14+, .NET 11 SDK.
+**Download.** A Native AOT build for Apple Silicon Macs (macOS 14+) is attached to the
+[latest release](https://github.com/tdav/tandem/releases/latest) as `Tandem-<version>-macOS-arm64.zip`; no .NET
+install is needed. The app is signed ad-hoc (no Apple Developer certificate), so after moving it to Applications
+clear the quarantine flag once: `xattr -dr com.apple.quarantine /Applications/Tandem.app` (or right-click → Open).
+
+Requirements for building from source: Apple Silicon Mac, macOS 14+, .NET 11 SDK.
 
 ```sh
 dotnet test Tandem.slnx     # run all tests
 build/make-app.sh           # build dist/Tandem.app (self-contained, osx-arm64, signed)
+build/make-aot-app.sh       # Native AOT dist/Tandem.app plus dist/Tandem-<version>-macOS-arm64.zip
 build/verify-app.sh         # verify the bundle
 open dist/Tandem.app
 ```

@@ -8,9 +8,12 @@ using Tandem.Net.Connections;
 namespace Tandem.App.ViewModels.Net;
 
 public sealed partial class ConnectionListViewModel(NetConnections connections, INetDialogs dialogs,
-    Func<Guid, Task<bool>>? beforeDelete = null) : ObservableObject
+    Func<Guid, Task<bool>>? beforeDelete = null, NetProtocol? protocol = null) : ObservableObject
 {
-    public IReadOnlyList<ConnectionProfile> Profiles => connections.Profiles;
+    public bool IsSshOnly => protocol == NetProtocol.Ssh;
+    public IReadOnlyList<ConnectionProfile> Profiles => protocol is { } filter
+        ? connections.Profiles.Where(profile => profile.Protocol == filter).ToArray()
+        : connections.Profiles;
     [ObservableProperty] public partial bool IsBusy { get; private set; }
     [ObservableProperty] public partial ConnectionProfile? Selected { get; set; }
     [ObservableProperty] public partial string? Error { get; private set; }
@@ -51,7 +54,8 @@ public sealed partial class ConnectionListViewModel(NetConnections connections, 
             });
             var hasStoredKey = profile?.Auth == NetAuth.PrivateKey &&
                 await connections.HasStoredPrivateKeyAsync(profile.Id, CancellationToken.None);
-            if (await dialogs.EditConnectionAsync(new ConnectionEditViewModel(profile, remembered, hasStoredKey), owner) is not { } edit)
+            if (await dialogs.EditConnectionAsync(new ConnectionEditViewModel(profile, remembered, hasStoredKey, protocol),
+                    owner) is not { } edit)
                 return;
             await Task.Run(() => connections.SaveAsync(edit.Profile, edit.Password, edit.Passphrase, CancellationToken.None));
             Refresh(edit.Profile.Id);

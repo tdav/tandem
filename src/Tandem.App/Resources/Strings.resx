@@ -1093,9 +1093,6 @@ Folder</value>
   <data name="Menu_ButtonBar" xml:space="preserve">
     <value>Button Bar</value>
   </data>
-  <data name="ButtonBar_Configure" xml:space="preserve">
-    <value>Set Up Buttons…</value>
-  </data>
   <data name="UserCommand_StartFailed" xml:space="preserve">
     <value>Could not start “{0}”.</value>
   </data>
@@ -1526,12 +1523,14 @@ Folder</value>
   <data name="Menu_net_connect" xml:space="preserve">
     <value>Connect to Server…</value>
   </data>
+  <data name="Menu_net_connect_ssh" xml:space="preserve"><value>Connect via SSH…</value></data>
   <data name="Menu_net_disconnect" xml:space="preserve">
     <value>Disconnect</value>
   </data>
   <data name="Menu_net_console" xml:space="preserve">
     <value>SSH Console</value>
   </data>
+  <data name="Menu_net_console_show" xml:space="preserve"><value>Show SSH Console</value></data>
 
   <!-- stage3:tools-a begin (Rename_*, Checksum_*, FolderSize_*) -->
   <data name="FolderSize_Computing" xml:space="preserve"><value>…</value></data>
@@ -1800,6 +1799,7 @@ Folder</value>
   <data name="RemoteEdit_DiscardUpload" xml:space="preserve"><value>Close Without Uploading</value></data>
   <data name="RemoteEdit_BeforeClose" xml:space="preserve"><value>Upload the saved changes to “{0}” before closing?</value></data>
   <data name="Connection_ListTitle" xml:space="preserve"><value>Network connections</value></data>
+  <data name="Connection_SshListTitle" xml:space="preserve"><value>SSH connections</value></data>
   <data name="Connection_Connect" xml:space="preserve"><value>Connect</value></data>
   <data name="Connection_New" xml:space="preserve"><value>New…</value></data>
   <data name="Connection_Edit" xml:space="preserve"><value>Edit…</value></data>
@@ -1857,6 +1857,7 @@ Folder</value>
   <data name="NetProtocol_FtpsExplicit" xml:space="preserve"><value>FTPS (explicit TLS)</value></data>
   <data name="NetProtocol_FtpsImplicit" xml:space="preserve"><value>FTPS (implicit TLS)</value></data>
   <data name="NetProtocol_Sftp" xml:space="preserve"><value>SFTP</value></data>
+  <data name="NetProtocol_Ssh" xml:space="preserve"><value>SSH</value></data>
   <data name="NetAuth_Password" xml:space="preserve"><value>Password</value></data>
   <data name="NetAuth_PrivateKey" xml:space="preserve"><value>Private key</value></data>
   <data name="NetAuth_Anonymous" xml:space="preserve"><value>Anonymous</value></data>
@@ -1896,6 +1897,7 @@ Folder</value>
   <data name="Terminal_AuthenticationFailed" xml:space="preserve"><value>Authentication failed</value></data>
   <data name="Terminal_TrustRefused" xml:space="preserve"><value>The server’s host key was declined</value></data>
   <data name="Terminal_Reconnect" xml:space="preserve"><value>Reconnect</value></data>
+  <data name="Terminal_KeepOnTop" xml:space="preserve"><value>Keep on Top</value></data>
   <data name="Terminal_CloseQuestion" xml:space="preserve"><value>Close the console?</value></data>
   <data name="Terminal_CloseDetail" xml:space="preserve"><value>The session on the server will end.</value></data>
   <data name="Terminal_CloseButton" xml:space="preserve"><value>Close console</value></data>

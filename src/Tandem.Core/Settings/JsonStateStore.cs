@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace Tandem.Core.Settings;
 
@@ -36,7 +35,7 @@ public sealed class JsonStateStore(string directory)
     /// <exception cref="IOException">The directory or file cannot be written; the previous file is left intact.</exception>
     public void Save(AppState state)
     {
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(state, SettingsFile.Options);
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(state, SettingsJsonContext.Format.AppState);
         lock (_gate) SettingsFile.WriteAtomically(directory, _file, _tempFile, bytes, "application state");
     }
 
@@ -46,7 +45,7 @@ public sealed class JsonStateStore(string directory)
         AppState? state;
         try
         {
-            state = JsonSerializer.Deserialize<AppState>(text, SettingsFile.Options);
+            state = JsonSerializer.Deserialize<AppState>(text, SettingsJsonContext.Format.AppState);
         }
         catch (Exception e) when (e is JsonException or NotSupportedException)
         {
@@ -71,13 +70,6 @@ public sealed class JsonStateStore(string directory)
 /// <c>settings.json</c>).</summary>
 internal static class SettingsFile
 {
-    /// <summary>Indented JSON with enumeration values written, and only accepted, by name.</summary>
-    public static readonly JsonSerializerOptions Options = new()
-    {
-        WriteIndented = true,
-        Converters = { new JsonStringEnumConverter(allowIntegerValues: false) },
-    };
-
     /// <summary>The file's text; null when it does not exist or cannot be read.</summary>
     public static string? ReadText(string file)
     {

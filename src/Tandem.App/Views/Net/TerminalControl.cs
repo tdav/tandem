@@ -22,7 +22,6 @@ public sealed class TerminalControl : Control
         Focusable = true;
         ClipToBounds = true;
         SizeChanged += (_, _) => ResizeToBounds();
-        ActualThemeVariantChanged += (_, _) => InvalidateVisual();
         GotFocus += (_, _) => InvalidateVisual();
         LostFocus += (_, _) => InvalidateVisual();
     }
@@ -88,7 +87,10 @@ public sealed class TerminalControl : Control
                 if (!ReferenceEquals(bg, background)) context.FillRectangle(bg, bounds);
                 if (selection is { } range &&
                     (Contains(range, (column, top + row)) || cell.Width == 2 && Contains(range, (column + 1, top + row))))
+                {
                     context.FillRectangle(selectedBrush!, bounds);
+                    fg = foreground;
+                }
                 if (!string.IsNullOrWhiteSpace(cell.Text))
                 {
                     var key = (cell.Text, cell.Style & (CellStyle.Bold | CellStyle.Italic), fg);

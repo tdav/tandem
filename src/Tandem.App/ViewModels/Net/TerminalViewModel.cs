@@ -20,6 +20,7 @@ public sealed partial class TerminalViewModel : ObservableObject, ICloseGuard, I
     private readonly string _name;
     private readonly Func<ITerminalTransport> _open;
     private readonly ITerminalClipboard _clipboard;
+    private readonly SemaphoreSlim _secondaryClicks = new(1);
     private readonly Func<ConfirmModel, Task<bool>> _confirm;
     private readonly Action<Exception> _reportFailure;
     private readonly DispatcherTimer _redraw = new() { Interval = TimeSpan.FromMilliseconds(17) };
@@ -183,21 +184,43 @@ public sealed partial class TerminalViewModel : ObservableObject, ICloseGuard, I
         return _clipboard.SetTextAsync(text);
     }
 
-    public async Task PasteAsync()
+    public Task PasteAsync() => PasteAsync(fromRightClick: false);
+
+    private async Task PasteAsync(bool fromRightClick)
     {
-        if (State != TerminalState.Connected) return;
+        if (_disposed || State != TerminalState.Connected) return;
         var text = await _clipboard.GetTextAsync();
-        if (string.IsNullOrEmpty(text)) return;
+        if (_disposed || State != TerminalState.Connected || string.IsNullOrEmpty(text)) return;
         bool bracketed;
         lock (ScreenLock) bracketed = Screen.BracketedPaste;
+        if (fromRightClick)
+        {
+            text = text.TrimEnd('\r', '\n');
+            // A bare CR is Enter in an SSH terminal. Without bracketed paste, keep the insertion on one line.
+            if (!bracketed) text = text.Replace("\r\n", " ", StringComparison.Ordinal).Replace('\r', ' ').Replace('\n', ' ');
+            if (text.Length == 0) return;
+        }
         Send(TerminalInput.Paste(text, bracketed));
     }
 
     public async Task SecondaryClickAsync()
     {
-        if (Selection is null) { await PasteAsync(); return; }
-        await CopySelectionAsync();
-        ClearSelection();
+        await _secondaryClicks.WaitAsync();
+        try
+        {
+            if (_disposed) return;
+            if (Selection is not { } selection)
+            {
+                await PasteAsync(fromRightClick: true);
+                return;
+            }
+            await CopySelectionAsync();
+            if (!_disposed && Selection == selection) ClearSelection();
+        }
+        finally
+        {
+            _secondaryClicks.Release();
+        }
     }
 
     [RelayCommand]

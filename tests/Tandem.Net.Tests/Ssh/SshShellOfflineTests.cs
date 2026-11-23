@@ -6,10 +6,12 @@ namespace Tandem.Net.Tests.Ssh;
 
 public sealed class SshShellOfflineTests
 {
-    [Fact]
-    public async Task Closed_port_reports_connection_loss_without_credentials()
+    [Theory]
+    [InlineData(NetProtocol.Sftp)]
+    [InlineData(NetProtocol.Ssh)]
+    public async Task Closed_port_reports_connection_loss_without_credentials(NetProtocol protocol)
     {
-        var profile = new ConnectionProfile(Guid.NewGuid(), "SSH", NetProtocol.Sftp, "127.0.0.1",
+        var profile = new ConnectionProfile(Guid.NewGuid(), "SSH", protocol, "127.0.0.1",
             ProbeSupport.ClosedPort(), "user", NetAuth.Password);
         await using var shell = new SshShellTransportFactory(TimeSpan.FromSeconds(2))
             .Create(profile, new SftpTests.Credentials("never-log-me"), new SftpTests.Trust());

@@ -12,10 +12,12 @@ namespace Tandem.App.Tests.Integration;
 public sealed class CompositionNetTests
 {
     [Fact]
-    public void Every_protocol_has_a_factory()
+    public void Every_file_transfer_protocol_has_a_factory()
     {
         var factories = Composition.CreateSessionFactories();
-        Assert.All(Enum.GetValues<NetProtocol>(), protocol => Assert.True(factories.ContainsKey(protocol)));
+        Assert.All(Enum.GetValues<NetProtocol>().Where(protocol => protocol != NetProtocol.Ssh),
+            protocol => Assert.True(factories.ContainsKey(protocol)));
+        Assert.DoesNotContain(NetProtocol.Ssh, factories.Keys);
         Assert.IsType<SftpSessionFactory>(factories[NetProtocol.Sftp]);
         Assert.IsType<FtpSessionFactory>(factories[NetProtocol.Ftp]);
         Assert.Same(factories[NetProtocol.Ftp], factories[NetProtocol.FtpsExplicit]);

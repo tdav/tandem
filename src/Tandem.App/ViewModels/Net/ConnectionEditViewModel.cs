@@ -14,11 +14,13 @@ public sealed partial class ConnectionEditViewModel : ObservableObject
     private bool _defaultPort;
     private bool _settingProtocol;
 
-    public ConnectionEditViewModel(ConnectionProfile? profile = null, bool hasSavedSecret = false, bool hasStoredKey = false)
+    public ConnectionEditViewModel(ConnectionProfile? profile = null, bool hasSavedSecret = false, bool hasStoredKey = false,
+        NetProtocol? fixedProtocol = null)
     {
         _original = profile;
         _id = profile?.Id ?? Guid.NewGuid();
-        Protocol = profile?.Protocol ?? NetProtocol.Sftp;
+        AvailableProtocols = fixedProtocol is { } protocol ? [protocol] : Enum.GetValues<NetProtocol>();
+        Protocol = fixedProtocol ?? profile?.Protocol ?? NetProtocol.Sftp;
         Name = profile?.Name ?? "";
         Host = profile?.Host ?? "";
         Port = (profile?.Port ?? ConnectionProfile.DefaultPort(Protocol)).ToString(CultureInfo.InvariantCulture);
@@ -46,7 +48,8 @@ public sealed partial class ConnectionEditViewModel : ObservableObject
     [ObservableProperty] public partial bool PassiveMode { get; set; } = true;
     [ObservableProperty] public partial string NameEncoding { get; set; } = TextEncodings.Utf8.Id;
 
-    public bool IsFtp => Protocol != NetProtocol.Sftp;
+    public IReadOnlyList<NetProtocol> AvailableProtocols { get; }
+    public bool IsFtp => Protocol is NetProtocol.Ftp or NetProtocol.FtpsExplicit or NetProtocol.FtpsImplicit;
     public bool HasStoredKey { get; }
     public IReadOnlyList<NetAuth> AuthenticationMethods => IsFtp ? [NetAuth.Password, NetAuth.Anonymous] :
         [NetAuth.Password, NetAuth.PrivateKey];
@@ -85,7 +88,8 @@ public sealed partial class ConnectionEditViewModel : ObservableObject
         {
             var keyPath = string.IsNullOrWhiteSpace(PrivateKeyPath) && HasStoredKey ? _original?.PrivateKeyPath : PrivateKeyPath;
             var profile = new ConnectionProfile(_id, string.IsNullOrWhiteSpace(Name) ? Host : Name, Protocol, Host,
-                port, User, Auth, Auth == NetAuth.PrivateKey ? keyPath : null, InitialPath, PassiveMode,
+                port, User, Auth, Auth == NetAuth.PrivateKey ? keyPath : null,
+                Protocol == NetProtocol.Ssh ? "/" : InitialPath, PassiveMode,
                 IsFtp && NameEncoding != TextEncodings.Utf8.Id ? NameEncoding : null).Normalized();
             var secret = !Remember ? "" : Secret.Length == 0 && _original?.Auth == Auth ? null :
                 Secret.Length == 0 ? null : Secret;

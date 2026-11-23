@@ -8,6 +8,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Tandem.App.Resources;
+using Tandem.App.Views.Net;
 using Tandem.Core.Operations;
 
 namespace Tandem.App.Tests;
@@ -218,28 +219,32 @@ public class LocalizationTests : LanguageTestBase
     }
 
     [AvaloniaFact]
-    public void Terminal_colours_exist_in_both_themes_and_every_ansi_colour_is_readable_on_the_background()
+    public void Terminal_palette_preserves_contrast_on_the_fixed_black_background()
     {
-        foreach (var theme in new[] { ThemeVariant.Light, ThemeVariant.Dark })
+        var window = new TerminalWindow();
+        try
         {
-            var background = ThemeColor("Tandem.TerminalBackground", theme);
-            ThemeColor("Tandem.TerminalCursor", theme);
-            ThemeColor("Tandem.TerminalSelection", theme);
-            var foreground = ThemeColor("Tandem.TerminalForeground", theme);
-            Assert.True(Contrast(foreground, background) >= 3, $"foreground in {theme}");
-
-            var ansi = Enumerable.Range(0, 16).Select(i => ThemeColor("Tandem.TerminalAnsi" + i, theme)).ToArray();
-            // The colours akin to the background are exempt: programs paint backgrounds with them.
-            int[] exempt = theme == ThemeVariant.Dark ? [0, 8] : [7, 15];
-            for (var i = 0; i < 16; i++)
+            Color TerminalColor(string name)
             {
-                if (exempt.Contains(i)) continue;
-                Assert.True(Contrast(ansi[i], background) >= 3,
-                    $"ANSI {i} in {theme}: {Contrast(ansi[i], background):0.00}");
+                Assert.True(window.TryFindResource("Tandem.Terminal" + name, ThemeVariant.Dark, out var brush));
+                return Assert.IsAssignableFrom<ISolidColorBrush>(brush).Color;
             }
-            // Black stays black and white white; white on black is what mc and htop draw.
-            Assert.True(Contrast(ansi[7], ansi[0]) >= 4.5, $"7 on 0 in {theme}");
-            Assert.True(Contrast(ansi[15], ansi[8]) >= 4.5, $"15 on 8 in {theme}");
+
+            var background = TerminalColor("Background");
+            var foreground = TerminalColor("Foreground");
+            Assert.Equal(Colors.Black, background);
+            Assert.True(Contrast(foreground, background) >= 4.5);
+            Assert.True(Contrast(foreground, TerminalColor("Selection")) >= 4.5);
+            Assert.True(Contrast(TerminalColor("Cursor"), background) >= 3);
+
+            var ansi = Enumerable.Range(0, 16).Select(i => TerminalColor("Ansi" + i)).ToArray();
+            for (var i = 1; i < ansi.Length; i++)
+            {
+                Assert.True(Contrast(ansi[i], background) >= 3, $"ANSI {i}: {Contrast(ansi[i], background):0.00}");
+            }
+            Assert.True(Contrast(ansi[7], ansi[0]) >= 4.5);
+            Assert.True(Contrast(ansi[15], ansi[8]) >= 4.5);
         }
+        finally { window.Close(); }
     }
 }

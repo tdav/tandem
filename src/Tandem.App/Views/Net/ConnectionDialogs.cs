@@ -2,7 +2,6 @@ using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
-using Avalonia.Data;
 using Avalonia.Layout;
 using Avalonia.Platform.Storage;
 using Tandem.App.Resources;
@@ -16,7 +15,8 @@ namespace Tandem.App.Views.Net;
 
 public sealed class ConnectionListDialog : DialogWindow
 {
-    public ConnectionListDialog(ConnectionListViewModel model) : base(Loc.Get("Connection_ListTitle"))
+    public ConnectionListDialog(ConnectionListViewModel model) : base(Loc.Get(model.IsSshOnly
+        ? "Connection_SshListTitle" : "Connection_ListTitle"))
     {
         DataContext = model;
         var list = new ListBox
@@ -32,8 +32,10 @@ public sealed class ConnectionListDialog : DialogWindow
                 return row;
             }),
         };
-        list.Bind(ItemsControl.ItemsSourceProperty, new Binding(nameof(model.Profiles)));
-        list.Bind(ListBox.SelectedItemProperty, new Binding(nameof(model.Selected)) { Mode = BindingMode.TwoWay });
+        list.Bind(ItemsControl.ItemsSourceProperty,
+            DialogBinding<ConnectionListViewModel>.Property(nameof(model.Profiles), m => m.Profiles));
+        list.Bind(ListBox.SelectedItemProperty,
+            DialogBinding<ConnectionListViewModel>.Property(nameof(model.Selected), m => m.Selected, (m, value) => m.Selected = value));
         model.Selected = model.Profiles.FirstOrDefault();
         var connect = MakeButton(Loc.Get("Connection_Connect"), isDefault: true, name: "Connect");
         var add = MakeButton(Loc.Get("Connection_New"), name: "Create");
@@ -87,16 +89,17 @@ public sealed class ConnectionEditDialog : DialogWindow
     {
         DataContext = model;
         var fields = new StackPanel { Spacing = 7 };
-        var name = TextBoxFor(nameof(model.Name));
-        var host = TextBoxFor(nameof(model.Host));
-        var port = TextBoxFor(nameof(model.Port));
-        var user = TextBoxFor(nameof(model.User));
-        var secret = TextBoxFor(nameof(model.Secret));
+        var name = TextBoxFor(nameof(model.Name), m => m.Name, (m, value) => m.Name = value);
+        var host = TextBoxFor(nameof(model.Host), m => m.Host, (m, value) => m.Host = value);
+        var port = TextBoxFor(nameof(model.Port), m => m.Port, (m, value) => m.Port = value);
+        var user = TextBoxFor(nameof(model.User), m => m.User, (m, value) => m.User = value);
+        var secret = TextBoxFor(nameof(model.Secret), m => m.Secret, (m, value) => m.Secret = value);
         secret.PasswordChar = '●';
-        var keyPath = TextBoxFor(nameof(model.PrivateKeyPath));
+        var keyPath = TextBoxFor(nameof(model.PrivateKeyPath), m => m.PrivateKeyPath, (m, value) => m.PrivateKeyPath = value);
 
         var protocol = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch, Name = "Protocol" };
-        protocol.ItemsSource = Enum.GetValues<NetProtocol>().Select(Item).ToArray();
+        protocol.ItemsSource = model.AvailableProtocols.Select(Item).ToArray();
+        protocol.IsEnabled = model.AvailableProtocols.Count > 1;
         Select(protocol, model.Protocol);
         var authentication = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch, Name = "Auth" };
         var encoding = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch, Name = "NameEncoding" };
@@ -110,9 +113,11 @@ public sealed class ConnectionEditDialog : DialogWindow
         };
 
         var remember = new CheckBox { Content = Loc.Get("Connection_Remember"), Name = "Remember" };
-        remember.Bind(CheckBox.IsCheckedProperty, new Binding(nameof(model.Remember)) { Mode = BindingMode.TwoWay });
+        remember.Bind(CheckBox.IsCheckedProperty,
+            DialogBinding<ConnectionEditViewModel>.Property(nameof(model.Remember), m => m.Remember, (m, value) => m.Remember = value));
         var passive = new CheckBox { Content = Loc.Get("Connection_Passive"), Name = "Passive" };
-        passive.Bind(CheckBox.IsCheckedProperty, new Binding(nameof(model.PassiveMode)) { Mode = BindingMode.TwoWay });
+        passive.Bind(CheckBox.IsCheckedProperty,
+            DialogBinding<ConnectionEditViewModel>.Property(nameof(model.PassiveMode), m => m.PassiveMode, (m, value) => m.PassiveMode = value));
         var pick = MakeButton(Loc.Get("Connection_Browse"), name: "ChooseKey");
         pick.Click += async (_, _) =>
         {
@@ -143,7 +148,8 @@ public sealed class ConnectionEditDialog : DialogWindow
         fields.Children.Add(secretField);
         var plainWarning = Text(Loc.Get("Connection_PlainFtpWarning"), name: "PlainFtpWarning");
         fields.Children.Add(plainWarning);
-        fields.Children.Add(Field("Connection_InitialPath", TextBoxFor(nameof(model.InitialPath))));
+        var initialPath = Field("Connection_InitialPath", TextBoxFor(nameof(model.InitialPath), m => m.InitialPath, (m, value) => m.InitialPath = value));
+        fields.Children.Add(initialPath);
         fields.Children.Add(passive);
         var encodingField = Field("Connection_FtpEncoding", encoding);
         fields.Children.Add(encodingField);
@@ -198,14 +204,16 @@ public sealed class ConnectionEditDialog : DialogWindow
             userField.IsVisible = secretField.IsVisible;
             secretLabel.Text = Loc.Get(key ? "Connection_Passphrase" : "Connection_Password");
             plainWarning.IsVisible = model.Protocol == NetProtocol.Ftp;
+            initialPath.IsVisible = model.Protocol != NetProtocol.Ssh;
             passive.IsVisible = encodingField.IsVisible = model.IsFtp;
         }
     }
 
-    private static TextBox TextBoxFor(string property)
+    private static TextBox TextBoxFor(string property, Func<ConnectionEditViewModel, string> get,
+        Action<ConnectionEditViewModel, string> set)
     {
         var field = new TextBox { Name = property };
-        field.Bind(TextBox.TextProperty, new Binding(property) { Mode = BindingMode.TwoWay });
+        field.Bind(TextBox.TextProperty, DialogBinding<ConnectionEditViewModel>.Property(property, get, set));
         return field;
     }
 

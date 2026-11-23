@@ -51,8 +51,8 @@ public static class MainMenu
 
     private static readonly string[] NetCommands =
     [
-        CommandIds.NetConnect, CommandIds.NetDisconnect, "-",
-        CommandIds.NetConsole,
+        CommandIds.NetConnect, CommandIds.NetConnectSsh, CommandIds.NetDisconnect, "-",
+        CommandIds.NetConsole, CommandIds.NetShowConsole,
     ];
 
     private static readonly string[] WindowCommands =

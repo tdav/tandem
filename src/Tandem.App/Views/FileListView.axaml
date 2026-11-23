@@ -3,9 +3,24 @@
              xmlns:vm="using:Tandem.App.ViewModels"
              xmlns:v="using:Tandem.App.Views"
              xmlns:settings="using:Tandem.Core.Settings"
+             xmlns:svg="clr-namespace:Avalonia.Svg;assembly=Svg.Controls.Avalonia"
              x:Class="Tandem.App.Views.FileListView"
              x:DataType="vm:SideViewModel">
+    <UserControl.Resources>
+        <svg:SvgImage x:Key="FileRowIcon" Source="avares://Tandem.App/Assets/FileIcons/file.svg" />
+        <svg:SvgImage x:Key="FolderRowIcon" Source="avares://Tandem.App/Assets/FileIcons/folder.svg" />
+        <svg:SvgImage x:Key="ParentRowIcon" Source="avares://Tandem.App/Assets/FileIcons/parent.svg" />
+    </UserControl.Resources>
     <UserControl.Styles>
+        <Style Selector="Image.entryIcon">
+            <Setter Property="Source" Value="{StaticResource FileRowIcon}" />
+        </Style>
+        <Style Selector="Image.entryIcon.folder">
+            <Setter Property="Source" Value="{StaticResource FolderRowIcon}" />
+        </Style>
+        <Style Selector="Image.entryIcon.parent">
+            <Setter Property="Source" Value="{StaticResource ParentRowIcon}" />
+        </Style>
         <!-- Fixed row height (from the settings, the same for every row): the virtualizing panel never measures rows
              one by one. -->
         <Style Selector="ListBox#Rows ListBoxItem">
@@ -107,24 +122,29 @@
                 <Grid Classes.marked="{Binding IsSelected}" Classes.folder="{Binding IsDirectoryLike}"
                       ColumnDefinitions="*,0,0,0,0"
                       v:ListLayoutColumns.Layout="{Binding $parent[v:FileListView].((vm:SideViewModel)DataContext).Layout}">
-                    <Panel>
-                        <!-- Docked left, the name is measured first: it keeps its room, the folder takes what is left. -->
-                        <DockPanel IsVisible="{Binding !IsRenaming}">
-                            <TextBlock x:Name="RowName" DockPanel.Dock="Left" Classes="name" Text="{Binding Name}"
-                                       TextTrimming="CharacterEllipsis" />
-                            <TextBlock x:Name="LocationText" Classes="location" Text="{Binding LocationText}"
-                                       IsVisible="{Binding IsForeign}" TextTrimming="CharacterEllipsis"
-                                       Margin="8,0,0,0" />
-                        </DockPanel>
-                        <!-- The inline rename editor, created only while the row is being renamed. -->
-                        <ContentControl Content="{Binding Rename}" IsVisible="{Binding IsRenaming}">
-                            <ContentControl.ContentTemplate>
-                                <DataTemplate x:DataType="vm:InlineRenameViewModel">
-                                    <v:InlineRenameEditor />
-                                </DataTemplate>
-                            </ContentControl.ContentTemplate>
-                        </ContentControl>
-                    </Panel>
+                    <DockPanel x:Name="RowNameCell">
+                        <Image DockPanel.Dock="Left" Classes="entryIcon" Classes.folder="{Binding IsDirectoryLike}"
+                               Classes.parent="{Binding IsParentLink}" Width="16" Height="16" Margin="0,0,6,0"
+                               VerticalAlignment="Center" IsHitTestVisible="False" />
+                        <Panel>
+                            <!-- The name is measured first, leaving the remaining room for the result location. -->
+                            <DockPanel IsVisible="{Binding !IsRenaming}">
+                                <TextBlock x:Name="RowName" DockPanel.Dock="Left" Classes="name" Text="{Binding Name}"
+                                           TextTrimming="CharacterEllipsis" />
+                                <TextBlock x:Name="LocationText" Classes="location" Text="{Binding LocationText}"
+                                           IsVisible="{Binding IsForeign}" TextTrimming="CharacterEllipsis"
+                                           Margin="8,0,0,0" />
+                            </DockPanel>
+                            <!-- The inline rename editor, created only while the row is being renamed. -->
+                            <ContentControl Content="{Binding Rename}" IsVisible="{Binding IsRenaming}">
+                                <ContentControl.ContentTemplate>
+                                    <DataTemplate x:DataType="vm:InlineRenameViewModel">
+                                        <v:InlineRenameEditor />
+                                    </DataTemplate>
+                                </ContentControl.ContentTemplate>
+                            </ContentControl>
+                        </Panel>
+                    </DockPanel>
                     <TextBlock x:Name="RowExtension" v:ListLayoutColumns.Cell="{x:Static settings:ColumnId.Extension}"
                                Text="{Binding Extension}" TextTrimming="CharacterEllipsis" Margin="6,0,0,0" />
                     <TextBlock x:Name="RowSize" v:ListLayoutColumns.Cell="{x:Static settings:ColumnId.Size}"

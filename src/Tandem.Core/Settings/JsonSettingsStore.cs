@@ -39,7 +39,7 @@ public sealed class JsonSettingsStore(string directory)
     public void Save(AppSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(settings, SettingsFile.Options);
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(settings, SettingsJsonContext.Format.AppSettings);
         lock (_gate) SettingsFile.WriteAtomically(directory, _file, _tempFile, bytes, "settings");
     }
 
@@ -49,7 +49,7 @@ public sealed class JsonSettingsStore(string directory)
         AppSettings? settings;
         try
         {
-            settings = JsonSerializer.Deserialize<AppSettings>(text, SettingsFile.Options);
+            settings = JsonSerializer.Deserialize<AppSettings>(text, SettingsJsonContext.Format.AppSettings);
         }
         catch (Exception e) when (e is JsonException or NotSupportedException)
         {

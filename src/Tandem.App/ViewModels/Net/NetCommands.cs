@@ -53,7 +53,8 @@ public sealed partial class NetCommands : ObservableObject, IDisposable
         _reportFailure = reportFailure ?? throw new ArgumentNullException(nameof(reportFailure));
         _onEscape = onEscape ?? throw new ArgumentNullException(nameof(onEscape));
 
-        On(CommandIds.NetConnect, OpenConnectionsAsync, CanOpenConnections);
+        On(CommandIds.NetConnect, () => OpenConnectionsAsync(), CanOpenConnections);
+        On(CommandIds.NetConnectSsh, () => OpenConnectionsAsync(NetProtocol.Ssh), CanOpenSshConnections);
         On(CommandIds.NetDisconnect, DisconnectCurrentAsync, CanDisconnect);
         if (services.Net is { } net)
         {
@@ -150,21 +151,25 @@ public sealed partial class NetCommands : ObservableObject, IDisposable
 
     private bool CanOpenConnections() => CanConnect() && _services.NetDialogs is not null;
 
+    private bool CanOpenSshConnections() => CanOpenConnections() && _services.Consoles is not null;
+
     private bool CanDisconnect() => CanConnect() && Active is { } panel &&
         _services.Net?.ProfileOf(panel.CurrentPath.ProviderId) is not null;
 
-    private bool CanOpenSavedConnection(ConnectionProfile? profile) => profile is not null && CanConnect();
+    private bool CanOpenSavedConnection(ConnectionProfile? profile) => profile is not null && CanConnect() &&
+        (profile.Protocol != NetProtocol.Ssh || _services.Consoles is not null);
 
     [RelayCommand(CanExecute = nameof(CanOpenSavedConnection))]
     private Task OpenSavedConnectionAsync(ConnectionProfile profile) => ConnectAsync(profile.Id);
 
-    private async Task OpenConnectionsAsync()
+    private async Task OpenConnectionsAsync(NetProtocol? protocol = null)
     {
         if (!CanOpenConnections() || _services.Net is not { } net || _services.NetDialogs is not { } dialogs) return;
         if (net.VaultConfigured && !net.VaultUnlocked &&
             !await dialogs.OpenVaultAsync(new ConnectionVaultViewModel(net, create: false))) return;
         if (!CanOpenConnections()) return;
-        var list = new ConnectionListViewModel(net, dialogs, BeforeDeleteAsync) { Selected = Connections.FirstOrDefault() };
+        var list = new ConnectionListViewModel(net, dialogs, BeforeDeleteAsync, protocol);
+        list.Selected = list.Profiles.FirstOrDefault();
         if (await dialogs.ShowConnectionsAsync(list) is { } id) await ConnectAsync(id);
     }
 
@@ -172,6 +177,12 @@ public sealed partial class NetCommands : ObservableObject, IDisposable
     {
         if (!CanConnect() || Active is not { } panel || _services.Net is not { } net ||
             Connections.FirstOrDefault(profile => profile.Id == profileId) is not { } profile) return;
+
+        if (profile.Protocol == NetProtocol.Ssh)
+        {
+            OpenConsole(profile);
+            return;
+        }
 
         var from = panel.CurrentPath;
         var notice = Loc.Format("Net_Connecting", profile.Address);

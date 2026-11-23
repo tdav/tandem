@@ -7,7 +7,12 @@ namespace Tandem.App.Views.Net;
 
 public sealed partial class TerminalWindow : Window
 {
-    public TerminalWindow() => InitializeComponent();
+    public TerminalWindow()
+    {
+        InitializeComponent();
+        KeepOnTop.IsCheckedChanged += (_, _) => Topmost = KeepOnTop.IsChecked == true;
+        KeepOnTop.Click += (_, _) => Terminal.Focus();
+    }
 
     public TerminalWindow(TerminalViewModel model) : this()
     {
@@ -39,6 +44,7 @@ public sealed partial class TerminalWindow : Window
             var grid = Terminal.GridSize;
             await model.StartAsync(grid.Columns, grid.Rows);
         };
+        Activated += (_, _) => Terminal.Focus();
         Closed += (_, _) => Terminal.Detach();
     }
 }

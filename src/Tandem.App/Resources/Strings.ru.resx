@@ -1084,9 +1084,6 @@
   <data name="Menu_ButtonBar" xml:space="preserve">
     <value>Панель кнопок</value>
   </data>
-  <data name="ButtonBar_Configure" xml:space="preserve">
-    <value>Настроить…</value>
-  </data>
   <data name="UserCommand_StartFailed" xml:space="preserve">
     <value>Не удалось запустить «{0}».</value>
   </data>
@@ -1517,12 +1514,14 @@
   <data name="Menu_net_connect" xml:space="preserve">
     <value>Подключиться к серверу…</value>
   </data>
+  <data name="Menu_net_connect_ssh" xml:space="preserve"><value>Подключиться по SSH…</value></data>
   <data name="Menu_net_disconnect" xml:space="preserve">
     <value>Отключиться</value>
   </data>
   <data name="Menu_net_console" xml:space="preserve">
     <value>SSH-консоль</value>
   </data>
+  <data name="Menu_net_console_show" xml:space="preserve"><value>Показать SSH-консоль</value></data>
 
   <!-- stage3:tools-a begin (Rename_*, Checksum_*, FolderSize_*) -->
   <data name="FolderSize_Computing" xml:space="preserve"><value>…</value></data>
@@ -1791,6 +1790,7 @@
   <data name="RemoteEdit_DiscardUpload" xml:space="preserve"><value>Закрыть без загрузки</value></data>
   <data name="RemoteEdit_BeforeClose" xml:space="preserve"><value>Загрузить сохранённые изменения файла «{0}» перед закрытием?</value></data>
   <data name="Connection_ListTitle" xml:space="preserve"><value>Сетевые подключения</value></data>
+  <data name="Connection_SshListTitle" xml:space="preserve"><value>Подключения SSH</value></data>
   <data name="Connection_Connect" xml:space="preserve"><value>Подключиться</value></data>
   <data name="Connection_New" xml:space="preserve"><value>Создать…</value></data>
   <data name="Connection_Edit" xml:space="preserve"><value>Изменить…</value></data>
@@ -1848,6 +1848,7 @@
   <data name="NetProtocol_FtpsExplicit" xml:space="preserve"><value>FTPS (явный TLS)</value></data>
   <data name="NetProtocol_FtpsImplicit" xml:space="preserve"><value>FTPS (неявный TLS)</value></data>
   <data name="NetProtocol_Sftp" xml:space="preserve"><value>SFTP</value></data>
+  <data name="NetProtocol_Ssh" xml:space="preserve"><value>SSH</value></data>
   <data name="NetAuth_Password" xml:space="preserve"><value>Пароль</value></data>
   <data name="NetAuth_PrivateKey" xml:space="preserve"><value>Закрытый ключ</value></data>
   <data name="NetAuth_Anonymous" xml:space="preserve"><value>Анонимный вход</value></data>
@@ -1887,6 +1888,7 @@
   <data name="Terminal_AuthenticationFailed" xml:space="preserve"><value>Не удалось войти на сервер</value></data>
   <data name="Terminal_TrustRefused" xml:space="preserve"><value>Ключ узла сервера отклонён</value></data>
   <data name="Terminal_Reconnect" xml:space="preserve"><value>Подключиться снова</value></data>
+  <data name="Terminal_KeepOnTop" xml:space="preserve"><value>Поверх окон</value></data>
   <data name="Terminal_CloseQuestion" xml:space="preserve"><value>Закрыть консоль?</value></data>
   <data name="Terminal_CloseDetail" xml:space="preserve"><value>Сеанс на сервере будет завершён.</value></data>
   <data name="Terminal_CloseButton" xml:space="preserve"><value>Закрыть консоль</value></data>

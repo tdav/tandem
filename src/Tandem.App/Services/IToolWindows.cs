@@ -2,11 +2,24 @@ using Avalonia.Controls;
 
 namespace Tandem.App.Services;
 
+public interface IDialogModel
+{
+    internal Action SubscribeToClose(Action<object?> close);
+}
+
 /// <summary>A dialog's model: it asks for its window to close and gives the answer (default: closed without one).
 /// Raised on the UI thread.</summary>
-public interface IDialogModel<TResult>
+public interface IDialogModel<TResult> : IDialogModel
 {
     event EventHandler<TResult?>? CloseRequested;
+
+    Action IDialogModel.SubscribeToClose(Action<object?> close)
+    {
+        void OnCloseRequested(object? sender, TResult? answer) => close(answer);
+
+        CloseRequested += OnCloseRequested;
+        return () => CloseRequested -= OnCloseRequested;
+    }
 }
 
 /// <summary>
@@ -20,6 +33,11 @@ public interface IToolWindows
     /// to the front instead. Closing the window disposes the model (<see cref="IAsyncDisposable"/> or
     /// <see cref="IDisposable"/>).</summary>
     void Show(object viewModel);
+
+    /// <summary>The most recently opened model of the given type, if its window is still open.</summary>
+    T? LastOpen<T>() where T : class;
+
+    event EventHandler? OpenWindowsChanged;
 
     /// <summary>A modal window for <paramref name="viewModel"/>, completing when it closes: with the answer of
     /// <see cref="IDialogModel{TResult}.CloseRequested"/>, or default when the window is closed with its close button

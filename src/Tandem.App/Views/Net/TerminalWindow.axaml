@@ -5,13 +5,40 @@
         xmlns:r="using:Tandem.App.Resources"
         x:Class="Tandem.App.Views.Net.TerminalWindow"
         x:DataType="vm:TerminalViewModel"
-        Title="{Binding Title}" Width="840" Height="500" MinWidth="280" MinHeight="180">
+        Title="{Binding Title}" RequestedThemeVariant="Dark" Background="{DynamicResource Tandem.TerminalBackground}"
+        Width="840" Height="500" MinWidth="280" MinHeight="180">
+  <Window.Resources>
+    <SolidColorBrush x:Key="Tandem.TerminalBackground" Color="#000000" />
+    <SolidColorBrush x:Key="Tandem.TerminalForeground" Color="#E5EDF5" />
+    <SolidColorBrush x:Key="Tandem.TerminalCursor" Color="#8DE1F3" />
+    <SolidColorBrush x:Key="Tandem.TerminalSelection" Color="#23496C" />
+    <SolidColorBrush x:Key="Tandem.TerminalAnsi0" Color="#000000" />
+    <SolidColorBrush x:Key="Tandem.TerminalAnsi1" Color="#F27681" />
+    <SolidColorBrush x:Key="Tandem.TerminalAnsi2" Color="#79D99E" />
+    <SolidColorBrush x:Key="Tandem.TerminalAnsi3" Color="#E7BD73" />
+    <SolidColorBrush x:Key="Tandem.TerminalAnsi4" Color="#7BAFF7" />
+    <SolidColorBrush x:Key="Tandem.TerminalAnsi5" Color="#CD9EF0" />
+    <SolidColorBrush x:Key="Tandem.TerminalAnsi6" Color="#69D2DE" />
+    <SolidColorBrush x:Key="Tandem.TerminalAnsi7" Color="#D5DFEA" />
+    <SolidColorBrush x:Key="Tandem.TerminalAnsi8" Color="#6A7584" />
+    <SolidColorBrush x:Key="Tandem.TerminalAnsi9" Color="#FFA1A8" />
+    <SolidColorBrush x:Key="Tandem.TerminalAnsi10" Color="#AAECB8" />
+    <SolidColorBrush x:Key="Tandem.TerminalAnsi11" Color="#FFE1A0" />
+    <SolidColorBrush x:Key="Tandem.TerminalAnsi12" Color="#B0CDFF" />
+    <SolidColorBrush x:Key="Tandem.TerminalAnsi13" Color="#E6C1FF" />
+    <SolidColorBrush x:Key="Tandem.TerminalAnsi14" Color="#A6EEF4" />
+    <SolidColorBrush x:Key="Tandem.TerminalAnsi15" Color="#FFFFFF" />
+  </Window.Resources>
   <Grid RowDefinitions="*,Auto">
-    <net:TerminalControl x:Name="Terminal" />
-    <DockPanel Grid.Row="1" IsVisible="{Binding HasStatus}" Margin="8" LastChildFill="True">
-      <Button DockPanel.Dock="Right" IsVisible="{Binding CanReconnect}" Command="{Binding ReconnectCommand}"
-              Content="{r:Tr Key=Terminal_Reconnect}" />
-      <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" TextWrapping="Wrap" />
-    </DockPanel>
+    <net:TerminalControl x:Name="Terminal" Margin="12,10" />
+    <Border Grid.Row="1" Background="#10151C" BorderBrush="#273442" BorderThickness="0,1,0,0" Padding="12,6">
+      <DockPanel LastChildFill="True">
+        <ToggleButton x:Name="KeepOnTop" DockPanel.Dock="Right" Content="{r:Tr Key=Terminal_KeepOnTop}" />
+        <Button DockPanel.Dock="Right" Margin="0,0,8,0" IsVisible="{Binding CanReconnect}"
+                Command="{Binding ReconnectCommand}" Content="{r:Tr Key=Terminal_Reconnect}" />
+        <TextBlock Text="{Binding StatusText}" IsVisible="{Binding HasStatus}" Foreground="#E5EDF5"
+                   VerticalAlignment="Center" TextWrapping="Wrap" />
+      </DockPanel>
+    </Border>
   </Grid>
 </Window>

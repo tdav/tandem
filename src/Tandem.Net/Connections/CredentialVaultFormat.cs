@@ -8,7 +8,7 @@ using System.Text.Json.Serialization;
 
 namespace Tandem.Net.Connections;
 
-internal static class CredentialVaultFormat
+internal static partial class CredentialVaultFormat
 {
     private static ReadOnlySpan<byte> Magic => "TANDVLT1"u8;
 
@@ -24,22 +24,26 @@ internal static class CredentialVaultFormat
     private const int MaxEncodedKeyBytes = (CredentialVault.MaxKeyBytes + 2) / 3 * 4;
     private static readonly UTF8Encoding PasswordEncoding = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
 
-    private static readonly JsonSerializerOptions Options = new()
+    private static readonly VaultJsonContext Format = new(new JsonSerializerOptions
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         RespectRequiredConstructorParameters = true,
         RespectNullableAnnotations = true,
         AllowDuplicateProperties = false,
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false) },
-    };
-
-    private static readonly JsonSerializerOptions KeyOptions = new()
-    {
-        Converters = { new PrivateKeyConverter() },
-    };
+        Converters =
+        {
+            new JsonStringEnumConverter<NetProtocol>(JsonNamingPolicy.CamelCase, allowIntegerValues: false),
+            new JsonStringEnumConverter<NetAuth>(JsonNamingPolicy.CamelCase, allowIntegerValues: false),
+            new PrivateKeyConverter(),
+        },
+    });
 
     private sealed record Payload(VaultEntry[] Entries);
+
+    [JsonSerializable(typeof(Payload))]
+    [JsonSerializable(typeof(byte[]))]
+    private sealed partial class VaultJsonContext : JsonSerializerContext;
 
     internal static void ValidateFileLength(long length)
     {
@@ -71,7 +75,7 @@ internal static class CredentialVaultFormat
     {
         ValidateEntries(entries);
         using var plaintext = new PayloadStream();
-        JsonSerializer.Serialize(plaintext, new Payload(entries), Options);
+        JsonSerializer.Serialize(plaintext, new Payload(entries), Format.Payload);
         var data = new byte[PayloadOffset + (int)plaintext.Length];
         Magic.CopyTo(data);
         salt.CopyTo(data, SaltOffset);
@@ -106,7 +110,7 @@ internal static class CredentialVaultFormat
 
                 var password = element.GetProperty("password").GetString();
                 var passphrase = element.GetProperty("passphrase").GetString();
-                var privateKey = element.GetProperty("privateKey").Deserialize<byte[]>(KeyOptions);
+                var privateKey = element.GetProperty("privateKey").Deserialize(Format.ByteArray);
                 entries.Add(new VaultEntry(profile, password, privateKey, passphrase));
             }
 
@@ -155,7 +159,7 @@ internal static class CredentialVaultFormat
     private static ConnectionProfile ReadProfile(JsonElement element)
     {
         if (element.GetPropertyCount() != 11) throw InvalidPayload();
-        var profile = element.Deserialize<ConnectionProfile>(Options);
+        var profile = element.Deserialize(Format.ConnectionProfile);
         ValidateProfile(profile);
 
         // The framework enum converter accepts case-insensitive names. V1 defines exact spellings.

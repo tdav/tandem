@@ -163,8 +163,8 @@ public class KeyMapTests
         var unbound = ConstantIds().Where(id => !bound.Contains(id)).Order();
 
         Assert.Equal(
-            [CommandIds.ShellOpenTerminal, CommandIds.ShellOpenWith, CommandIds.ShellReveal, CommandIds.TabCloseOthers,
-                CommandIds.TabDuplicate, CommandIds.ToolsChecksumCreate, CommandIds.ToolsChecksumVerify],
+            [CommandIds.NetConnectSsh, CommandIds.NetShowConsole, CommandIds.ShellOpenTerminal, CommandIds.ShellOpenWith, CommandIds.ShellReveal,
+                CommandIds.TabCloseOthers, CommandIds.TabDuplicate, CommandIds.ToolsChecksumCreate, CommandIds.ToolsChecksumVerify],
             unbound);
     }
 

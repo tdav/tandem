@@ -79,8 +79,10 @@ public static class CommandIds
 
     // Network (stage 3): server connections and the SSH console.
     public const string NetConnect = "net.connect";
+    public const string NetConnectSsh = "net.connect.ssh";
     public const string NetDisconnect = "net.disconnect";
     public const string NetConsole = "net.console";
+    public const string NetShowConsole = "net.console.show";
 
     // Invoked from menus only; no default key binding.
     public const string ShellReveal = "shell.reveal";

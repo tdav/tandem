@@ -1,7 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
-using Avalonia.Data;
 using Avalonia.Layout;
 using Tandem.App.Resources;
 using Tandem.App.ViewModels.Tools;
@@ -22,9 +21,11 @@ public sealed class ChecksumCreateDialog : DialogWindow
             ItemsSource = Enum.GetValues<ChecksumAlgorithm>(),
             ItemTemplate = new FuncDataTemplate<ChecksumAlgorithm>((value, _) => new TextBlock { Text = Loc.Enum(value) }),
         };
-        algorithm.Bind(ComboBox.SelectedItemProperty, new Binding(nameof(model.Algorithm)) { Mode = BindingMode.TwoWay });
+        algorithm.Bind(ComboBox.SelectedItemProperty,
+            DialogBinding<ChecksumCreateViewModel>.Property(nameof(model.Algorithm), m => m.Algorithm, (m, value) => m.Algorithm = value));
         var name = new TextBox { Name = "Name" };
-        name.Bind(TextBox.TextProperty, new Binding(nameof(model.Name)) { Mode = BindingMode.TwoWay });
+        name.Bind(TextBox.TextProperty,
+            DialogBinding<ChecksumCreateViewModel>.Property(nameof(model.Name), m => m.Name, (m, value) => m.Name = value));
         var error = ErrorText("Error");
         model.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(model.Error)) ShowError(error, model.Error); };
         var create = MakeButton(Loc.Get("Checksum_Create"), isDefault: true, name: "Create");

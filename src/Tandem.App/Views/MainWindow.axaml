@@ -1,5 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:c="using:Tandem.App.Commands"
+        xmlns:r="using:Tandem.App.Resources"
         xmlns:vm="using:Tandem.App.ViewModels"
         xmlns:v="using:Tandem.App.Views"
         x:Class="Tandem.App.Views.MainWindow"
@@ -13,6 +15,14 @@
             <v:ButtonBar x:Name="ButtonBar" />
         </Panel>
         <v:FKeyBar x:Name="FKeyBar" DockPanel.Dock="Bottom" IsVisible="{Binding Workspace.View.FKeyBar}" />
+
+        <Border DockPanel.Dock="Bottom" IsVisible="{Binding Net.HasOpenConsole}"
+                Background="{DynamicResource Tandem.BarBackground}" BorderBrush="{DynamicResource Tandem.DividerBrush}"
+                BorderThickness="0,1,0,0" Padding="6,1">
+            <Button x:Name="ShowSshConsole" Classes="flat" HorizontalAlignment="Right"
+                    Content="{r:Tr Key=Menu_net_console_show}" Command="{Binding RunCommand}"
+                    CommandParameter="{x:Static c:CommandIds.NetShowConsole}" />
+        </Border>
 
         <!-- Operations still running or waiting: a click shows the progress window again. -->
         <Border x:Name="OperationsBar" DockPanel.Dock="Bottom" IsVisible="{Binding Operations.HasOperations}"

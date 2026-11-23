@@ -34,12 +34,17 @@ internal sealed class ScriptedToolWindows : IToolWindows
 
     public bool HasOpenWindows => _open.Count > 0;
 
+    public event EventHandler? OpenWindowsChanged;
+
+    public T? LastOpen<T>() where T : class => _open.FindLast(model => model is T) as T;
+
     public void Show(object viewModel)
     {
         ArgumentNullException.ThrowIfNull(viewModel);
         Shown.Add(viewModel);
         if (_open.Contains(viewModel)) return;
         _open.Add(viewModel);
+        OpenWindowsChanged?.Invoke(this, EventArgs.Empty);
         foreach (var type in viewModel.GetType().GetInterfaces())
         {
             if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IDialogModel<>))
@@ -54,6 +59,7 @@ internal sealed class ScriptedToolWindows : IToolWindows
         {
             model.CloseRequested -= OnCloseRequested;
             if (!_open.Remove(viewModel)) return;
+            OpenWindowsChanged?.Invoke(this, EventArgs.Empty);
             _ = DisposeAsync(viewModel);
         }
 
@@ -78,6 +84,7 @@ internal sealed class ScriptedToolWindows : IToolWindows
         if (!_open.Contains(viewModel)) return true;
         if (viewModel is ICloseGuard guard && !await guard.CanCloseAsync()) return false;
         _open.Remove(viewModel);
+        OpenWindowsChanged?.Invoke(this, EventArgs.Empty);
         await DisposeAsync(viewModel);
         return true;
     }

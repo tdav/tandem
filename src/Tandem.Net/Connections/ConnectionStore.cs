@@ -1,5 +1,5 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 
 namespace Tandem.Net.Connections;
 
@@ -9,7 +9,7 @@ public sealed class ConnectionStore(string directory)
     public const string FileName = "connections.json";
 
     private readonly Lock _gate = new();
-    private readonly ConnectionFile<Document> _file = new(directory, FileName);
+    private readonly ConnectionFile<Document> _file = new(directory, FileName, ConnectionJsonContext.Format.Connections);
 
     public IReadOnlyList<ConnectionProfile> Load()
     {
@@ -58,17 +58,13 @@ public sealed class ConnectionStore(string directory)
         profile.Name is not null && profile.User is not null &&
         Enum.IsDefined(profile.Protocol) && Enum.IsDefined(profile.Auth);
 
-    private sealed record Document(int Version, IReadOnlyList<ConnectionProfile> Profiles);
+    internal sealed record Document(int Version, IReadOnlyList<ConnectionProfile> Profiles);
 }
 
 /// <summary>Reads and atomically replaces the application-owned connection and trust files.</summary>
-internal sealed class ConnectionFile<T>(string directory, string fileName) where T : class
+internal sealed class ConnectionFile<T>(string directory, string fileName, JsonTypeInfo<T> format)
+    where T : class
 {
-    private static readonly JsonSerializerOptions Options = new()
-    {
-        WriteIndented = true,
-        Converters = { new JsonStringEnumConverter(allowIntegerValues: false) },
-    };
 
     private readonly string _path = Path.Combine(directory, fileName);
 
@@ -77,7 +73,7 @@ internal sealed class ConnectionFile<T>(string directory, string fileName) where
         try
         {
             using var file = File.OpenRead(_path);
-            return JsonSerializer.Deserialize<T>(file, Options);
+            return JsonSerializer.Deserialize(file, format);
         }
         catch (Exception error) when (checkQuarantine && error is (FileNotFoundException or DirectoryNotFoundException))
         {
@@ -134,7 +130,7 @@ internal sealed class ConnectionFile<T>(string directory, string fileName) where
         {
             using (var file = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             {
-                JsonSerializer.Serialize(file, document, Options);
+                JsonSerializer.Serialize(file, document, format);
                 file.Flush(flushToDisk: true);
             }
             File.Move(temporary, _path, overwrite: true);

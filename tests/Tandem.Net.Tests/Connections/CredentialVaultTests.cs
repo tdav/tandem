@@ -29,6 +29,8 @@ public sealed class CredentialVaultTests
             new VaultEntry(Profile, "", [0, 255, 128], "фраза"),
             new VaultEntry(Profile with { Id = Guid.NewGuid(), Protocol = NetProtocol.FtpsExplicit, Auth = NetAuth.Password },
                 "секрет", null, null),
+            new VaultEntry(Profile with { Id = Guid.NewGuid(), Protocol = NetProtocol.Ssh },
+                null, [1, 2, 3], "ssh phrase"),
         ], Ct);
 
         Assert.True(vault.IsConfigured);
@@ -55,6 +57,7 @@ public sealed class CredentialVaultTests
         Assert.Equal("privateKey", profile.GetProperty("auth").GetString());
         Assert.Equal("ftpsExplicit", records[1].GetProperty("profile").GetProperty("protocol").GetString());
         Assert.Equal(JsonValueKind.Null, records[1].GetProperty("privateKey").ValueKind);
+        Assert.Equal("ssh", records[2].GetProperty("profile").GetProperty("protocol").GetString());
 
         using var reopened = new CredentialVault(directory.Path);
         await reopened.UnlockAsync(MasterPassword, Ct);
@@ -66,6 +69,8 @@ public sealed class CredentialVaultTests
         Assert.Equal("секрет", entries[1].Password);
         Assert.Null(entries[1].PrivateKey);
         Assert.Null(entries[1].Passphrase);
+        Assert.Equal(NetProtocol.Ssh, entries[2].Profile.Protocol);
+        Assert.Equal("ssh phrase", entries[2].Passphrase);
     }
 
     [Theory]
