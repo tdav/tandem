@@ -165,3 +165,16 @@ public class WindowsNameTests
     [InlineData("trailing ", false)]
     public void IsWindowsName(string name, bool expected) => Assert.Equal(expected, LocalPath.IsWindowsName(name));
 }
+
+public class LinkTargetTests
+{
+    [Theory]
+    [InlineData("/C:/a", @"C:\target", LocalPathStyle.Windows, @"C:\target")]
+    [InlineData("/C:/a", @"..\x", LocalPathStyle.Windows, "/C:/a/../x")]
+    [InlineData("/C:/a", @"\\srv\share", LocalPathStyle.Windows, @"\\srv\share")]
+    [InlineData("/a", "/t", LocalPathStyle.Unix, "/t")]
+    [InlineData("/a", "../x", LocalPathStyle.Unix, "/a/../x")]
+    [InlineData("/", "x", LocalPathStyle.Unix, "//x")]
+    public void JoinLinkTarget(string parent, string target, LocalPathStyle style, string expected) =>
+        Assert.Equal(expected, LocalPath.JoinLinkTarget(parent, target, style));
+}

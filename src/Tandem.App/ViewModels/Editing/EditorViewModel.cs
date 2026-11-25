@@ -396,8 +396,8 @@ public sealed partial class EditorViewModel : ObservableObject
         if (string.IsNullOrEmpty(target)) return null;
         try
         {
-            return new VfsPath(link.ProviderId,
-                target.StartsWith('/') ? target : link.Parent!.Value.Path + "/" + target);
+            return new VfsPath(link.ProviderId, LocalPath.JoinLinkTarget(link.Parent!.Value.Path, target,
+                link.ProviderId == VfsPath.LocalProviderId ? LocalPath.Current : LocalPathStyle.Unix));
         }
         catch (ArgumentException)
         {

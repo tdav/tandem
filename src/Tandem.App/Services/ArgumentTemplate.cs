@@ -1,3 +1,4 @@
+using Tandem.Core.Vfs.Local;
 using System.Text;
 
 namespace Tandem.App.Services;
@@ -141,5 +142,5 @@ public static class ArgumentTemplate
         return missing ? null : result.ToString();
     }
 
-    private static string NameOf(string path) => Path.GetFileName(path.TrimEnd('/'));
+    private static string NameOf(string path) => Path.GetFileName(path.TrimEnd('/', Path.DirectorySeparatorChar));
 }

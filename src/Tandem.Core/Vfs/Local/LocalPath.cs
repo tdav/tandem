@@ -118,6 +118,22 @@ public static class LocalPath
     public static bool EndsWithSeparator(string text, LocalPathStyle style) =>
         text.EndsWith('/') || (style == LocalPathStyle.Windows && text.EndsWith('\\'));
 
+    /// <summary>Where a link in <paramref name="parent"/> (a VFS path) leads: an absolute target as it is (on Windows
+    /// a drive or share path, which <see cref="VfsPath"/> converts for the local provider), a relative one joined to
+    /// the parent with '/' (on Windows '\\' separators become '/'). The result is not normalized yet.</summary>
+    public static string JoinLinkTarget(string parent, string target, LocalPathStyle style)
+    {
+        ArgumentNullException.ThrowIfNull(parent);
+        ArgumentNullException.ThrowIfNull(target);
+        if (target.StartsWith('/')) return target;
+        if (style == LocalPathStyle.Windows)
+        {
+            if (ExpandTyped(target, "", style) is { } absolute && !target.StartsWith('~')) return absolute;
+            target = target.Replace('\\', '/');
+        }
+        return parent + "/" + target;
+    }
+
     private static readonly HashSet<string> ReservedWindowsNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "CON", "PRN", "AUX", "NUL",

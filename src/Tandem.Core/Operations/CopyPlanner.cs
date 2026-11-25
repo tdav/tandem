@@ -1,4 +1,5 @@
 using Tandem.Core.Vfs;
+using Tandem.Core.Vfs.Local;
 
 namespace Tandem.Core.Operations;
 
@@ -103,9 +104,11 @@ internal sealed class CopyPlanner(ProviderRegistry providers, FileOperation oper
             if (entry is not { Kind: EntryKind.Symlink, IsDirectoryLike: true, LinkTarget: { } target }) break;
             try
             {
-                path = target.StartsWith('/')
-                    ? path with { Path = target }
-                    : path with { Path = path.Parent!.Value.Path + "/" + target };
+                path = path with
+                {
+                    Path = LocalPath.JoinLinkTarget(path.Parent!.Value.Path, target,
+                        path.ProviderId == VfsPath.LocalProviderId ? LocalPath.Current : LocalPathStyle.Unix),
+                };
             }
             catch (ArgumentException)
             {
