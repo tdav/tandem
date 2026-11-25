@@ -15,9 +15,12 @@ namespace Tandem.Core.Vfs.Local;
 /// by the system in the same call that renames; without one (or on a volume that has no exclusive rename) the
 /// destination is checked first and then renamed, which leaves a moment for another process to create it.</para>
 /// </summary>
-public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusiveRename? exclusiveRename = null)
+public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusiveRename? exclusiveRename = null,
+    IEntryIdentity? identity = null)
     : IFileSystemProvider, ILinkResolver
 {
+    private static readonly bool Windows = LocalPath.Current == LocalPathStyle.Windows;
+
     private const int EnumerationBatchSize = 256;
     private const int StreamBufferSize = 81920;
     private static readonly TimeSpan WatchCoalesceDelay = TimeSpan.FromMilliseconds(300);
@@ -32,18 +35,30 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusive
 
     private readonly IFileAccessBroker _broker = broker ?? throw new ArgumentNullException(nameof(broker));
     private readonly IExclusiveRename? _exclusiveRename = exclusiveRename;
+    private readonly IEntryIdentity _identity = identity ?? new UnixEntryIdentity();
 
     public string Id => VfsPath.LocalProviderId;
 
+    /// <summary>On Windows without <see cref="ProviderCapabilities.UnixPermissions"/>.</summary>
     public ProviderCapabilities Capabilities =>
-        ProviderCapabilities.Write | ProviderCapabilities.Trash | ProviderCapabilities.UnixPermissions |
-        ProviderCapabilities.Symlinks | ProviderCapabilities.Watch;
+        ProviderCapabilities.Write | ProviderCapabilities.Trash | ProviderCapabilities.Symlinks |
+        ProviderCapabilities.Watch | (Windows ? 0 : ProviderCapabilities.UnixPermissions);
 
     /// <summary>Yields entries in batches read on the thread pool, so a huge directory shows up progressively;
     /// the broker scope stays open until the enumeration ends.</summary>
+    /// <para>On Windows the root <c>/</c> lists the ready drives as directories named <c>C:</c>.</para>
     public async IAsyncEnumerable<FileEntry> EnumerateAsync(VfsPath directory,
         [EnumeratorCancellation] CancellationToken ct)
     {
+        if (Windows && directory.IsRoot && string.Equals(directory.ProviderId, Id, StringComparison.Ordinal))
+        {
+            foreach (var drive in await Task.Run(DriveEntries, ct))
+            {
+                ct.ThrowIfCancellationRequested();
+                yield return drive;
+            }
+            yield break;
+        }
         var listing = await Task.Run(() => Listing.Open(_broker, ToOsPath(directory)), ct);
         try
         {
@@ -64,7 +79,9 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusive
         }
     }
 
-    public Task<FileEntry?> GetEntryAsync(VfsPath path, CancellationToken ct) => RunAsync(path, ct, p =>
+    public Task<FileEntry?> GetEntryAsync(VfsPath path, CancellationToken ct) => Windows && path.IsRoot
+        ? Task.FromResult<FileEntry?>(RootEntry(path))
+        : RunAsync(path, ct, p =>
     {
         var info = new FileInfo(p);
         return Exists(info) ? ToEntry(path, info) : null;
@@ -74,9 +91,12 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusive
 
     /// <summary>As realpath(3) does, without needing the end to exist: walks the path name by name from the root,
     /// replacing every link met by its target, so ".." always steps out of a real folder.</summary>
-    public Task<VfsPath> ResolveLinksAsync(VfsPath path, CancellationToken ct) => RunAsync(path, ct, p =>
+    public Task<VfsPath> ResolveLinksAsync(VfsPath path, CancellationToken ct) => Windows && path.IsRoot
+        ? Task.FromResult(path)
+        : RunAsync(path, ct, _ =>
     {
-        var pending = new Stack<string>(p.Split('/', StringSplitOptions.RemoveEmptyEntries).Reverse());
+        // Walks the VFS form (on macOS the OS path itself); each prefix is converted for the system call.
+        var pending = new Stack<string>(path.Path.Split('/', StringSplitOptions.RemoveEmptyEntries).Reverse());
         var current = "/";
         var hops = 0;
         while (pending.TryPop(out var name))
@@ -85,20 +105,32 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusive
             if (name == ".") continue;
             if (name == "..")
             {
-                current = Path.GetDirectoryName(current) ?? "/";
+                var slash = current.LastIndexOf('/');
+                current = slash <= 0 ? "/" : current[..slash];
                 continue;
             }
             var next = current == "/" ? "/" + name : current + "/" + name;
             string? target;
-            using (_broker.Access(next)) target = new FileInfo(next).LinkTarget;
+            if (Windows && current == "/") target = null; // a drive or the UNC segment
+            else
+            {
+                var os = LocalPath.ToOs(next, LocalPath.Current);
+                using (_broker.Access(os)) target = new FileInfo(os).LinkTarget;
+            }
             if (target is null)
             {
                 current = next;
                 continue;
             }
-            if (++hops > MaxLinkHops) throw new VfsException($"Too many levels of symbolic links at '{p}'.");
-            foreach (var part in target.Split('/', StringSplitOptions.RemoveEmptyEntries).Reverse()) pending.Push(part);
-            if (target.StartsWith('/')) current = "/";
+            if (++hops > MaxLinkHops) throw new VfsException($"Too many levels of symbolic links at '{path.Path}'.");
+            if (Path.IsPathRooted(target))
+            {
+                target = LocalPath.FromOs(target, LocalPath.Current);
+                current = "/";
+            }
+            var separators = Windows ? new[] { '/', '\\' } : ['/'];
+            foreach (var part in target.Split(separators, StringSplitOptions.RemoveEmptyEntries).Reverse())
+                pending.Push(part);
         }
         return VfsPath.Local(current);
     });
@@ -124,8 +156,9 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusive
     {
         var info = new FileInfo(p);
         if (!Exists(info)) throw new VfsNotFoundException($"'{p}' does not exist.");
-        if (path.IsRoot) throw new VfsAccessDeniedException("Cannot delete the root.");
-        if (IsRealDirectory(info.Attributes))
+        if (path.IsRoot || LocalPath.IsDriveRoot(path.Path))
+            throw new VfsAccessDeniedException("Cannot delete the root.");
+        if (IsRealDirectory(info))
             Directory.Delete(p, recursive); // does not follow links inside the tree
         else
             File.Delete(p); // a file or a link (the link itself, never its target)
@@ -198,11 +231,13 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusive
     {
         var second = ToOsPath(b);
         using var access = _broker.Access(second);
-        return Identity(first) is { } x && Identity(second) is { } y && x == y;
+        return _identity.Get(first) is { } x && _identity.Get(second) is { } y && x == y;
     });
 
     /// <summary>The mount point of the longest mounted volume that contains the path (links are not resolved).</summary>
-    public Task<string> GetVolumeKeyAsync(VfsPath path, CancellationToken ct) => RunAsync(path, ct, _ =>
+    public Task<string> GetVolumeKeyAsync(VfsPath path, CancellationToken ct) => Windows && path.IsRoot
+        ? Task.FromResult("/")
+        : RunAsync(path, ct, _ =>
         DriveInfo.GetDrives()
             .Select(drive => VfsPath.Local(drive.RootDirectory.FullName))
             .Where(path.IsSameOrDescendantOf)
@@ -215,6 +250,7 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusive
     public IDisposable? Watch(VfsPath directory, Action changed)
     {
         ArgumentNullException.ThrowIfNull(changed);
+        if (Windows && directory.IsRoot) return null; // the drive list: nothing on disk to watch
         var p = ToOsPath(directory);
         return Translate(p, () =>
         {
@@ -238,7 +274,7 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusive
     {
         if (!string.Equals(path.ProviderId, Id, StringComparison.Ordinal))
             throw new ArgumentException($"Path '{path}' does not belong to provider '{Id}'.", nameof(path));
-        return path.Path;
+        return path.ToOsPath();
     }
 
     private Task<T> RunAsync<T>(VfsPath path, CancellationToken ct, Func<string, T> body) => Task.Run(() =>
@@ -273,35 +309,17 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusive
         }
     }
 
-    private const int ENOENT = 2, EACCES = 13, ENOTDIR = 20;
-    private const int StatBufferSize = 256; // struct stat is 144 bytes on macOS
-
-    /// <summary>(device, inode) of the entry itself, or null when it does not exist.</summary>
-    private static (int Device, ulong Inode)? Identity(string path)
-    {
-        if (!OperatingSystem.IsMacOS())
-            throw new PlatformNotSupportedException("Entry identity is implemented for macOS only.");
-        var buffer = new byte[StatBufferSize];
-        if (LStat(path, buffer) != 0)
-        {
-            var errno = Marshal.GetLastPInvokeError();
-            if (errno is ENOENT or ENOTDIR) return null;
-            if (errno == EACCES) throw new VfsAccessDeniedException($"Access to '{path}' is denied.");
-            throw new VfsException($"Cannot read '{path}' (errno {errno}).");
-        }
-        // macOS (64-bit inodes): dev_t st_dev at 0 (int32), ino_t st_ino at 8 (uint64).
-        return (BitConverter.ToInt32(buffer, 0), BitConverter.ToUInt64(buffer, 8));
-    }
-
-    [DllImport("libc", EntryPoint = "lstat", SetLastError = true)]
-    private static extern int LStat([MarshalAs(UnmanagedType.LPUTF8Str)] string path, [Out] byte[] buffer);
-
     /// <summary>True when the entry itself exists (a broken link counts); <see cref="FileSystemInfo.Attributes"/>
     /// is -1 for a missing path.</summary>
     private static bool Exists(FileSystemInfo info) => (int)info.Attributes != -1;
 
-    private static bool IsRealDirectory(FileAttributes attributes) =>
-        attributes.HasFlag(FileAttributes.Directory) && !attributes.HasFlag(FileAttributes.ReparsePoint);
+    private static bool IsRealDirectory(FileSystemInfo info) =>
+        info.Attributes.HasFlag(FileAttributes.Directory) && !IsLink(info);
+
+    /// <summary>A symbolic link (on Windows also a junction). On Windows other reparse points — OneDrive's
+    /// on-demand files and folders, deduplicated files — are ordinary entries: they have no link target.</summary>
+    private static bool IsLink(FileSystemInfo info) =>
+        info.Attributes.HasFlag(FileAttributes.ReparsePoint) && (!Windows || ReadLinkTarget(info) is not null);
 
     /// <summary>True when <paramref name="destination"/> names the entry <paramref name="source"/> itself (same device
     /// and inode, <c>lstat</c>) in the same directory (the parents compared the same way, but with links to them
@@ -310,30 +328,31 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusive
     /// source — under another name, or under an equivalent name in another directory, where a plain <c>rename(2)</c>
     /// between two links of one file does nothing and reports success — from counting as the source, and a move onto
     /// the very same name is still refused as existing.</summary>
-    private static bool IsRespelling(string source, string destination)
+    private bool IsRespelling(string source, string destination)
     {
         var sourceName = Path.GetFileName(source);
         var destinationName = Path.GetFileName(destination);
         return !string.Equals(sourceName, destinationName, StringComparison.Ordinal) &&
                string.Equals(sourceName.Normalize(NormalizationForm.FormC),
                    destinationName.Normalize(NormalizationForm.FormC), StringComparison.OrdinalIgnoreCase) &&
-               Identity(destination) is { } target && Identity(source) == target &&
+               _identity.Get(destination) is { } target && _identity.Get(source) == target &&
                Path.GetDirectoryName(source) is { } sourceParent &&
                Path.GetDirectoryName(destination) is { } destinationParent &&
-               Identity(Resolved(sourceParent)) is { } parent && Identity(Resolved(destinationParent)) == parent;
+               _identity.Get(Resolved(sourceParent)) is { } parent &&
+               _identity.Get(Resolved(destinationParent)) == parent;
     }
 
     /// <summary>The directory path with a trailing '/', so that <c>lstat</c> resolves a linked folder to the folder
     /// itself (a panel in "/tmp" names "/tmp/a" where the resolved destination is "/private/tmp/A").</summary>
     private static string Resolved(string directory) =>
-        directory.EndsWith('/') ? directory : directory + "/";
+        directory.EndsWith(Path.DirectorySeparatorChar) ? directory : directory + Path.DirectorySeparatorChar;
 
     private static FileEntry ToEntry(VfsPath path, FileSystemInfo info)
     {
         var attributes = info.Attributes;
         // The same test as DeleteAsync: a link is a link even when its target cannot be read (readlink refused):
         // it is then reported without a target, and never as the directory it may lead to.
-        var isLink = attributes.HasFlag(FileAttributes.ReparsePoint);
+        var isLink = IsLink(info);
         var linkTarget = isLink ? ReadLinkTarget(info) : null;
         var kind = isLink ? EntryKind.Symlink
             : attributes.HasFlag(FileAttributes.Directory) ? EntryKind.Directory
@@ -344,7 +363,7 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusive
             EntryKind.Symlink => linkTarget is null ? 0 : Encoding.UTF8.GetByteCount(linkTarget),
             _ => 0,
         };
-        var mode = info.UnixFileMode; // -1 when unknown, e.g. for a broken link
+        var mode = Windows ? (UnixFileMode)(-1) : info.UnixFileMode; // -1 when unknown, e.g. for a broken link
         return new FileEntry(path, kind, size,
             Modified: new DateTimeOffset(info.LastWriteTimeUtc, TimeSpan.Zero),
             Created: new DateTimeOffset(info.CreationTimeUtc, TimeSpan.Zero),
@@ -353,6 +372,20 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusive
             LinkTarget: linkTarget,
             LinkPointsToDirectory: kind == EntryKind.Symlink && attributes.HasFlag(FileAttributes.Directory));
     }
+
+    /// <summary>Windows: the root itself, the virtual folder of drives.</summary>
+    private static FileEntry RootEntry(VfsPath root) =>
+        new(root, EntryKind.Directory, 0, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, null, false, null, false);
+
+    /// <summary>Windows: the ready drives, as directories named <c>C:</c>.</summary>
+    private static List<FileEntry> DriveEntries() =>
+        DriveInfo.GetDrives()
+            .Where(drive => drive.IsReady)
+            .Select(drive => VfsPath.Local(drive.RootDirectory.FullName))
+            .Where(path => LocalPath.IsDriveRoot(path.Path))
+            .Select(path => new FileEntry(path, EntryKind.Directory, 0, DateTimeOffset.UnixEpoch,
+                DateTimeOffset.UnixEpoch, null, false, null, false))
+            .ToList();
 
     /// <summary>The link's target, or null when it cannot be read.</summary>
     private static string? ReadLinkTarget(FileSystemInfo info)
