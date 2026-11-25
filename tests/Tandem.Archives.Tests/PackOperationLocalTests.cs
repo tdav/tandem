@@ -47,6 +47,7 @@ public sealed class PackOperationLocalTests : IDisposable
     [InlineData(ArchiveFormat.TarGz)]
     public async Task System_tools_accept_packed_zip_and_tar_gz(ArchiveFormat format)
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Runs the macOS unzip and tar.");
         var source = _dir.Combine("src");
         Directory.CreateDirectory(Path.Combine(source, "папка", "пустая"));
         await File.WriteAllTextAsync(Path.Combine(source, "папка", "файл.txt"), "содержимое", Ct);
@@ -110,6 +111,7 @@ public sealed class PackOperationLocalTests : IDisposable
     [InlineData(ArchiveFormat.TarGz)]
     public async Task Names_the_writer_would_change_are_skipped_and_listed_never_written_altered(ArchiveFormat format)
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Names with ':' and '\\' cannot exist on a Windows disk.");
         var (_, sources, unstorable) = AddNamesWritersWouldChange();
         var archive = _dir.Combine("packed." + ArchiveFormats.DefaultExtension(format));
         var op = new PackOperation(_providers, sources, VfsPath.Local(archive), format, new ScriptedInteraction(),
@@ -132,6 +134,7 @@ public sealed class PackOperationLocalTests : IDisposable
     public async Task Archive_whose_listing_differs_from_what_was_written_fails_and_leaves_nothing(
         ArchiveFormat format)
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Names with ':' and '\\' cannot exist on a Windows disk.");
         var (source, _, _) = AddNamesWritersWouldChange();
         var archive = _dir.Combine("packed." + ArchiveFormats.DefaultExtension(format));
         var op = new PackOperation(_providers,

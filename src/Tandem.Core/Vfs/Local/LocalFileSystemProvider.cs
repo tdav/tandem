@@ -136,17 +136,20 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusive
         return VfsPath.Local(current);
     });
 
+    /// <summary>Opened so that other programs may still write, rename and delete the file (on Windows a plain open
+    /// would lock it against them, and against renaming or deleting its folders, for as long as Tandem holds it,
+    /// e.g. while an archive is browsed).</summary>
     public Task<Stream> OpenReadAsync(VfsPath path, CancellationToken ct) => RunAsync<Stream>(path, ct, p =>
     {
         if (Directory.Exists(p)) throw new VfsException($"'{p}' is a directory.");
-        return new FileStream(p, FileMode.Open, FileAccess.Read, FileShare.Read, StreamBufferSize,
+        return new FileStream(p, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, StreamBufferSize,
             FileOptions.Asynchronous | FileOptions.SequentialScan);
     });
 
     public Task<Stream> OpenWriteAsync(VfsPath path, CancellationToken ct) => RunAsync<Stream>(path, ct, p =>
     {
         if (Directory.Exists(p)) throw new VfsException($"'{p}' is a directory.");
-        return new FileStream(p, FileMode.Create, FileAccess.Write, FileShare.Read, StreamBufferSize,
+        return new FileStream(p, FileMode.Create, FileAccess.Write, FileShare.Read | FileShare.Delete, StreamBufferSize,
             FileOptions.Asynchronous);
     });
 

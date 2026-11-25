@@ -558,6 +558,7 @@ public class SharpCompressZoneProbeTests
 {
     private static void InZone(string zone, TimeSpan offset, Action action)
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "The TZ variable picks the local zone on Unix only.");
         var saved = Environment.GetEnvironmentVariable("TZ");
         Environment.SetEnvironmentVariable("TZ", zone);
         TimeZoneInfo.ClearCachedData();

@@ -106,7 +106,7 @@ public sealed class ArchiveProviderLocalTests : IDisposable
         Assert.Empty(Directory.EnumerateFileSystemEntries(victim.Path, "*", SearchOption.AllDirectories));
         var options = new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = 0 };
         var added = Directory.EnumerateFileSystemEntries(_dir.Path, "*", options).Where(p => !before.Contains(p));
-        Assert.All(added, p => Assert.StartsWith(output + "/", p, StringComparison.Ordinal));
+        Assert.All(added, p => Assert.StartsWith(output + Path.DirectorySeparatorChar, p, StringComparison.Ordinal));
         Assert.DoesNotContain(Directory.EnumerateFiles(output, "*", options), p => p.EndsWith("file.txt",
             StringComparison.OrdinalIgnoreCase));
 

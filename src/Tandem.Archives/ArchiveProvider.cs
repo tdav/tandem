@@ -192,7 +192,7 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
         lock (_preparedLock)
         {
             if (ReferenceEquals(_preparedFor, snapshot) && _prepared.TryGetValue(node.Path, out var file))
-                return new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, CopyBufferSize,
+                return new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, CopyBufferSize,
                     useAsync: true);
         }
         var password = _password;
@@ -666,7 +666,7 @@ public sealed partial class ArchiveProvider : IFileSystemProvider, IHostedProvid
     }
 
     private static FileStream OpenLocalCopy(string path) =>
-        new(path, FileMode.Open, FileAccess.Read, FileShare.Read, CopyBufferSize, useAsync: false);
+        new(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, CopyBufferSize, useAsync: false);
 
     // ---- Errors --------------------------------------------------------------------------------------------
 

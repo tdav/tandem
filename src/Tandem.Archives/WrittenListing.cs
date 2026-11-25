@@ -42,7 +42,7 @@ internal sealed class WrittenListing
                                  CopyBufferSize, useAsync: true))
                     await stream.CopyToAsync(local, CopyBufferSize, ct).ConfigureAwait(false);
                 await stream.DisposeAsync().ConfigureAwait(false);
-                stream = new FileStream(copy, FileMode.Open, FileAccess.Read, FileShare.Read, CopyBufferSize,
+                stream = new FileStream(copy, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, CopyBufferSize,
                     useAsync: false);
             }
             Dictionary<string, (bool, long)> listed;

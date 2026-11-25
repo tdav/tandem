@@ -368,7 +368,7 @@ public sealed partial class ViewerViewModel : ObservableObject, IAsyncDisposable
                 await CopyAsync(stream, copy, ct).ConfigureAwait(false);
                 await stream.DisposeAsync().ConfigureAwait(false);
                 stream = null;
-                stream = new FileStream(copy, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, useAsync: true);
+                stream = new FileStream(copy, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, 4096, useAsync: true);
             }
             var length = stream.Length;
 

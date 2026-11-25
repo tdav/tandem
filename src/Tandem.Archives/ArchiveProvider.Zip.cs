@@ -202,7 +202,7 @@ public sealed partial class ArchiveProvider
             FileStream file;
             try
             {
-                file = new FileStream(content, FileMode.CreateNew, FileAccess.Write, FileShare.Read, CopyBufferSize,
+                file = new FileStream(content, FileMode.CreateNew, FileAccess.Write, FileShare.Read | FileShare.Delete, CopyBufferSize,
                     useAsync: true);
             }
             catch
@@ -350,7 +350,7 @@ public sealed partial class ArchiveProvider
     /// <summary>A file's content as it will be: written in this batch, or the archive's entry as last read.</summary>
     private Task<Stream> OpenContentAsync(Edits edits, EditNode node, CancellationToken ct) =>
         node.Content is { } content
-            ? Task.FromResult<Stream>(new FileStream(content, FileMode.Open, FileAccess.Read, FileShare.ReadWrite,
+            ? Task.FromResult<Stream>(new FileStream(content, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete,
                 CopyBufferSize, useAsync: true))
             : OpenEntryAsync(edits.Base, node.Original!, _password, ct);
 

@@ -92,6 +92,7 @@ public sealed class ZipEditingLocalTests : IDisposable
     [Fact]
     public async Task System_unzip_accepts_the_archive_after_edits()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Runs the macOS unzip.");
         var archive = await OpenAsync();
 
         await EditAsync(archive);
@@ -111,6 +112,7 @@ public sealed class ZipEditingLocalTests : IDisposable
     [Fact]
     public async Task System_unzip_accepts_an_archive_rewritten_through_a_stream_that_cannot_seek()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Runs the macOS unzip.");
         var host = new CountingHostProvider(); // its write streams do not seek, like a file inside another archive
         _providers.Register(host);
         host.Files.AddFile("/sample.zip", Fixture.Bytes("sample.zip"));
