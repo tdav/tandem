@@ -231,10 +231,12 @@ public class DragDropWindowTests : LanguageTestBase
         var point = BelowTheRows(app, PanelSide.Right);
         app.Dialogs.AnswerCopyMove(); // Enter: the pre-selected action
 
-        // A platform that still offers everything with Cmd held (not what macOS does, see MacOffer).
+        // A platform that still offers everything with Cmd held (not what macOS does, see MacOffer). On Windows the
+        // move key is Shift, as in Explorer.
+        var move = OperatingSystem.IsWindows() ? RawInputModifiers.Shift : RawInputModifiers.Meta;
         Drag(app, point, RawDragEventType.DragEnter, data, offered: All);
-        Drag(app, point, RawDragEventType.DragOver, data, RawInputModifiers.Meta, offered: All);
-        Drag(app, point, RawDragEventType.Drop, data, RawInputModifiers.Meta, offered: All);
+        Drag(app, point, RawDragEventType.DragOver, data, move, offered: All);
+        Drag(app, point, RawDragEventType.Drop, data, move, offered: All);
         await WaitForRequest(app);
 
         Assert.Equal([DragDropEffects.Copy, DragDropEffects.Copy], effects.Select(e => e.Effects));
@@ -387,7 +389,7 @@ public class DragDropWindowTests : LanguageTestBase
             return app.Dialogs.CopyMoveRequests.Count == 1;
         });
 
-        Assert.Equal(outside.Root + "/x.txt", app.Dialogs.CopyMoveRequests[0].Destination);
+        Assert.Equal(Path.Join(outside.Root, "x.txt"), app.Dialogs.CopyMoveRequests[0].Destination);
     }
 
     // ---- Dragging out of a panel -------------------------------------------------------------------------
@@ -441,9 +443,9 @@ public class DragDropWindowTests : LanguageTestBase
         Assert.Equal("report.pdf", app.Left.CursorRow?.Name);
 
         var notes = app.CenterOf(Row(app, PanelSide.Left, "notes.txt"));
-        app.Window.MouseDown(notes, MouseButton.Left, RawInputModifiers.Meta);
-        app.Window.MouseMove(notes + new Point(20, 0), RawInputModifiers.LeftMouseButton | RawInputModifiers.Meta);
-        app.Window.MouseUp(notes + new Point(20, 0), MouseButton.Left, RawInputModifiers.Meta);
+        app.Window.MouseDown(notes, MouseButton.Left, TestKeys.Platform(RawInputModifiers.Meta));
+        app.Window.MouseMove(notes + new Point(20, 0), TestKeys.Platform(RawInputModifiers.LeftMouseButton | RawInputModifiers.Meta));
+        app.Window.MouseUp(notes + new Point(20, 0), MouseButton.Left, TestKeys.Platform(RawInputModifiers.Meta));
         app.Pump();
         Assert.True(app.Left.Rows[IndexOf(app.Left, "notes.txt")].IsSelected); // Cmd+click marked, as before
 

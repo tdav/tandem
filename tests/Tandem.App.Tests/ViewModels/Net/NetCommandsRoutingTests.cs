@@ -38,6 +38,7 @@ public sealed class NetCommandsRoutingTests : LanguageTestBase
     [AvaloniaFact]
     public async Task Manager_connects_the_active_panel_and_disconnect_returns_every_server_tab()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests and WindowsStartTests cover Windows.");
         var server = Server();
         var dialogs = new RoutingDialogs(Profile.Id);
         await using var app = await StartAsync(server, dialogs);

@@ -348,7 +348,11 @@ public partial class FileListView : UserControl
         var effect = offered.HasFlag(DragDropEffects.Copy) ? DragDropEffects.Copy
             : offered.HasFlag(DragDropEffects.Move) ? DragDropEffects.Move
             : DragDropEffects.Link;
-        return (paths, target, effect, PlatformKeys.HasCommand(e.KeyModifiers));
+        // The move key: Cmd on macOS; Shift on Windows, as in Explorer (Ctrl there means copy).
+        var preferMove = PlatformKeys.IsWindows
+            ? e.KeyModifiers.HasFlag(KeyModifiers.Shift)
+            : e.KeyModifiers.HasFlag(KeyModifiers.Meta);
+        return (paths, target, effect, preferMove);
     }
 
     /// <summary>A dialog of the app (owned by its window; the progress window is not a dialog) is open.</summary>

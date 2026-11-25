@@ -167,6 +167,7 @@ public sealed class TerminalViewModelTests
     [AvaloniaFact]
     public async Task Terminal_window_sends_text_and_arrow_input_and_closes_with_command_w()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Cmd+W; on Windows the console closes with Ctrl+Shift+W (Ctrl+W belongs to the shell).");
         var transport = new Transport();
         await using var model = new TerminalViewModel("Test", () => transport, new Clipboard(), _ => Task.FromResult(true),
             _ => { });

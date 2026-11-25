@@ -140,6 +140,7 @@ public sealed class ZipEditingLocalTests : IDisposable
     [Fact]
     public async Task Edit_on_real_disk_leaves_no_temp_files_next_to_the_archive()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix permissions.");
         var archive = await OpenAsync();
 
         await EditAsync(archive);

@@ -242,8 +242,8 @@ internal sealed class TestApp : IAsyncDisposable
         MouseButton button = MouseButton.Left)
     {
         var point = CenterOf(control);
-        Window.MouseDown(point, button, modifiers);
-        Window.MouseUp(point, button, modifiers);
+        Window.MouseDown(point, button, TestKeys.Platform(modifiers));
+        Window.MouseUp(point, button, TestKeys.Platform(modifiers));
         Pump();
     }
 

@@ -544,6 +544,7 @@ public class QuickViewTests : LanguageTestBase
     [AvaloniaFact]
     public async Task Swapping_panels_closes_quick_view()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests and WindowsStartTests cover Windows.");
         await using var app = await StartAsync();
         var quick = await OpenAsync(app, "notes.txt");
 

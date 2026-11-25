@@ -275,7 +275,15 @@ public class HostedPanelTests : LanguageTestBase
         Cursor(app.Left, "top.txt");
 
         await app.Left.ActivateAsync();
-        await TestApp.WaitUntil(() => app.Shell.Calls.Count > 0);
+        try
+        {
+            await TestApp.WaitUntil(() => app.Shell.Calls.Count > 0);
+        }
+        catch (TimeoutException e)
+        {
+            throw new TimeoutException(
+                $"failures: {string.Join(" | ", app.Failures)}; messages: {string.Join(" | ", app.Dialogs.Messages)}", e);
+        }
 
         var (call, path) = Assert.Single(app.Shell.Calls);
         Assert.Equal("open", call);

@@ -87,6 +87,8 @@ public partial class OutputPane : UserControl
 
     private void OnTextKeyDown(object? sender, KeyEventArgs e)
     {
+        // On Windows Ctrl+C is also the copy: with text selected in the output it copies, as in a console window.
+        if (Input.PlatformKeys.IsWindows && sender is TextBox { SelectedText.Length: > 0 }) return;
         if (CommandLineView.TryKill(_model, e)) e.Handled = true;
     }
 }
