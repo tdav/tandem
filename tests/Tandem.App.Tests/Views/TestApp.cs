@@ -443,7 +443,12 @@ internal sealed class RecordingShell : IShellIntegration
         return verdict;
     }
     public Task RevealInFinder(string path) => Record("reveal", path);
-    public Task OpenTerminal(string directory) => Record("terminal", directory);
+    public List<TerminalChoice> Terminals { get; } = [];
+    public Task OpenTerminal(string directory, TerminalChoice terminal)
+    {
+        Terminals.Add(terminal);
+        return Record("terminal", directory);
+    }
     public Task OpenFullDiskAccessSettings() => Record("settings", "");
 }
 
@@ -517,7 +522,7 @@ internal sealed class FakePlatform : IShellIntegration, IQuickLook, IFileMetadat
     public IReadOnlyList<AppInfo> GetAppsFor(string path) => throw NotHere();
     public Task OpenWith(string path, AppInfo app) => throw NotHere();
     public Task RevealInFinder(string path) => throw NotHere();
-    public Task OpenTerminal(string directory) => throw NotHere();
+    public Task OpenTerminal(string directory, TerminalChoice terminal) => throw NotHere();
     public Task OpenFullDiskAccessSettings() => throw NotHere();
     public bool IsOpen => false;
     public void Toggle(IReadOnlyList<string> paths) => throw NotHere();

@@ -9,6 +9,7 @@ using Tandem.App.Services;
 using Tandem.App.ViewModels;
 using Tandem.App.Views;
 using Tandem.Core.Settings;
+using Tandem.Core.Themes;
 
 namespace Tandem.App;
 
@@ -38,6 +39,8 @@ public partial class App : Application
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
+        // The design system's resources (colours, fonts, sizes) exist before any window is built.
+        ThemeService.Apply(BuiltInThemes.Stone);
     }
 
     public override void OnFrameworkInitializationCompleted()
@@ -69,7 +72,7 @@ public partial class App : Application
             var stateDirectory = AppDirectories.State(home);
             _main = await Composition.StartAsync(_services, stateDirectory, home);
             _main.CommandFailed += (_, e) => ReportUnexpected(e, "command");
-            _window = new MainWindow(_main);
+            _window = new MainWindow(_main, stateDirectory: stateDirectory);
             if (_services.Dialogs is DialogService dialogs) dialogs.Owner = _window;
             if (_services.Windows is WindowService windows) windows.Owner = _window;
             if (_services.ToolWindows is ToolWindows tools) tools.Owner = _window;

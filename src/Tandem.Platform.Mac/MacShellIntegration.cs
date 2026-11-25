@@ -1,5 +1,6 @@
 using System.Runtime.Versioning;
 using Tandem.Core.Platform;
+using Tandem.Core.Settings;
 using Tandem.Platform.Mac.Interop;
 
 namespace Tandem.Platform.Mac;
@@ -43,10 +44,10 @@ public sealed class MacShellIntegration(IProcessRunner runner) : IShellIntegrati
         return Open("-R", path);
     }
 
-    public Task OpenTerminal(string directory)
+    public Task OpenTerminal(string directory, TerminalChoice terminal)
     {
         ProcessLaunch.RequireAbsolute(directory, nameof(directory));
-        return Open("-a", "Terminal", directory);
+        return Open("-a", terminal == TerminalChoice.ITerm ? "iTerm" : "Terminal", directory);
     }
 
     public Task OpenFullDiskAccessSettings() => Open(FullDiskAccessPane);

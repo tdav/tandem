@@ -34,8 +34,14 @@
             <Setter Property="Padding" Value="10,3" />
             <Setter Property="MinHeight" Value="0" />
         </Style>
+        <!-- The selected tab: the list's surface, underlined in the input colour (focus). -->
+        <Style Selector="ListBox#TabStrip ListBoxItem /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="BorderBrush" Value="{DynamicResource Tandem.Transparent}" />
+            <Setter Property="BorderThickness" Value="0,0,0,2" />
+        </Style>
         <Style Selector="ListBox#TabStrip ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource Tandem.TabActiveBackground}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Tandem.Focus}" />
         </Style>
     </UserControl.Styles>
 
@@ -70,7 +76,7 @@
         <ListBox x:Name="TabStrip" DockPanel.Dock="Top" Focusable="False"
                  ScrollViewer.HorizontalScrollBarVisibility="Auto"
                  ItemsSource="{Binding Tabs.Tabs}" SelectedItem="{Binding SelectedTab}"
-                 Background="{DynamicResource Tandem.BarBackground}">
+                 Background="{DynamicResource Tandem.SurfaceRaised}">
             <ListBox.ItemsPanel>
                 <ItemsPanelTemplate>
                     <StackPanel Orientation="Horizontal" />

@@ -102,4 +102,6 @@ public partial class SettingsWindow : Window
     private void OnAddFileColor(object? sender, RoutedEventArgs e) => Settings.AddFileColor();
 
     private void OnAddButton(object? sender, RoutedEventArgs e) => Settings.AddButton();
+
+    private async void OnOpenThemesFolder(object? sender, RoutedEventArgs e) => await Settings.OpenThemesFolderAsync();
 }

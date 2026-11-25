@@ -4,7 +4,9 @@ using Tandem.App.Commands;
 using Tandem.App.Resources;
 using Tandem.App.Services;
 using Tandem.App.Views;
+using Tandem.Core.Platform;
 using Tandem.Core.Settings;
+using Tandem.Core.Themes;
 
 namespace Tandem.App.ViewModels.Settings;
 
@@ -24,6 +26,17 @@ public enum ChordAssignment
 
 /// <summary>A theme in the settings window's list, with its label.</summary>
 public sealed record ThemeOption(ThemeChoice Value, string Label);
+
+/// <summary>A theme of <see cref="ThemeCatalog.List"/> in the settings window's list. One whose file cannot be read
+/// (<see cref="Error"/>) is shown marked but cannot be chosen.</summary>
+public sealed record ColorSchemeOption(string Id, string Label, string? Error, bool IsBuiltIn)
+{
+    public bool IsSelectable => Error is null;
+
+    internal static ColorSchemeOption From(ThemeInfo theme) => new(theme.Id,
+        theme.Error is null ? theme.Name : Loc.Format("Settings_ColorSchemeBroken", theme.Name), theme.Error,
+        theme.Path is null);
+}
 
 /// <summary>A colour of <see cref="AppSettings.ColorNames"/> in the settings window's list, with its label.</summary>
 public sealed record ColorOption(string Value, string Label);
@@ -154,6 +167,8 @@ public sealed partial class SettingsViewModel : ObservableObject
 {
     private readonly SettingsService _settings;
     private readonly ShortcutRow[] _shortcuts;
+    private readonly IShellIntegration? shell;
+    private string colorSchemeId;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectedTheme))]
@@ -181,6 +196,22 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private int _sshPanelIndex;
 
+    /// <summary>The terminals this platform has, in the order of the combo box; the first is the default.</summary>
+    public static IReadOnlyList<TerminalChoice> TerminalChoices { get; } = OperatingSystem.IsMacOS()
+        ? [TerminalChoice.Default, TerminalChoice.ITerm]
+        : [TerminalChoice.Default, TerminalChoice.WindowsTerminal, TerminalChoice.Cmd];
+
+    public static IReadOnlyList<string> TerminalOptions { get; } = TerminalChoices.Select(c => c switch
+    {
+        TerminalChoice.WindowsTerminal => Loc.Get("Settings_TerminalWindowsTerminal"),
+        TerminalChoice.Cmd => Loc.Get("Settings_TerminalCmd"),
+        TerminalChoice.ITerm => Loc.Get("Settings_TerminalITerm"),
+        _ => Loc.Get(OperatingSystem.IsMacOS() ? "Settings_TerminalMacDefault" : "Settings_TerminalPowerShell"),
+    }).ToArray();
+
+    [ObservableProperty]
+    private int _terminalIndex;
+
     public static IReadOnlyList<string> SshPanelOptions =>
         [Loc.Get("Settings_LeftPanel"), Loc.Get("Settings_RightPanel")];
 
@@ -199,17 +230,24 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     /// <param name="keyMap">The key map in effect (the main window's); when null, the default map with the
     /// settings' overrides, which is the same.</param>
-    public SettingsViewModel(SettingsService settings, KeyMap? keyMap = null)
+    /// <param name="shell">Opens the themes folder; without it <see cref="OpenThemesFolderAsync"/> does nothing.</param>
+    public SettingsViewModel(SettingsService settings, KeyMap? keyMap = null, IShellIntegration? shell = null)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
+        this.shell = shell;
         var current = settings.Current;
         keyMap ??= KeyMap.Platform.WithOverrides(current.KeyBindings);
         _theme = current.Theme;
+        colorSchemeId = current.ThemeName ?? BuiltInThemes.StoneId;
+        var themes = settings.Themes?.List()
+                     ?? [new ThemeInfo(BuiltInThemes.StoneId, BuiltInThemes.Stone.Name, null, null)];
+        ColorSchemes = themes.Select(ColorSchemeOption.From).ToArray();
         _fontSize = current.FontSize;
         _rowHeight = current.RowHeight;
         _externalEditor = current.ExternalEditor ?? "";
         _sshInPanelTab = current.SshConsolePlacement == SshConsolePlacement.PanelTab;
         _sshPanelIndex = current.SshConsolePanel == SshConsoleSide.Left ? 0 : 1;
+        _terminalIndex = Math.Max(0, TerminalChoices.ToList().IndexOf(current.Terminal));
         FileColors = new(current.FileColors.Select(r => new FileColorRuleRow { Mask = r.Mask, Color = r.Color }));
         LeftColumns = new(current.LeftColumns.Select(c => new ColumnRow(c.Column, c.Visible, c.Width)));
         RightColumns = new(current.RightColumns.Select(c => new ColumnRow(c.Column, c.Visible, c.Width)));
@@ -245,6 +283,39 @@ public sealed partial class SettingsViewModel : ObservableObject
         set
         {
             if (value is not null) Theme = value.Value;
+        }
+    }
+
+    /// <summary>The themes there are, the built-in one first; read when the window opens.</summary>
+    public IReadOnlyList<ColorSchemeOption> ColorSchemes { get; }
+
+    /// <summary>The theme <see cref="Apply"/> saves as <see cref="AppSettings.ThemeName"/>; null when the saved name
+    /// is not in <see cref="ColorSchemes"/> (then it stays). One that cannot be read is not taken.</summary>
+    public ColorSchemeOption? SelectedColorScheme
+    {
+        get => ColorSchemes.FirstOrDefault(o => string.Equals(o.Id, colorSchemeId, StringComparison.OrdinalIgnoreCase));
+        set
+        {
+            if (value is { IsSelectable: true } && value.Id != colorSchemeId) colorSchemeId = value.Id;
+            // A refused choice puts the list back on the theme kept.
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>Opens the themes folder in the system file browser, making it first when it is missing. A failure
+    /// shows in <see cref="Error"/>.</summary>
+    public async Task OpenThemesFolderAsync()
+    {
+        if (shell is null || _settings.Themes is not { } themes) return;
+        try
+        {
+            Directory.CreateDirectory(themes.Directory);
+            await shell.OpenDefault(themes.Directory);
+        }
+        catch (Exception e)
+        {
+            // Whatever the launcher throws (a process that cannot start, too) is told here, not lost.
+            Error = e.Message;
         }
     }
 
@@ -388,8 +459,12 @@ public sealed partial class SettingsViewModel : ObservableObject
         _settings.Update(current with
         {
             Theme = Theme,
+            ThemeName = SelectedColorScheme is { } scheme
+                ? scheme.IsBuiltIn ? null : scheme.Id
+                : current.ThemeName,
             SshConsolePlacement = SshInPanelTab ? SshConsolePlacement.PanelTab : SshConsolePlacement.SeparateWindow,
             SshConsolePanel = SshPanelIndex == 0 ? SshConsoleSide.Left : SshConsoleSide.Right,
+            Terminal = TerminalChoices[Math.Clamp(TerminalIndex, 0, TerminalChoices.Count - 1)],
             FontSize = FontSize,
             RowHeight = RowHeight,
             LeftColumns = LeftColumns.Select(c => c.ToSetting()).ToArray(),

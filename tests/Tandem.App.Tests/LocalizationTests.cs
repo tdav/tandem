@@ -219,6 +219,41 @@ public class LocalizationTests : LanguageTestBase
     }
 
     [AvaloniaFact]
+    public void Design_system_tokens_switch_with_the_theme_and_back_the_views_and_controls()
+    {
+        // tokens.json of the design system: surface, ink, accent, focus in each theme.
+        Assert.Equal(Color.Parse("#bbb8b0"), ThemeColor("Tandem.Surface", ThemeVariant.Light));
+        Assert.Equal(Color.Parse("#2a2927"), ThemeColor("Tandem.Surface", ThemeVariant.Dark));
+        Assert.Equal(Color.Parse("#1b1a18"), ThemeColor("Tandem.Ink", ThemeVariant.Light));
+        Assert.Equal(Color.Parse("#dbd7ce"), ThemeColor("Tandem.Ink", ThemeVariant.Dark));
+        Assert.Equal(Color.Parse("#25555c"), ThemeColor("Tandem.Accent", ThemeVariant.Light));
+        Assert.Equal(Color.Parse("#c7754f"), ThemeColor("Tandem.Focus", ThemeVariant.Dark));
+
+        foreach (var theme in new[] { ThemeVariant.Light, ThemeVariant.Dark })
+        {
+            // The views' keys and Fluent's control brushes stand on the tokens.
+            Assert.Equal(ThemeColor("Tandem.Bar", theme), ThemeColor("Tandem.BarBackground", theme));
+            Assert.Equal(ThemeColor("Tandem.Bar", theme), ThemeColor("ButtonBackground", theme));
+            Assert.Equal(ThemeColor("Tandem.BarHover", theme), ThemeColor("ButtonBackgroundPointerOver", theme));
+            Assert.Equal(ThemeColor("Tandem.Field", theme), ThemeColor("TextControlBackground", theme));
+            Assert.Equal(ThemeColor("Tandem.Focus", theme), ThemeColor("TextControlBorderBrushFocused", theme));
+            Assert.Equal(ThemeColor("Tandem.Accent", theme), ThemeColor("Tandem.ActivePathBackground", theme));
+            Assert.Equal(ThemeColor("Tandem.Cursor", theme), ThemeColor("Tandem.CursorBackground", theme));
+            Assert.Equal(ThemeColor("Tandem.Line", theme), ThemeColor("Tandem.DividerBrush", theme));
+
+            // Text on the backgrounds the design system names for it.
+            foreach (var background in new[] { "Surface", "SurfaceRaised", "Bar", "BarHover", "BarPressed", "Field", "Cursor" })
+                Assert.True(Contrast(ThemeColor("Tandem.Ink", theme), ThemeColor("Tandem." + background, theme)) >= 4.5,
+                    $"ink on {background} in {theme}");
+            foreach (var background in new[] { "Surface", "SurfaceRaised", "Bar", "Field" })
+                Assert.True(Contrast(ThemeColor("Tandem.InkMuted", theme), ThemeColor("Tandem." + background, theme)) >= 4.5,
+                    $"ink-muted on {background} in {theme}");
+            Assert.True(Contrast(ThemeColor("Tandem.OnAccent", theme), ThemeColor("Tandem.Accent", theme)) >= 4.5);
+            Assert.True(Contrast(ThemeColor("Tandem.OnFocus", theme), ThemeColor("Tandem.Focus", theme)) >= 4.5);
+        }
+    }
+
+    [AvaloniaFact]
     public void Terminal_palette_preserves_contrast_on_the_fixed_black_background()
     {
         var window = new TerminalWindow();

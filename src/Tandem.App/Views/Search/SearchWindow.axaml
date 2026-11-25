@@ -8,7 +8,7 @@
         Width="820" Height="640" MinWidth="560" MinHeight="360">
     <!-- The criteria on top, the buttons beside them; below, the results (virtualized, up to 100 000 rows); at the
          bottom, a reason the search did not start and the status. -->
-    <DockPanel Background="{DynamicResource Tandem.ViewerBackground}">
+    <DockPanel Background="{DynamicResource Tandem.Surface}">
         <Border DockPanel.Dock="Top" Background="{DynamicResource Tandem.BarBackground}"
                 BorderBrush="{DynamicResource Tandem.DividerBrush}" BorderThickness="0,0,0,1" Padding="10,8">
             <DockPanel>
@@ -99,7 +99,7 @@
             <TextBlock Grid.Column="3" Classes="secondary" Text="{loc:Tr Key=Search_ColumnDate}" />
         </Grid>
         <ListBox x:Name="ResultsList" ItemsSource="{Binding Results}" SelectionMode="Single"
-                 Background="{DynamicResource Tandem.ViewerBackground}">
+                 Background="{DynamicResource Tandem.Surface}">
             <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="vm:SearchResultRow">
                     <Grid ColumnDefinitions="2*,3*,90,140">

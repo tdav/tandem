@@ -50,6 +50,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     private FileColors _fileColors;
     private IReadOnlyList<FileColorRule> _fileColorRules;
     private ThemeChoice _theme;
+    private string? appliedThemeName;
+    private string? startNotice;
     private readonly List<Func<bool>> _escapeHandlers = [];
 
     /// <param name="progressWindowDelay">Waits before the progress window may appear; the real delay when null.</param>
@@ -75,6 +77,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _fileColorRules = settings.Current.FileColors;
         _fileColors = new FileColors(_fileColorRules);
         _theme = settings.Current.Theme;
+        ApplyThemeFile(settings.Current.ThemeName, atStart: true);
         SearchResults = services.Providers.TryGet(SearchResultsProvider.ProviderId, out var search) &&
                         search is SearchResultsProvider results
             ? results
@@ -111,7 +114,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             Commands, services.Providers, services.Metadata, services.Temp, ReportFailure, quickLookDelay,
             services.NativeCopy, settings, services.Processes, quarantine, services.Clipboard);
         ButtonBar = new ButtonBarViewModel(workspace, settings, services.Processes, services.Dialogs, ReportFailure);
-        CommandLine = new CommandLineViewModel(workspace, services.Processes, workspace.HomeDirectory);
+        CommandLine = new CommandLineViewModel(workspace, services.Processes, workspace.HomeDirectory,
+            shell: services.Shell, terminal: () => settings.Current.Terminal);
         ArchiveMounts = archiveMounts;
         Archives = new ArchiveCommands(workspace, services, ArchiveMounts, Files, Interaction, Commands,
             ReportFailure);
@@ -165,6 +169,37 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     {
         get => _theme;
         private set => SetProperty(ref _theme, value);
+    }
+
+    /// <summary>Why the theme file of <see cref="AppSettings.ThemeName"/> could not be applied the last time it was
+    /// loaded (the built-in theme shows instead); null when it was, or no file is chosen.</summary>
+    public string? ThemeError { get; private set; }
+
+    /// <summary>Loads <paramref name="name"/> from <see cref="SettingsService.Themes"/> and applies it; a file that
+    /// cannot be read gives the built-in theme, logged and told to the user (at start, once the window shows: see
+    /// <see cref="TakeStartNotice"/>).</summary>
+    private void ApplyThemeFile(string? name, bool atStart)
+    {
+        var told = string.Equals(name, appliedThemeName, StringComparison.Ordinal) ? ThemeError : null;
+        appliedThemeName = name;
+        if (Settings.Themes is not { } themes) return;
+        ThemeService.Apply(themes.Load(name, out var error));
+        ThemeError = error;
+        // The same failure again (the file still broken as the settings change) is not told twice.
+        if (error is null || error == told) return;
+        Services.Log.Write(new InvalidDataException(error), "theme");
+        var text = Loc.Format("Settings_ThemeLoadFailed", error);
+        if (atStart) startNotice = text;
+        else NoticeRequested?.Invoke(this, text);
+    }
+
+    /// <summary>What went wrong while starting that the user should be told, once; null when nothing did. The
+    /// window asks when it opens.</summary>
+    public string? TakeStartNotice()
+    {
+        var text = startNotice;
+        startNotice = null;
+        return text;
     }
 
     /// <summary>View → Theme: keeps <paramref name="theme"/> in the settings, which applies it at once.</summary>
@@ -393,6 +428,9 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     {
         var settings = Settings.Current;
         Theme = settings.Theme;
+        // A file that failed is tried again on every change, so a mended one shows without a restart.
+        if (ThemeError is not null || !string.Equals(settings.ThemeName, appliedThemeName, StringComparison.Ordinal))
+            ApplyThemeFile(settings.ThemeName, atStart: false);
         var rules = settings.FileColors;
         var fileColorsChanged = !rules.SequenceEqual(_fileColorRules);
         if (fileColorsChanged)
@@ -631,7 +669,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         On(CommandIds.SortReverse, () => ActiveSide.ReverseSort());
         // The window starts from the key map in effect; an open one comes to the front instead.
         Commands.Register(CommandIds.AppSettings,
-            () => Services.Windows.ShowSettingsAsync(new SettingsViewModel(Settings, KeyMap)));
+            () => Services.Windows.ShowSettingsAsync(new SettingsViewModel(Settings, KeyMap, Services.Shell)));
         // Only on the local disk (not in archives, result sets or elsewhere). The availability flips with the active
         // panel's folder being local, exactly as "open terminal"'s does, whose flips ShellCommands announces.
         On(CommandIds.SearchFiles, ShowSearch, () => Workspace.IsLoaded && ShellCommands.IsLocal(Panel()));

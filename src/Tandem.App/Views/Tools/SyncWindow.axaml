@@ -40,7 +40,7 @@
             </Grid>
         </StackPanel>
         <ListBox Grid.Row="4" x:Name="SyncRows" ItemsSource="{Binding Rows}" SelectionMode="Multiple"
-                 Background="{DynamicResource Tandem.ViewerBackground}"
+                 Background="{DynamicResource Tandem.Surface}"
                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
             <ListBox.ItemTemplate>
                 <DataTemplate x:DataType="vm:SyncRowViewModel">

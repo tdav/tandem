@@ -10,6 +10,7 @@ using Tandem.Core.Operations;
 using Tandem.Core.Platform;
 using Tandem.Core.Search;
 using Tandem.Core.Settings;
+using Tandem.Core.Themes;
 using Tandem.Core.Vfs;
 using Tandem.Core.Vfs.Local;
 using Tandem.Net;
@@ -222,7 +223,10 @@ public static class Composition
         ArgumentNullException.ThrowIfNull(services);
         var store = new JsonStateStore(stateDirectory);
         var settings = new SettingsService(new JsonSettingsStore(stateDirectory),
-            e => services.Log.Write(e, "settings"));
+            e => services.Log.Write(e, "settings"))
+        {
+            Themes = new ThemeCatalog(ThemeCatalog.DirectoryIn(stateDirectory)),
+        };
         var state = await Task.Run(() =>
         {
             settings.Load();

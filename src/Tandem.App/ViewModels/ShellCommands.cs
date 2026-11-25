@@ -6,6 +6,7 @@ using Tandem.App.ViewModels.Editing;
 using Tandem.App.ViewModels.Viewing;
 using Tandem.Core.Platform;
 using Tandem.Core.Search;
+using Tandem.Core.Settings;
 using Tandem.Core.Vfs;
 using Tandem.Core.Vfs.Local;
 
@@ -500,7 +501,7 @@ public sealed class ShellCommands : IDisposable
 
     private Task OpenTerminalAsync() =>
         Active is { } panel && IsLocal(panel)
-            ? RunAsync(() => _shell.OpenTerminal(panel.CurrentPath.ToOsPath()),
+            ? RunAsync(() => _shell.OpenTerminal(panel.CurrentPath.ToOsPath(), _settings?.Current.Terminal ?? TerminalChoice.Default),
                 Loc.Format("Shell_TerminalFailed", panel.CurrentPath.Display()))
             : Task.CompletedTask;
 

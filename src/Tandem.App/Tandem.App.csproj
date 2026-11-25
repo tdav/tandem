@@ -31,7 +31,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <AvaloniaResource Include="Assets/FileIcons/*.svg" />
     <AvaloniaResource Include="Assets/Tandem.ico" />
   </ItemGroup>
 

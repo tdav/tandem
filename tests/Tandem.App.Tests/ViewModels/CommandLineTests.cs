@@ -3,6 +3,7 @@ using Tandem.App.Resources;
 using Tandem.App.Tests.Views;
 using Tandem.App.ViewModels;
 using Tandem.Core.Platform;
+using Tandem.Core.Settings;
 using Tandem.Core.Vfs;
 using Tandem.Core.Vfs.InMemory;
 
@@ -33,6 +34,7 @@ public class CommandLineTests : LanguageTestBase
         public required ManualFlush Flush { get; init; }
         /// <summary>The grace period after the shell exits: held (never over) unless released.</summary>
         public required ManualFlush Grace { get; init; }
+        public TerminalChoice Terminal { get; set; } = TerminalChoice.Default;
         public PanelViewModel Panel => App.Left;
 
         public async ValueTask DisposeAsync()
@@ -83,8 +85,10 @@ public class CommandLineTests : LanguageTestBase
         var runner = new FakeProcessRunner();
         var flush = new ManualFlush();
         var grace = new ManualFlush { Hold = true };
-        var line = new CommandLineViewModel(app.Main.Workspace, runner, TestApp.Home, flush.Wait, grace.Wait);
-        return new Fixture { App = app, Runner = runner, Line = line, Flush = flush, Grace = grace };
+        var holder = new Fixture[1];
+        var line = new CommandLineViewModel(app.Main.Workspace, runner, TestApp.Home, flush.Wait, grace.Wait,
+            app.Shell, () => holder[0].Terminal);
+        return holder[0] = new Fixture { App = app, Runner = runner, Line = line, Flush = flush, Grace = grace };
     }
 
     private static InMemoryFileSystem RemoteFileSystem()
@@ -104,6 +108,94 @@ public class CommandLineTests : LanguageTestBase
         var running = f.Line.ExecuteAsync();
         await TestApp.WaitUntil(() => f.Runner.Processes.Count > 0 && f.Line.IsRunning);
         return running;
+    }
+
+    // ---- A bare shell name opens a terminal -----------------------------------------------------------------
+
+    [AvaloniaTheory]
+    [InlineData("cmd")]
+    [InlineData("  powershell  ")]
+    [InlineData("pwsh")]
+    [InlineData("bash")]
+    [InlineData("zsh")]
+    [InlineData("sh")]
+    [InlineData("terminal")]
+    public async Task A_bare_shell_name_opens_the_terminal_in_the_folder_and_runs_nothing(string input)
+    {
+        await using var f = await StartAsync();
+        f.Terminal = TerminalChoice.Cmd;
+        f.Line.Text = input;
+
+        await f.Line.ExecuteAsync();
+
+        Assert.Equal([("terminal", "/a/b")], f.App.Shell.Calls);
+        Assert.Equal([TerminalChoice.Cmd], f.App.Shell.Terminals);
+        Assert.Empty(f.Runner.Started);
+        Assert.Equal("", f.Line.Text);
+        Assert.Equal("", f.Line.Output);
+        Assert.False(f.Line.IsOutputVisible);
+        Assert.Equal([input], f.Line.History);
+    }
+
+    [AvaloniaFact]
+    public async Task Windows_shell_names_ignore_case_and_exe()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows only: names are case-sensitive elsewhere");
+        await using var f = await StartAsync();
+
+        foreach (var input in new[] { "CMD", "cmd.exe", "PowerShell.EXE", "\"cmd\"" })
+        {
+            f.Line.Text = input;
+            await f.Line.ExecuteAsync();
+        }
+
+        Assert.Equal(4, f.App.Shell.Calls.Count);
+        Assert.Empty(f.Runner.Started);
+    }
+
+    [AvaloniaTheory]
+    [InlineData("cmd /c dir")]
+    [InlineData("cmd /k dir")]
+    [InlineData("bash -c \"ls\"")]
+    [InlineData("powershell -Command Get-Date")]
+    [InlineData("command")]
+    [InlineData("shell")]
+    [InlineData("cmdx")]
+    [InlineData("echo cmd")]
+    public async Task A_shell_with_arguments_or_another_command_runs_as_before(string input)
+    {
+        await using var f = await StartAsync();
+
+        var running = await StartCommandAsync(f, input);
+        f.Runner.Processes[0].Exit(0);
+        await running;
+
+        Assert.Empty(f.App.Shell.Calls);
+    }
+
+    [AvaloniaFact]
+    public async Task A_failed_terminal_goes_to_the_output_and_the_text_stays()
+    {
+        await using var f = await StartAsync();
+        f.App.Shell.Failure = new IOException("no terminal");
+        f.Line.Text = "cmd";
+
+        await f.Line.ExecuteAsync();
+
+        Assert.Equal("cmd", f.Line.Text);
+        Assert.True(f.Line.IsOutputVisible);
+        Assert.Contains("no terminal", f.Line.Output);
+        Assert.Empty(f.Runner.Started);
+    }
+
+    [AvaloniaTheory]
+    [InlineData("cmd", true)]
+    [InlineData("cmd arg", false)]
+    [InlineData("", false)]
+    [InlineData("\"cmd", false)]
+    public void IsBareShell_knows_a_lone_shell_name(string text, bool expected)
+    {
+        Assert.Equal(expected, CommandLineViewModel.IsBareShell(text));
     }
 
     // ---- cd ---------------------------------------------------------------------------------------------

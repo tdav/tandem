@@ -1,3 +1,5 @@
+using Tandem.Core.Settings;
+
 namespace Tandem.Core.Platform;
 
 /// <summary>An application that can open files: its display name and the path of its bundle.</summary>
@@ -34,9 +36,10 @@ public interface IShellIntegration
     /// <exception cref="IOException">The launcher could not be started.</exception>
     Task RevealInFinder(string path);
 
-    /// <summary>Opens a terminal window in <paramref name="directory"/>.</summary>
+    /// <summary>Opens a terminal window in <paramref name="directory"/>: the one <paramref name="terminal"/> names,
+    /// or the platform's usual one when the platform does not have it.</summary>
     /// <exception cref="IOException">The launcher could not be started.</exception>
-    Task OpenTerminal(string directory);
+    Task OpenTerminal(string directory, TerminalChoice terminal);
 
     /// <summary>Opens the system settings page where the user grants Full Disk Access.</summary>
     /// <exception cref="IOException">The launcher could not be started.</exception>

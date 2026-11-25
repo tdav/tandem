@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.Versioning;
 using Tandem.Core.Platform;
+using Tandem.Core.Settings;
 
 namespace Tandem.Platform.Windows.Tests;
 
@@ -13,11 +14,11 @@ public sealed class WinShellIntegrationTests
 
     private readonly List<ProcessStartInfo> _started = [];
 
-    private WinShellIntegration Shell(string? wt = null, Exception? failure = null) => new(info =>
+    private WinShellIntegration Shell(string? wt = null, Exception? failure = null, string? pwsh = null) => new(info =>
     {
         if (failure is not null) throw failure;
         _started.Add(info);
-    }, name => name == "wt.exe" ? wt : null);
+    }, name => name switch { "wt.exe" => wt, "pwsh.exe" => pwsh, _ => null });
 
     [Fact]
     public async Task OpenDefault_shell_executes_the_item()
@@ -67,28 +68,74 @@ public sealed class WinShellIntegrationTests
         Assert.Equal($"/select,\"{Item}\"", info.Arguments);
     }
 
+    private const string WindowsTerminalPath = @"C:\Users\me\AppData\Local\Microsoft\WindowsApps\wt.exe";
+
     [Fact]
-    public async Task OpenTerminal_uses_windows_terminal_when_it_is_on_the_path()
+    public async Task OpenTerminal_uses_windows_terminal_when_chosen_and_on_the_path()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows only");
 
-        await Shell(wt: @"C:\Users\me\AppData\Local\Microsoft\WindowsApps\wt.exe").OpenTerminal(Folder);
+        await Shell(wt: WindowsTerminalPath).OpenTerminal(Folder, TerminalChoice.WindowsTerminal);
 
         var info = Assert.Single(_started);
-        Assert.Equal(@"C:\Users\me\AppData\Local\Microsoft\WindowsApps\wt.exe", info.FileName);
+        Assert.Equal(WindowsTerminalPath, info.FileName);
         Assert.Equal(["-d", Folder], info.ArgumentList);
     }
 
     [Fact]
-    public async Task OpenTerminal_falls_back_to_cmd_in_the_directory()
+    public async Task OpenTerminal_default_is_windows_powershell_in_the_directory()
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows only");
 
-        await Shell().OpenTerminal(Folder);
+        // Windows Terminal being installed does not matter unless it is chosen.
+        await Shell(wt: WindowsTerminalPath).OpenTerminal(Folder, TerminalChoice.Default);
+
+        var info = Assert.Single(_started);
+        Assert.Equal("powershell.exe", info.FileName);
+        Assert.Equal(Folder, info.WorkingDirectory);
+        Assert.True(info.UseShellExecute);
+    }
+
+    [Fact]
+    public async Task OpenTerminal_default_prefers_powershell_7_when_installed()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows only");
+
+        await Shell(pwsh: @"C:\Program Files\PowerShell\7\pwsh.exe").OpenTerminal(Folder, TerminalChoice.Default);
+
+        Assert.Equal(@"C:\Program Files\PowerShell\7\pwsh.exe", Assert.Single(_started).FileName);
+    }
+
+    [Fact]
+    public async Task OpenTerminal_windows_terminal_chosen_but_missing_falls_back_to_powershell()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows only");
+
+        await Shell().OpenTerminal(Folder, TerminalChoice.WindowsTerminal);
+
+        Assert.Equal("powershell.exe", Assert.Single(_started).FileName);
+    }
+
+    [Fact]
+    public async Task OpenTerminal_cmd_when_chosen_in_the_directory()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows only");
+
+        await Shell(wt: WindowsTerminalPath).OpenTerminal(Folder, TerminalChoice.Cmd);
 
         var info = Assert.Single(_started);
         Assert.Equal("cmd.exe", info.FileName);
         Assert.Equal(Folder, info.WorkingDirectory);
+    }
+
+    [Fact]
+    public async Task OpenTerminal_iterm_is_not_here_so_the_default_opens()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Windows only");
+
+        await Shell().OpenTerminal(Folder, TerminalChoice.ITerm);
+
+        Assert.Equal("powershell.exe", Assert.Single(_started).FileName);
     }
 
     [Fact]
@@ -100,7 +147,7 @@ public sealed class WinShellIntegrationTests
         await Assert.ThrowsAsync<ArgumentException>(() => shell.OpenDefault("file.txt"));
         await Assert.ThrowsAsync<ArgumentException>(() => shell.OpenInTextEditor(@"dir\file.txt"));
         await Assert.ThrowsAsync<ArgumentException>(() => shell.RevealInFinder(@"C:file.txt"));
-        await Assert.ThrowsAsync<ArgumentException>(() => shell.OpenTerminal("dir"));
+        await Assert.ThrowsAsync<ArgumentException>(() => shell.OpenTerminal("dir", TerminalChoice.Default));
         await Assert.ThrowsAsync<ArgumentException>(() => shell.OpenWith(Item, new AppInfo("x", "editor.exe")));
         Assert.Throws<ArgumentException>(() => shell.GetAppsFor("file.txt"));
         Assert.Empty(_started);
@@ -113,7 +160,7 @@ public sealed class WinShellIntegrationTests
         var shell = Shell(failure: new Win32Exception(2));
 
         await Assert.ThrowsAsync<IOException>(() => shell.OpenDefault(Item));
-        await Assert.ThrowsAsync<IOException>(() => shell.OpenTerminal(Folder));
+        await Assert.ThrowsAsync<IOException>(() => shell.OpenTerminal(Folder, TerminalChoice.Default));
     }
 
     [Fact]

@@ -963,6 +963,12 @@
   <data name="Output_Clear" xml:space="preserve">
     <value>Очистить</value>
   </data>
+  <data name="Output_Float" xml:space="preserve">
+    <value>Открепить</value>
+  </data>
+  <data name="Output_Dock" xml:space="preserve">
+    <value>Прикрепить</value>
+  </data>
   <data name="Output_Close" xml:space="preserve">
     <value>Закрыть</value>
   </data>
@@ -1204,6 +1210,20 @@
   <data name="Settings_FontSize" xml:space="preserve">
     <value>Размер шрифта</value>
   </data>
+  <data name="Settings_ColorScheme" xml:space="preserve">
+    <value>Цветовая схема</value>
+  </data>
+  <data name="Settings_OpenThemesFolder" xml:space="preserve">
+    <value>Открыть папку тем</value>
+  </data>
+  <data name="Settings_ColorSchemeBroken" xml:space="preserve">
+    <value>{0} (ошибка)</value>
+  </data>
+  <data name="Settings_ThemeLoadFailed" xml:space="preserve">
+    <value>Не удалось загрузить цветовую схему. Вместо неё показана встроенная.
+
+{0}</value>
+  </data>
   <data name="Settings_RowHeight" xml:space="preserve">
     <value>Высота строки</value>
   </data>
@@ -1281,6 +1301,27 @@
   </data>
   <data name="Settings_ButtonsHint" xml:space="preserve">
     <value>В аргументах: %p — папка активной панели, %t — папка другой панели, %f — элемент под курсором, %n — его имя, %s — выбранные элементы, %% — знак процента.</value>
+  </data>
+  <data name="Settings_Terminal" xml:space="preserve">
+    <value>Терминал</value>
+  </data>
+  <data name="Settings_TerminalPowerShell" xml:space="preserve">
+    <value>PowerShell (по умолчанию)</value>
+  </data>
+  <data name="Settings_TerminalWindowsTerminal" xml:space="preserve">
+    <value>Windows Terminal</value>
+  </data>
+  <data name="Settings_TerminalCmd" xml:space="preserve">
+    <value>Командная строка (cmd)</value>
+  </data>
+  <data name="Settings_TerminalMacDefault" xml:space="preserve">
+    <value>Terminal (по умолчанию)</value>
+  </data>
+  <data name="Settings_TerminalITerm" xml:space="preserve">
+    <value>iTerm</value>
+  </data>
+  <data name="Settings_TerminalHint" xml:space="preserve">
+    <value>Используется пунктом «Открыть терминал» и когда в командной строке введено имя оболочки (cmd, powershell, bash…).</value>
   </data>
   <data name="Settings_ExternalEditor" xml:space="preserve">
     <value>Внешний редактор для F4</value>

@@ -7,6 +7,7 @@ using Avalonia.Interactivity;
 using Tandem.App.Commands;
 using Tandem.App.Input;
 using Tandem.App.Resources;
+using Tandem.App.Services;
 using Tandem.App.ViewModels;
 using Tandem.App.Views.Dialogs;
 using Tandem.App.Views.Net;
@@ -31,6 +32,11 @@ public partial class MainWindow : Window
     private bool _confirmingClose;
     private ProgressWindow? _progress;
     private double _outputHeight = DefaultOutputHeight;
+    private readonly OutputWindowPlacementStore? _placementStore;
+    private OutputWindow? _outputWindow;
+
+    private const double FloatingOutputWidth = 700;
+    private const double FloatingOutputHeight = 300;
 
     /// <summary>The output pane's height when it first opens.</summary>
     public const double DefaultOutputHeight = 180;
@@ -53,10 +59,13 @@ public partial class MainWindow : Window
     /// <param name="main">A loaded main view model.</param>
     /// <param name="screens">The screens' working areas in pixels, to check the saved placement against; the
     /// system's screens when null.</param>
-    public MainWindow(MainViewModel main, IReadOnlyList<PixelRect>? screens = null) : this()
+    /// <param name="stateDirectory">Where the floating output window's placement is kept; not kept when null.</param>
+    public MainWindow(MainViewModel main, IReadOnlyList<PixelRect>? screens = null, string? stateDirectory = null)
+        : this()
     {
         ArgumentNullException.ThrowIfNull(main);
         _main = main;
+        if (stateDirectory is not null) _placementStore = new OutputWindowPlacementStore(stateDirectory);
         _screens = screens;
         DataContext = main;
         App.ApplyTheme(main.Theme);
@@ -95,6 +104,7 @@ public partial class MainWindow : Window
         {
             _placementApplied = true;
             FocusActivePanel();
+            if (main.TakeStartNotice() is { } notice) OnNoticeRequested(main, notice);
         };
         Closing += OnClosing;
         Closed += (_, _) => Detach();
@@ -215,7 +225,51 @@ public partial class MainWindow : Window
 
     private void OnCommandLinePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(CommandLineViewModel.IsOutputVisible)) UpdateOutputPane();
+        if (e.PropertyName is nameof(CommandLineViewModel.IsOutputVisible) or nameof(CommandLineViewModel.IsOutputFloating))
+        {
+            UpdateOutputPane();
+            UpdateFloatingOutput();
+        }
+    }
+
+    /// <summary>Opens the floating output window while the pane is detached and closes it when the pane is docked
+    /// or closed; its placement is restored from, and saved to, <c>output-window.json</c>.</summary>
+    private void UpdateFloatingOutput()
+    {
+        if (_main is null) return;
+        var floating = _main.CommandLine.IsOutputFloating;
+        if (!floating)
+        {
+            _outputWindow?.Close();
+            return;
+        }
+        if (_outputWindow is not null) return;
+
+        var window = new OutputWindow(_main.CommandLine) { Width = FloatingOutputWidth, Height = FloatingOutputHeight };
+        var screens = _screens ?? Screens.All.Select(s => s.WorkingArea).ToList();
+        var saved = _placementStore?.Load();
+        var placement = WindowPlacement.Restore(saved, screens, Screens.Primary?.Scaling ?? 1);
+        if (saved is not null && placement.Position is { } position)
+        {
+            window.WindowStartupLocation = WindowStartupLocation.Manual;
+            window.Width = placement.Width;
+            window.Height = placement.Height;
+            window.Position = position;
+        }
+        else
+        {
+            window.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        }
+        window.PositionChanged += (_, _) => window.RecordBounds();
+        window.Opened += (_, _) => window.RecordBounds();
+        window.Closed += (_, _) =>
+        {
+            if (window.NormalBounds is { } b)
+                _placementStore?.Save(new AppWindowState(b.Position.X, b.Position.Y, b.Width, b.Height, false, 0.5));
+            if (_outputWindow == window) _outputWindow = null;
+        };
+        _outputWindow = window;
+        window.Show(this);
     }
 
     /// <summary>Opens or closes the output pane above the command line; its height (as the splitter left it) is kept
@@ -223,7 +277,7 @@ public partial class MainWindow : Window
     private void UpdateOutputPane()
     {
         if (_main is null) return;
-        var visible = _main.CommandLine.IsOutputVisible;
+        var visible = _main.CommandLine.IsOutputDocked;
         var row = WorkArea.RowDefinitions[2];
         if (visible == OutputPane.IsVisible) return;
         if (!visible && OutputPane.Bounds.Height > 0) _outputHeight = OutputPane.Bounds.Height;
@@ -263,7 +317,9 @@ public partial class MainWindow : Window
         foreach (var path in main.Workspace.Favorites.Items)
             flyout.Items.Add(new MenuItem
             {
-                Header = LiteralLabel.For(LocalPath.Display(path, LocalPath.Current)), Command = main.OpenFavoriteCommand, CommandParameter = path,
+                Header = LiteralLabel.For(LocalPath.Display(path, LocalPath.Current)),
+                Command = main.OpenFavoriteCommand,
+                CommandParameter = path,
             });
         if (flyout.Items.Count == 0)
             flyout.Items.Add(new MenuItem { Header = Loc.Get("Menu_FavoritesEmpty"), IsEnabled = false });

@@ -99,11 +99,11 @@
                 </DockPanel>
             </TabItem>
 
-            <!-- View: theme, font size, row height and the colour rules (the first matching rule wins). -->
+            <!-- View: theme, colour scheme, font size, row height and the colour rules (the first matching rule wins). -->
             <TabItem Header="{loc:Tr Key=Settings_Tab_View}">
                 <ScrollViewer>
                     <StackPanel Spacing="10" Margin="0,8,0,0">
-                        <Grid ColumnDefinitions="160,220" RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
+                        <Grid ColumnDefinitions="160,220,Auto" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="8">
                             <TextBlock Text="{loc:Tr Key=Menu_Theme}" VerticalAlignment="Center" />
                             <ComboBox x:Name="ThemeChoice" Grid.Column="1" HorizontalAlignment="Stretch"
                                       ItemsSource="{x:Static vm:SettingsViewModel.ThemeOptions}"
@@ -114,14 +114,33 @@
                                     </DataTemplate>
                                 </ComboBox.ItemTemplate>
                             </ComboBox>
-                            <TextBlock Grid.Row="1" Text="{loc:Tr Key=Settings_FontSize}" VerticalAlignment="Center" />
-                            <NumericUpDown x:Name="FontSizeField" Grid.Row="1" Grid.Column="1" Increment="1"
+                            <!-- Which theme file (colours, fonts, sizes); one that cannot be read is shown but cannot be chosen. -->
+                            <TextBlock Grid.Row="1" Text="{loc:Tr Key=Settings_ColorScheme}" VerticalAlignment="Center" />
+                            <ComboBox x:Name="ColorSchemeChoice" Grid.Row="1" Grid.Column="1" HorizontalAlignment="Stretch"
+                                      ItemsSource="{Binding ColorSchemes}"
+                                      SelectedItem="{Binding SelectedColorScheme}">
+                                <ComboBox.Styles>
+                                    <Style Selector="ComboBoxItem" x:DataType="vm:ColorSchemeOption">
+                                        <Setter Property="IsEnabled" Value="{Binding IsSelectable}" />
+                                    </Style>
+                                </ComboBox.Styles>
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:ColorSchemeOption">
+                                        <TextBlock Text="{Binding Label}" ToolTip.Tip="{Binding Error}"
+                                                   ToolTip.ShowOnDisabled="True" />
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <Button x:Name="OpenThemesFolder" Grid.Row="1" Grid.Column="2" Margin="8,0,0,0"
+                                    Content="{loc:Tr Key=Settings_OpenThemesFolder}" Click="OnOpenThemesFolder" />
+                            <TextBlock Grid.Row="2" Text="{loc:Tr Key=Settings_FontSize}" VerticalAlignment="Center" />
+                            <NumericUpDown x:Name="FontSizeField" Grid.Row="2" Grid.Column="1" Increment="1"
                                            FormatString="0"
                                            Minimum="{x:Static vm:SettingsViewModel.MinFontSize}"
                                            Maximum="{x:Static vm:SettingsViewModel.MaxFontSize}"
                                            Value="{Binding FontSize, Converter={x:Static s:NumberFieldConverter.Instance}}" />
-                            <TextBlock Grid.Row="2" Text="{loc:Tr Key=Settings_RowHeight}" VerticalAlignment="Center" />
-                            <NumericUpDown x:Name="RowHeightField" Grid.Row="2" Grid.Column="1" Increment="1"
+                            <TextBlock Grid.Row="3" Text="{loc:Tr Key=Settings_RowHeight}" VerticalAlignment="Center" />
+                            <NumericUpDown x:Name="RowHeightField" Grid.Row="3" Grid.Column="1" Increment="1"
                                            FormatString="0"
                                            Minimum="{x:Static vm:SettingsViewModel.MinRowHeight}"
                                            Maximum="{x:Static vm:SettingsViewModel.MaxRowHeight}"
@@ -219,6 +238,11 @@
                     <TextBlock Text="{loc:Tr Key=Settings_ExternalEditor}" />
                     <TextBox x:Name="ExternalEditor" Text="{Binding ExternalEditor}" />
                     <TextBlock Text="{loc:Tr Key=Settings_ExternalEditorHint}" Classes="secondary" TextWrapping="Wrap" />
+                    <TextBlock Text="{loc:Tr Key=Settings_Terminal}" Margin="0,8,0,0" />
+                    <ComboBox x:Name="TerminalCombo" Width="240"
+                              ItemsSource="{x:Static vm:SettingsViewModel.TerminalOptions}"
+                              SelectedIndex="{Binding TerminalIndex}" />
+                    <TextBlock Text="{loc:Tr Key=Settings_TerminalHint}" Classes="secondary" TextWrapping="Wrap" />
                 </StackPanel>
             </TabItem>
             <TabItem Header="{loc:Tr Key=Settings_Tab_SshConsole}">

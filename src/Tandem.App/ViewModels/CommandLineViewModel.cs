@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.Input;
 using Tandem.App.Resources;
 using Tandem.App.Services;
 using Tandem.Core.Platform;
+using Tandem.Core.Settings;
 using Tandem.Core.Vfs;
 using Tandem.Core.Vfs.Local;
 
@@ -49,6 +50,8 @@ public sealed partial class CommandLineViewModel : ObservableObject, IDisposable
     private readonly WorkspaceViewModel _workspace;
     private readonly IProcessRunner _runner;
     private readonly string _homeDirectory;
+    private readonly IShellIntegration? _shell;
+    private readonly Func<TerminalChoice> _terminal;
     private readonly Func<TimeSpan, CancellationToken, Task> _flushDelay;
     private readonly Func<TimeSpan, CancellationToken, Task> _exitGraceDelay;
     private readonly SynchronizationContext _ui;
@@ -78,9 +81,13 @@ public sealed partial class CommandLineViewModel : ObservableObject, IDisposable
     /// when null.</param>
     /// <param name="exitGraceDelay">Waits <see cref="ExitGracePeriod"/> after the shell has exited;
     /// <see cref="Task.Delay(TimeSpan, CancellationToken)"/> when null.</param>
+    /// <param name="shell">Opens the terminal when a bare shell name (<c>cmd</c>, <c>bash</c>, …) is entered; when null,
+    /// such a text runs like any other.</param>
+    /// <param name="terminal">The terminal the user has chosen; the platform's usual one when null.</param>
     public CommandLineViewModel(WorkspaceViewModel workspace, IProcessRunner runner, string homeDirectory,
         Func<TimeSpan, CancellationToken, Task>? flushDelay = null,
-        Func<TimeSpan, CancellationToken, Task>? exitGraceDelay = null)
+        Func<TimeSpan, CancellationToken, Task>? exitGraceDelay = null, IShellIntegration? shell = null,
+        Func<TerminalChoice>? terminal = null)
     {
         ArgumentNullException.ThrowIfNull(workspace);
         ArgumentNullException.ThrowIfNull(runner);
@@ -90,6 +97,8 @@ public sealed partial class CommandLineViewModel : ObservableObject, IDisposable
         _workspace = workspace;
         _runner = runner;
         _homeDirectory = homeDirectory;
+        _shell = shell;
+        _terminal = terminal ?? (() => TerminalChoice.Default);
         _flushDelay = flushDelay ?? Task.Delay;
         _exitGraceDelay = exitGraceDelay ?? Task.Delay;
         workspace.PropertyChanged += OnWorkspacePropertyChanged;
@@ -128,7 +137,33 @@ public sealed partial class CommandLineViewModel : ObservableObject, IDisposable
 
     /// <summary>Whether the output pane is open; it opens by itself when output arrives.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsOutputDocked))]
     public partial bool IsOutputVisible { get; set; }
+
+    /// <summary>Whether the open output pane is detached into its own floating window; it is never floating while
+    /// the pane is closed.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsOutputDocked))]
+    public partial bool IsOutputFloating { get; private set; }
+
+    /// <summary>Whether the output pane shows in the main window, under the panels: open and not floating.</summary>
+    public bool IsOutputDocked => IsOutputVisible && !IsOutputFloating;
+
+    /// <summary>Detaches the open output pane into a floating window; the pane under the panels hides.</summary>
+    [RelayCommand]
+    public void FloatOutput()
+    {
+        if (IsOutputVisible) IsOutputFloating = true;
+    }
+
+    /// <summary>Puts the floating output pane back under the panels (the floating window closing does the same).</summary>
+    [RelayCommand]
+    public void DockOutput() => IsOutputFloating = false;
+
+    partial void OnIsOutputVisibleChanged(bool value)
+    {
+        if (!value) IsOutputFloating = false;
+    }
 
     /// <summary>
     /// Enter: runs the text. Blank text does nothing; nothing runs while a command is running or the command line is
@@ -150,6 +185,8 @@ public sealed partial class CommandLineViewModel : ObservableObject, IDisposable
             var folder = panel.CurrentPath;
             if (CdCommandParser.Parse(text, folder.Path, _homeDirectory, LocalPath.Current) is { } cd)
                 await ChangeFolderAsync(panel, cd, text);
+            else if (_shell is not null && IsBareShell(text))
+                await OpenTerminalAsync(folder, text);
             else
                 await RunAsync(panel, folder, text);
         }
@@ -253,6 +290,40 @@ public sealed partial class CommandLineViewModel : ObservableObject, IDisposable
         }
         else
             Report(panel.Error ?? Loc.Format("CommandLine_CdFailed", target.Display())); // the panel's reason names the folder
+    }
+
+    // ---- An interactive shell ------------------------------------------------------------------------------
+
+    private static readonly string[] ShellNames = ["cmd", "powershell", "pwsh", "bash", "zsh", "sh", "terminal"];
+
+    /// <summary>Whether <paramref name="text"/> is just the name of an interactive shell (<c>cmd</c>, <c>powershell</c>,
+    /// <c>pwsh</c>, <c>bash</c>, <c>zsh</c>, <c>sh</c>, <c>terminal</c>; on Windows in any case and with <c>.exe</c>),
+    /// with no arguments. Its output cannot be captured: it would print a banner, get no input and exit. With any
+    /// argument (<c>cmd /c dir</c>, <c>bash -c "…"</c>) the shell does a job of its own and runs as any command.</summary>
+    public static bool IsBareShell(string text)
+    {
+        var name = text.Trim();
+        if (name.Length >= 2 && name[0] == '"' && name[^1] == '"') name = name[1..^1];
+        if (name.Length == 0 || name.Any(c => char.IsWhiteSpace(c) || c == '"')) return false;
+        var windows = OperatingSystem.IsWindows();
+        if (windows && name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) name = name[..^4];
+        return ShellNames.Contains(name, windows ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+    }
+
+    /// <summary>Opens the chosen terminal in <paramref name="folder"/> instead of running the shell with its output
+    /// captured; the field is cleared (unless the user typed something else meanwhile), a failure goes to the output.</summary>
+    private async Task OpenTerminalAsync(VfsPath folder, string text)
+    {
+        try
+        {
+            await _shell!.OpenTerminal(folder.ToOsPath(), _terminal());
+        }
+        catch (Exception e) when (e is IOException or ArgumentException)
+        {
+            if (!_disposed) Report(Loc.Format("Shell_TerminalFailed", folder.Display()) + " " + e.Message);
+            return;
+        }
+        if (!_disposed && Text == text) Text = "";
     }
 
     // ---- Running a command ----------------------------------------------------------------------------------

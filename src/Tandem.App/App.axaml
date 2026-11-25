@@ -13,25 +13,17 @@
             <!-- Every colour the views use, in a light and a dark variant. Views refer to these keys only. -->
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Light">
-                    <SolidColorBrush x:Key="Tandem.BarBackground" Color="#FFF4F4F5" />
-                    <SolidColorBrush x:Key="Tandem.HeaderBackground" Color="#FFEDEDEF" />
-                    <SolidColorBrush x:Key="Tandem.DividerBrush" Color="#FFD4D4D8" />
-                    <SolidColorBrush x:Key="Tandem.SecondaryForeground" Color="#FF6B6B73" />
-                    <SolidColorBrush x:Key="Tandem.PathBackground" Color="#FFE4E4E7" />
-                    <SolidColorBrush x:Key="Tandem.PathForeground" Color="#FF3F3F46" />
-                    <SolidColorBrush x:Key="Tandem.ActivePathBackground" Color="#FF2563EB" />
-                    <SolidColorBrush x:Key="Tandem.ActivePathForeground" Color="#FFFFFFFF" />
-                    <SolidColorBrush x:Key="Tandem.CursorBackground" Color="#FFCFE0FF" />
-                    <SolidColorBrush x:Key="Tandem.CursorBorder" Color="#FF2563EB" />
+                    <!-- The design system tokens (Tandem.Color.*, Tandem.* brushes, the views' keys, Fluent's control
+                         brushes, the file list icons) are written by ThemeService from the applied theme
+                         (Services/ThemeResourceMap.cs). -->
+                    <SolidColorBrush x:Key="Tandem.Transparent" Color="#00FFFFFF" />
+                    <SolidColorBrush x:Key="SystemControlFocusVisualSecondaryBrush" Color="#00000000" />
+                    <!-- No design system token: kept as they were (marked files, errors, drag and drop, the comparison,
+                         the colour rules' palette, hidden entries). -->
                     <SolidColorBrush x:Key="Tandem.MarkedForeground" Color="#FFD21F3C" />
                     <SolidColorBrush x:Key="Tandem.ErrorForeground" Color="#FFB91C1C" />
-                    <SolidColorBrush x:Key="Tandem.TabActiveBackground" Color="#FFFFFFFF" />
-                    <SolidColorBrush x:Key="Tandem.Transparent" Color="#00FFFFFF" />
                     <SolidColorBrush x:Key="Tandem.DropTargetBackground" Color="#FFD9F2E0" />
                     <SolidColorBrush x:Key="Tandem.DropTargetBorder" Color="#FF16A34A" />
-                    <SolidColorBrush x:Key="Tandem.ViewerBackground" Color="#FFFFFFFF" />
-                    <SolidColorBrush x:Key="Tandem.ViewerForeground" Color="#FF18181B" />
-                    <SolidColorBrush x:Key="Tandem.ViewerSelection" Color="#FFBFD7FF" />
                     <SolidColorBrush x:Key="Tandem.DiffChangedBackground" Color="#FFFFF5D8" />
                     <SolidColorBrush x:Key="Tandem.DiffAddedBackground" Color="#FFE7F5E9" />
                     <SolidColorBrush x:Key="Tandem.DiffRemovedBackground" Color="#FFFCE8E8" />
@@ -51,25 +43,17 @@
                     <SolidColorBrush x:Key="Tandem.HiddenIconBorder" Color="#FF5B47A0" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
-                    <SolidColorBrush x:Key="Tandem.BarBackground" Color="#FF232326" />
-                    <SolidColorBrush x:Key="Tandem.HeaderBackground" Color="#FF2A2A2E" />
-                    <SolidColorBrush x:Key="Tandem.DividerBrush" Color="#FF3F3F46" />
-                    <SolidColorBrush x:Key="Tandem.SecondaryForeground" Color="#FFA1A1AA" />
-                    <SolidColorBrush x:Key="Tandem.PathBackground" Color="#FF333338" />
-                    <SolidColorBrush x:Key="Tandem.PathForeground" Color="#FFD4D4D8" />
-                    <SolidColorBrush x:Key="Tandem.ActivePathBackground" Color="#FF3B82F6" />
-                    <SolidColorBrush x:Key="Tandem.ActivePathForeground" Color="#FFFFFFFF" />
-                    <SolidColorBrush x:Key="Tandem.CursorBackground" Color="#FF1E3A66" />
-                    <SolidColorBrush x:Key="Tandem.CursorBorder" Color="#FF60A5FA" />
+                    <!-- The design system tokens (Tandem.Color.*, Tandem.* brushes, the views' keys, Fluent's control
+                         brushes, the file list icons) are written by ThemeService from the applied theme
+                         (Services/ThemeResourceMap.cs). -->
+                    <SolidColorBrush x:Key="Tandem.Transparent" Color="#00000000" />
+                    <SolidColorBrush x:Key="SystemControlFocusVisualSecondaryBrush" Color="#00000000" />
+                    <!-- No design system token: kept as they were (marked files, errors, drag and drop, the comparison,
+                         the colour rules' palette, hidden entries). -->
                     <SolidColorBrush x:Key="Tandem.MarkedForeground" Color="#FFFF6B81" />
                     <SolidColorBrush x:Key="Tandem.ErrorForeground" Color="#FFF87171" />
-                    <SolidColorBrush x:Key="Tandem.TabActiveBackground" Color="#FF3A3A40" />
-                    <SolidColorBrush x:Key="Tandem.Transparent" Color="#00000000" />
                     <SolidColorBrush x:Key="Tandem.DropTargetBackground" Color="#FF1C4A2E" />
                     <SolidColorBrush x:Key="Tandem.DropTargetBorder" Color="#FF4ADE80" />
-                    <SolidColorBrush x:Key="Tandem.ViewerBackground" Color="#FF1C1C1E" />
-                    <SolidColorBrush x:Key="Tandem.ViewerForeground" Color="#FFE4E4E7" />
-                    <SolidColorBrush x:Key="Tandem.ViewerSelection" Color="#FF264F78" />
                     <SolidColorBrush x:Key="Tandem.DiffChangedBackground" Color="#FF43381F" />
                     <SolidColorBrush x:Key="Tandem.DiffAddedBackground" Color="#FF1E3D2C" />
                     <SolidColorBrush x:Key="Tandem.DiffRemovedBackground" Color="#FF49272C" />
@@ -101,7 +85,14 @@
     </Application.Resources>
 
     <Application.Styles>
-        <FluentTheme />
+        <FluentTheme>
+            <!-- Fluent's own palette on the design system: its accent is the input colour (focus, not the
+                 navigation accent), the window background the surface, the main text the ink. -->
+            <FluentTheme.Palettes>
+                <ColorPaletteResources x:Key="Light" Accent="#FF7C3F21" RegionColor="#FFBBB8B0" BaseHigh="#FF1B1A18" />
+                <ColorPaletteResources x:Key="Dark" Accent="#FFC7754F" RegionColor="#FF2A2927" BaseHigh="#FFDBD7CE" />
+            </FluentTheme.Palettes>
+        </FluentTheme>
         <!-- The built-in text editor's own look (AvaloniaEdit's Fluent theme). -->
         <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
 
@@ -109,6 +100,8 @@
              Generated from build/icon/tandem.svg by build/icon/make-icons.py. -->
         <Style Selector=":is(Window)">
             <Setter Property="Icon" Value="avares://Tandem.App/Assets/Tandem.ico" />
+            <!-- The theme's interface font (ThemeService writes Tandem.Font.Ui). -->
+            <Setter Property="FontFamily" Value="{DynamicResource Tandem.Font.Ui}" />
         </Style>
 
         <!-- Flat buttons of the bars (volumes, tabs, headers, F-keys, sidebar): they never take the focus, so the
@@ -122,6 +115,14 @@
             <Setter Property="MinHeight" Value="0" />
             <Setter Property="HorizontalContentAlignment" Value="Left" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <!-- Selected text in a field: on-focus on the focus colour (TextControlSelectionHighlightColor). -->
+        <Style Selector="TextBox">
+            <Setter Property="SelectionForegroundBrush" Value="{DynamicResource Tandem.OnFocus}" />
+        </Style>
+        <Style Selector="SelectableTextBlock">
+            <Setter Property="SelectionBrush" Value="{DynamicResource Tandem.Focus}" />
+            <Setter Property="SelectionForegroundBrush" Value="{DynamicResource Tandem.OnFocus}" />
         </Style>
         <Style Selector="TextBlock.secondary">
             <Setter Property="Foreground" Value="{DynamicResource Tandem.SecondaryForeground}" />

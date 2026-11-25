@@ -346,6 +346,32 @@ public sealed class JsonSettingsStoreTests : IDisposable
     }
 
     [Fact]
+    public void Theme_name_roundtrips_and_is_null_when_absent()
+    {
+        Assert.Null(AppSettings.Default.ThemeName);
+        Store().Save(Sample() with { ThemeName = "solarized" });
+
+        Assert.Equal("solarized", Store().Load().ThemeName);
+        Assert.Contains("\"ThemeName\": \"solarized\"", File.ReadAllText(SettingsFile));
+
+        Store().Save(Sample());
+        Assert.Null(Store().Load().ThemeName);
+    }
+
+    [Theory]
+    [InlineData("   ", null)]
+    [InlineData("", null)]
+    [InlineData("  dark-blue ", "dark-blue")]
+    public void Theme_name_is_trimmed_and_a_blank_one_null(string value, string? expected)
+    {
+        var json = SampleJson();
+        json["ThemeName"] = value;
+        WriteRaw(json.ToJsonString());
+
+        Assert.Equal(expected, Store().Load().ThemeName);
+    }
+
+    [Fact]
     public void Every_cut_short_file_loads_without_throwing()
     {
         var content = SampleJson().ToJsonString();

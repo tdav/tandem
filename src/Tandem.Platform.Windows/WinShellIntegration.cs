@@ -1,13 +1,14 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using Tandem.Core.Platform;
+using Tandem.Core.Settings;
 
 namespace Tandem.Platform.Windows;
 
 /// <summary>
 /// Hands items to the Windows shell with <see cref="Process.Start(ProcessStartInfo)"/>: the default application
 /// through ShellExecute, Notepad as the text editor, Explorer to reveal an item, Windows Terminal (<c>wt.exe -d</c>)
-/// when it is on the PATH or else <c>cmd.exe</c> to open a terminal. ShellExecute gives its verdict when it is
+/// (when chosen and on the PATH), <c>cmd.exe</c> (when chosen) or else PowerShell (<c>pwsh.exe</c> when on the PATH, otherwise <c>powershell.exe</c>) to open a terminal. ShellExecute gives its verdict when it is
 /// called, so a launch that fails (no application, an item that is gone) throws an <see cref="IOException"/> at once
 /// and a launch that returns has succeeded. There is no list of applications for an item (<see cref="GetAppsFor"/>
 /// is empty) and no Full Disk Access to grant.
@@ -59,13 +60,17 @@ public sealed class WinShellIntegration : IShellIntegration
         return Launch(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
     }
 
-    public Task OpenTerminal(string directory)
+    public Task OpenTerminal(string directory, TerminalChoice terminal)
     {
         WinPath.RequireAbsolute(directory, nameof(directory));
         // Shell-executed, so a console program gets a console window of its own.
-        return Launch(_findOnPath("wt.exe") is { } terminal
-            ? new ProcessStartInfo(terminal) { ArgumentList = { "-d", directory }, UseShellExecute = true }
-            : new ProcessStartInfo("cmd.exe") { WorkingDirectory = directory, UseShellExecute = true });
+        if (terminal == TerminalChoice.WindowsTerminal && _findOnPath("wt.exe") is { } wt)
+            return Launch(new ProcessStartInfo(wt) { ArgumentList = { "-d", directory }, UseShellExecute = true });
+        if (terminal == TerminalChoice.Cmd)
+            return Launch(new ProcessStartInfo("cmd.exe") { WorkingDirectory = directory, UseShellExecute = true });
+        // The default (and Windows Terminal when it is not installed): PowerShell 7 if present, else Windows PowerShell.
+        var powerShell = _findOnPath("pwsh.exe") ?? "powershell.exe";
+        return Launch(new ProcessStartInfo(powerShell) { WorkingDirectory = directory, UseShellExecute = true });
     }
 
     public Task OpenFullDiskAccessSettings() => Task.CompletedTask;

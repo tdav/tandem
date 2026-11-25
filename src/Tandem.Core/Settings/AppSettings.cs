@@ -3,6 +3,11 @@ namespace Tandem.Core.Settings;
 /// <summary>The colour scheme: the system's, or always light or dark.</summary>
 public enum ThemeChoice { System, Light, Dark }
 
+/// <summary>The terminal that "Open terminal" and a bare shell name in the command line open. <see cref="Default"/> is
+/// the platform's usual one: PowerShell on Windows, Terminal on macOS. A choice the platform does not have
+/// (<see cref="ITerm"/> on Windows, the others on macOS) is treated as <see cref="Default"/>.</summary>
+public enum TerminalChoice { Default, WindowsTerminal, Cmd, ITerm }
+
 public enum SshConsolePlacement { SeparateWindow, PanelTab }
 
 public enum SshConsoleSide { Right, Left }
@@ -36,6 +41,13 @@ public sealed record AppSettings(int Version, ThemeChoice Theme, double FontSize
     public SshConsolePlacement SshConsolePlacement { get; init; }
     public SshConsoleSide SshConsolePanel { get; init; }
 
+    /// <summary>The theme file (its name without ".json" in the app's <c>Themes</c> folder) whose colours, fonts and
+    /// sizes the app shows; null means the built-in theme. Independent of <see cref="Theme"/>, the light/dark choice.</summary>
+    public string? ThemeName { get; init; }
+
+    /// <summary>The terminal "Open terminal" and a bare shell name in the command line open.</summary>
+    public TerminalChoice Terminal { get; init; }
+
     public const int CurrentVersion = 1;
     public const double DefaultFontSize = 14, MinFontSize = 10, MaxFontSize = 24;
     public const double DefaultRowHeight = 22, MinRowHeight = 16, MaxRowHeight = 48;
@@ -67,7 +79,8 @@ public sealed record AppSettings(int Version, ThemeChoice Theme, double FontSize
     /// (a row at least <c>FontSize + 6</c> high; a missing, zero or negative number gets its default), missing lists empty, each column list holding every column once
     /// (repeats dropped, missing ones added from <see cref="DefaultColumns"/>, widths clamped), colour rules without a
     /// mask or with an unknown colour, buttons without a title or program and key overrides without a command or
-    /// without a chord list dropped, and a blank <see cref="ExternalEditor"/> null.
+    /// without a chord list dropped, a blank <see cref="ExternalEditor"/> null and
+    /// <see cref="ThemeName"/> trimmed (a blank one null).
     /// </summary>
     public AppSettings Normalized()
     {
@@ -77,6 +90,7 @@ public sealed record AppSettings(int Version, ThemeChoice Theme, double FontSize
         {
             SshConsolePlacement = Enum.IsDefined(SshConsolePlacement) ? SshConsolePlacement : SshConsolePlacement.SeparateWindow,
             SshConsolePanel = Enum.IsDefined(SshConsolePanel) ? SshConsolePanel : SshConsoleSide.Right,
+            Terminal = Enum.IsDefined(Terminal) ? Terminal : TerminalChoice.Default,
             FontSize = fontSize,
             RowHeight = rowHeight,
             LeftColumns = NormalizedColumns(LeftColumns),
@@ -90,6 +104,7 @@ public sealed record AppSettings(int Version, ThemeChoice Theme, double FontSize
                 .Select(b => b with { Arguments = b.Arguments ?? "" })
                 .ToArray(),
             ExternalEditor = string.IsNullOrWhiteSpace(ExternalEditor) ? null : ExternalEditor,
+            ThemeName = string.IsNullOrWhiteSpace(ThemeName) ? null : ThemeName.Trim(),
         };
     }
 

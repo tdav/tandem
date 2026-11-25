@@ -14,6 +14,10 @@
                             Command="{Binding KillCommand}" IsVisible="{Binding IsRunning}" />
                     <Button x:Name="ClearButton" Classes="flat" Content="{loc:Tr Key=Output_Clear}"
                             Command="{Binding ClearOutputCommand}" />
+                    <Button x:Name="FloatButton" Classes="flat" Content="{loc:Tr Key=Output_Float}"
+                            Command="{Binding FloatOutputCommand}" IsVisible="{Binding !IsOutputFloating}" />
+                    <Button x:Name="DockButton" Classes="flat" Content="{loc:Tr Key=Output_Dock}"
+                            Command="{Binding DockOutputCommand}" IsVisible="{Binding IsOutputFloating}" />
                     <Button x:Name="CloseButton" Classes="flat" Content="{loc:Tr Key=Output_Close}"
                             Command="{Binding CloseOutputCommand}" />
                 </StackPanel>

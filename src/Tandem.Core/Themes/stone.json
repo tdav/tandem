@@ -1,0 +1,343 @@
+{
+ "name": "Tandem",
+ "version": 1,
+ "color": {
+  "themes": [
+   {
+    "id": "light",
+    "name": "Светлая"
+   },
+   {
+    "id": "dark",
+    "name": "Тёмная"
+   }
+  ],
+  "tokens": [
+   {
+    "name": "surface",
+    "value": {
+     "light": "#bbb8b0",
+     "dark": "#2a2927"
+    },
+    "usage": "Фон списков файлов, окон и диалогов. Основная площадь экрана."
+   },
+   {
+    "name": "surface-raised",
+    "value": {
+     "light": "#afaca4",
+     "dark": "#343330"
+    },
+    "usage": "Строка заголовка окна, строка вкладок панели, фон области текста в просмотрщике, фон списка сочетаний."
+   },
+   {
+    "name": "bar",
+    "value": {
+     "light": "#a3a098",
+     "dark": "#3f3d39"
+    },
+    "usage": "Полосы панели (диски, путь неактивной панели, строка состояния), F-клавиши, кнопки, панель инструментов просмотрщика."
+   },
+   {
+    "name": "bar-hover",
+    "value": {
+     "light": "#98958d",
+     "dark": "#494743"
+    },
+    "usage": "Кнопка и F-клавиша под указателем мыши."
+   },
+   {
+    "name": "bar-pressed",
+    "value": {
+     "light": "#8d8a82",
+     "dark": "#54514c"
+    },
+    "usage": "Кнопка и F-клавиша в момент нажатия."
+   },
+   {
+    "name": "field",
+    "value": {
+     "light": "#cac7c0",
+     "dark": "#222120"
+    },
+    "usage": "Фон полей ввода, выпадающих списков, флажков и командной строки."
+   },
+   {
+    "name": "line",
+    "value": {
+     "light": "#84817a",
+     "dark": "#57544e"
+    },
+    "usage": "Разделитель между панелями, рамки полей без фокуса, ползунок прокрутки, пунктир записи сочетания."
+   },
+   {
+    "name": "edge",
+    "value": {
+     "light": "#54514b",
+     "dark": "#8a867d"
+    },
+    "usage": "Рамки элементов управления (поиск, список, флажок) и неактивная рамка курсора; 3:1 и выше на surface и field."
+   },
+   {
+    "name": "ink",
+    "value": {
+     "light": "#1b1a18",
+     "dark": "#dbd7ce"
+    },
+    "usage": "Основной текст на surface, surface-raised, bar, field и cursor."
+   },
+   {
+    "name": "ink-muted",
+    "value": {
+     "light": "#353330",
+     "dark": "#b3afa5"
+    },
+    "usage": "Второстепенный текст на тех же фонах: расширения, «свободно … ГБ», сочетания клавиш, подсказки в пустых полях."
+   },
+   {
+    "name": "ink-disabled",
+    "value": {
+     "light": "#4f4c46",
+     "dark": "#8a867d"
+    },
+    "usage": "Текст недоступной кнопки на surface-raised («Как по умолчанию», «Сбросить всё», когда сбрасывать нечего). Намеренно тусклее 4,5:1 (недоступные элементы WCAG не нормирует), но не ниже 3:1."
+   },
+   {
+    "name": "accent",
+    "value": {
+     "light": "#25555c",
+     "dark": "#357c86"
+    },
+    "usage": "Строка пути активной панели и значок приложения. Единственный цвет, который показывает, какая панель активна."
+   },
+   {
+    "name": "on-accent",
+    "value": {
+     "light": "#ffffff",
+     "dark": "#ffffff"
+    },
+    "usage": "Текст и стрелки ‹ › на accent."
+   },
+   {
+    "name": "cursor",
+    "value": {
+     "light": "#86a3a4",
+     "dark": "#2f4a4d"
+    },
+    "usage": "Строка под курсором в активной панели. Текст на нём — ink."
+   },
+   {
+    "name": "focus",
+    "value": {
+     "light": "#7c3f21",
+     "dark": "#c7754f"
+    },
+    "usage": "Рамка поля ввода в фокусе, подчёркивание выбранной вкладки, фон выделенного текста в поле. Не для навигации."
+   },
+   {
+    "name": "on-focus",
+    "value": {
+     "light": "#ffffff",
+     "dark": "#1d120c"
+    },
+    "usage": "Выделенный текст на focus."
+   },
+   {
+    "name": "folder",
+    "value": {
+     "light": "#214f56",
+     "dark": "#64a3ab"
+    },
+    "usage": "Значок папки и «..» в списке, на surface и cursor."
+   },
+   {
+    "name": "file",
+    "value": {
+     "light": "#5a5852",
+     "dark": "#8f8b82"
+    },
+    "usage": "Значок файла в списке, на surface."
+   },
+   {
+    "name": "syntax",
+    "value": {
+     "light": "#1a4046",
+     "dark": "#7fbac1"
+    },
+    "usage": "Скобки и ключи JSON в просмотрщике и редакторе, на surface и surface-raised."
+   }
+  ]
+ },
+ "type": {
+  "fonts": [],
+  "families": {
+   "ui": "\"Segoe UI Variable Text\", \"Segoe UI\", system-ui, sans-serif",
+   "mono": "\"Cascadia Mono\", Consolas, monospace"
+  },
+  "groups": [
+   {
+    "name": "Интерфейс",
+    "family": "ui",
+    "styles": [
+     {
+      "name": "dialog-tab",
+      "fontSize": "25px",
+      "lineHeight": "32px",
+      "fontWeight": 300,
+      "sample": "Клавиши  Вид  Столбцы",
+      "usage": "Вкладки окна «Настройки» и подзаголовок раздела («SSH-консоль»)."
+     },
+     {
+      "name": "dialog-text",
+      "fontSize": "15px",
+      "lineHeight": "20px",
+      "fontWeight": 400,
+      "sample": "Копировать «.mcp.json» в: C:\\.mcp.json",
+      "usage": "Текст малых диалогов (Копировать, Упаковка), подписи флажков, панель просмотрщика."
+     },
+     {
+      "name": "item",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "fontWeight": 600,
+      "sample": "daemon-auth-status.json",
+      "usage": "Имена файлов и папок, пункты меню, названия команд, текст кнопок."
+     },
+     {
+      "name": "data",
+      "fontSize": "14px",
+      "lineHeight": "22px",
+      "fontWeight": 400,
+      "sample": "12,8 КБ  16.11.2026 01:12",
+      "usage": "Расширение, размер, дата, путь, строка состояния, сочетания клавиш."
+     },
+     {
+      "name": "caption",
+      "fontSize": "12px",
+      "lineHeight": "16px",
+      "fontWeight": 400,
+      "sample": "C:\\Users\\admin\\.claude\\.mcp.json",
+      "usage": "Строка заголовка окна и диалога."
+     }
+    ]
+   },
+   {
+    "name": "Код",
+    "family": "mono",
+    "styles": [
+     {
+      "name": "code",
+      "fontSize": "12.5px",
+      "lineHeight": "17px",
+      "fontWeight": 400,
+      "sample": "{ \"mcpServers\": {} }",
+      "usage": "Текст в просмотрщике и редакторе, номера строк."
+     }
+    ]
+   }
+  ]
+ },
+ "spacing": {
+  "tokens": [
+   {
+    "name": "space-1",
+    "value": "4px",
+    "usage": "Промежуток между панелями, зазор между значком и краем строки."
+   },
+   {
+    "name": "space-2",
+    "value": "8px",
+    "usage": "Отступ текста в строке списка, отступ от значка до имени (7–8px), промежуток между кнопками."
+   },
+   {
+    "name": "space-3",
+    "value": "12px",
+    "usage": "Отступ меню от края окна, внутренние поля строки сочетания."
+   },
+   {
+    "name": "space-4",
+    "value": "16px",
+    "usage": "Отступ кнопок от правого края диалога «Настройки»."
+   },
+   {
+    "name": "space-6",
+    "value": "24px",
+    "usage": "Поля малых диалогов, расстояние между пунктами меню."
+   },
+   {
+    "name": "space-7",
+    "value": "28px",
+    "usage": "Поля окна «Настройки»."
+   }
+  ]
+ },
+ "size": {
+  "tokens": [
+   {
+    "name": "row-height",
+    "value": "22px",
+    "usage": "Строка списка файлов и все полосы панели: диски, вкладки, путь, состояние."
+   },
+   {
+    "name": "fkey-height",
+    "value": "26px",
+    "usage": "Строка F-клавиш."
+   },
+   {
+    "name": "control-height",
+    "value": "29px",
+    "usage": "Кнопка."
+   },
+   {
+    "name": "field-height",
+    "value": "32px",
+    "usage": "Поле ввода, выпадающий список, поиск."
+   },
+   {
+    "name": "shortcut-row-height",
+    "value": "38px",
+    "usage": "Строка списка сочетаний в «Настройках»."
+   },
+   {
+    "name": "pane-gap",
+    "value": "4px",
+    "usage": "Ширина разделителя между панелями (цвет line)."
+   }
+  ]
+ },
+ "radius": {
+  "tokens": [
+   {
+    "name": "radius-field",
+    "value": "2px",
+    "usage": "Поиск и поле записи сочетания в «Настройках»."
+   },
+   {
+    "name": "radius-button",
+    "value": "3px",
+    "usage": "Кнопки."
+   },
+   {
+    "name": "radius-control",
+    "value": "4px",
+    "usage": "Поля ввода малых диалогов, выпадающие списки, флажки."
+   },
+   {
+    "name": "radius-window",
+    "value": "8px",
+    "usage": "Окна диалогов, просмотрщика и редактора. Главное окно — без скругления."
+   }
+  ]
+ },
+ "shadow": {
+  "tokens": [
+   {
+    "name": "shadow-window",
+    "value": {
+     "light": "0 12px 34px rgba(0, 0, 0, 0.22)",
+     "dark": "0 12px 34px rgba(0, 0, 0, 0.5)"
+    },
+    "usage": "Диалоги и отдельные окна поверх главного окна."
+   }
+  ]
+ }
+}

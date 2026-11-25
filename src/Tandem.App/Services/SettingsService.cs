@@ -1,4 +1,5 @@
 using Tandem.Core.Settings;
+using Tandem.Core.Themes;
 
 namespace Tandem.App.Services;
 
@@ -14,6 +15,10 @@ public sealed class SettingsService(JsonSettingsStore store, Action<Exception>? 
 
     /// <summary>The settings in use; <see cref="AppSettings.Default"/> until <see cref="Load"/>.</summary>
     public AppSettings Current { get; private set; } = AppSettings.Default;
+
+    /// <summary>The themes <see cref="AppSettings.ThemeName"/> chooses from (the state folder's <c>Themes</c>);
+    /// null when the app runs without a themes folder (some tests): then the built-in theme stays.</summary>
+    public ThemeCatalog? Themes { get; init; }
 
     /// <summary>Raised by <see cref="Update"/>, on the thread that called it (the UI thread), with
     /// <see cref="Current"/> already the new settings. <see cref="Load"/> does not raise it.</summary>

@@ -1,5 +1,6 @@
 using System.Runtime.Versioning;
 using Tandem.Core.Platform;
+using Tandem.Core.Settings;
 
 namespace Tandem.Platform.Mac.Tests;
 
@@ -61,11 +62,20 @@ public sealed class MacShellIntegrationTests : IDisposable
     [Fact]
     public void OpenTerminal_runs_open_a_Terminal()
     {
-        _shell.OpenTerminal("/tmp/some dir");
+        _shell.OpenTerminal("/tmp/some dir", TerminalChoice.Default);
 
         var spec = Assert.Single(_runner.Specs);
         Assert.Equal(Open, spec.FileName);
         Assert.Equal(["-a", "Terminal", "/tmp/some dir"], spec.Arguments);
+    }
+
+    [Fact]
+    public void OpenTerminal_runs_open_iTerm_when_chosen()
+    {
+        _shell.OpenTerminal("/tmp/some dir", TerminalChoice.ITerm);
+
+        var spec = Assert.Single(_runner.Specs);
+        Assert.Equal(["-a", "iTerm", "/tmp/some dir"], spec.Arguments);
     }
 
     [Fact]

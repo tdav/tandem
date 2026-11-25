@@ -3,14 +3,11 @@
              xmlns:vm="using:Tandem.App.ViewModels"
              xmlns:v="using:Tandem.App.Views"
              xmlns:settings="using:Tandem.Core.Settings"
-             xmlns:svg="clr-namespace:Avalonia.Svg;assembly=Svg.Controls.Avalonia"
              x:Class="Tandem.App.Views.FileListView"
              x:DataType="vm:SideViewModel">
     <UserControl.Resources>
-        <svg:SvgImage x:Key="FileRowIcon" Source="avares://Tandem.App/Assets/FileIcons/file.svg" />
-        <svg:SvgImage x:Key="FolderRowIcon" Source="avares://Tandem.App/Assets/FileIcons/folder.svg" />
-        <svg:SvgImage x:Key="ParentRowIcon" Source="avares://Tandem.App/Assets/FileIcons/parent.svg" />
-        <!-- Hidden entries draw the same shapes as folder.svg and file.svg, filled with the theme's hidden brushes. -->
+        <!-- Hidden entries draw the same shapes as the theme's folder and file icons (Tandem.FolderIcon,
+             Tandem.FileIcon), filled with the theme's hidden brushes. -->
         <StreamGeometry x:Key="HiddenFolderBody">M1.5 12.5v-9a1 1 0 0 1 1-1h3.25l1.5 2h6.25a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1Z</StreamGeometry>
         <StreamGeometry x:Key="HiddenFolderDetail">M2 7h12v5.5a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5Z</StreamGeometry>
         <StreamGeometry x:Key="HiddenFileBody">M4.5 1.5h5l3 3v9a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1Z</StreamGeometry>
@@ -56,13 +53,13 @@
     </UserControl.Resources>
     <UserControl.Styles>
         <Style Selector="Image.entryIcon">
-            <Setter Property="Source" Value="{StaticResource FileRowIcon}" />
+            <Setter Property="Source" Value="{DynamicResource Tandem.FileIcon}" />
         </Style>
         <Style Selector="Image.entryIcon.folder">
-            <Setter Property="Source" Value="{StaticResource FolderRowIcon}" />
+            <Setter Property="Source" Value="{DynamicResource Tandem.FolderIcon}" />
         </Style>
         <Style Selector="Image.entryIcon.parent">
-            <Setter Property="Source" Value="{StaticResource ParentRowIcon}" />
+            <Setter Property="Source" Value="{DynamicResource Tandem.ParentIcon}" />
         </Style>
         <!-- Hidden entries: the icon in the hidden colour, a file's shape or a folder's. Only the icon: a colour rule
              and the marked style colour the name (TextBlocks), so the three never compete. -->
