@@ -1,3 +1,4 @@
+using Tandem.Core.Vfs.Local;
 using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
@@ -262,7 +263,7 @@ public partial class MainWindow : Window
         foreach (var path in main.Workspace.Favorites.Items)
             flyout.Items.Add(new MenuItem
             {
-                Header = LiteralLabel.For(path), Command = main.OpenFavoriteCommand, CommandParameter = path,
+                Header = LiteralLabel.For(LocalPath.Display(path, LocalPath.Current)), Command = main.OpenFavoriteCommand, CommandParameter = path,
             });
         if (flyout.Items.Count == 0)
             flyout.Items.Add(new MenuItem { Header = Loc.Get("Menu_FavoritesEmpty"), IsEnabled = false });

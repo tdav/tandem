@@ -1,3 +1,4 @@
+using Tandem.Core.Vfs.Local;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Tandem.App.Resources;
 
@@ -111,6 +112,10 @@ public sealed partial class InlineRenameViewModel : ObservableObject
     {
         if (string.IsNullOrWhiteSpace(name)) return Loc.Get("Rename_Empty");
         if (name is "." or ".." || name.Contains('/') || name.Contains('\0')) return Loc.Format("Rename_Invalid", name);
+        // On Windows a name the disk cannot hold ("a:b", "a\\b", "CON") is refused here, not by a puzzling system
+        // error (or, for '\\', a move into another folder).
+        if (LocalPath.Current == LocalPathStyle.Windows && !LocalPath.IsWindowsName(name))
+            return Loc.Format("Rename_Invalid", name);
         return null;
     }
 

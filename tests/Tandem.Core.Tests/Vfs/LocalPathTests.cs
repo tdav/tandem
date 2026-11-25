@@ -140,3 +140,28 @@ public class LocalPathTypedTests
     public void Display(string vfs, LocalPathStyle style, string expected) =>
         Assert.Equal(expected, LocalPath.Display(vfs, style));
 }
+
+public class WindowsNameTests
+{
+    [Theory]
+    [InlineData("report.txt", true)]
+    [InlineData("a b", true)]
+    [InlineData(".gitignore", true)]
+    [InlineData("a:b", false)]
+    [InlineData(@"a\b", false)]
+    [InlineData("a/b", false)]
+    [InlineData("what?", false)]
+    [InlineData("star*", false)]
+    [InlineData("<x>", false)]
+    [InlineData("pipe|", false)]
+    [InlineData("quote\"", false)]
+    [InlineData("tab\t", false)]
+    [InlineData("CON", false)]
+    [InlineData("nul.txt", false)]
+    [InlineData("COM1", false)]
+    [InlineData("lpt9.log", false)]
+    [InlineData("CONSOLE", true)]
+    [InlineData("trailing.", false)]
+    [InlineData("trailing ", false)]
+    public void IsWindowsName(string name, bool expected) => Assert.Equal(expected, LocalPath.IsWindowsName(name));
+}

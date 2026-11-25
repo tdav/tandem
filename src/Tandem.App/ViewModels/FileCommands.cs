@@ -1,3 +1,4 @@
+using Tandem.Core.Vfs.Local;
 using System.ComponentModel;
 using Tandem.App.Commands;
 using Tandem.App.Resources;
@@ -259,7 +260,8 @@ public sealed class FileCommands : IDisposable
         if (_askingCopyOrMove) return false;
         var single = sources.Count == 1 ? sources[0].Name : null;
         var to = destinationDirectory;
-        var proposal = single is null ? to.Path : to.Combine(single).Path;
+        // Shown as the user types paths (on Windows C:\\x); DestinationParser reads that form back.
+        var proposal = single is null ? to.Display() : to.Combine(single).Display();
         var probe = OffTheUiThread(DestinationParser.ProbeOf(_providers));
         Task<DestinationParseResult> Parse(string text) => DestinationParser.ParseAsync(text, baseDirectory, to,
             sources.Count, single, _workspace.HomeDirectory, probe);
@@ -374,9 +376,13 @@ public sealed class FileCommands : IDisposable
             error = Loc.Get("NewFolder_Empty");
             return null;
         }
-        var trimmed = text.EndsWith('/') ? text[..^1] : text;
-        var segments = trimmed.Split('/');
-        if (text.StartsWith('/') || segments.Any(s => s.Length == 0 || s is "." or ".." || s.Contains('\0')))
+        // On Windows '\\' separates folders as well, and each name must be one Windows can hold.
+        var windows = LocalPath.Current == LocalPathStyle.Windows;
+        var separators = windows ? new[] { '/', '\\' } : ['/'];
+        var trimmed = separators.Contains(text[^1]) ? text[..^1] : text;
+        var segments = trimmed.Split(separators);
+        if (separators.Contains(text[0]) ||
+            segments.Any(s => s.Length == 0 || s is "." or ".." || s.Contains('\0') || (windows && !LocalPath.IsWindowsName(s))))
         {
             error = Loc.Format("NewFolder_Invalid", text);
             return null;

@@ -118,6 +118,26 @@ public static class LocalPath
     public static bool EndsWithSeparator(string text, LocalPathStyle style) =>
         text.EndsWith('/') || (style == LocalPathStyle.Windows && text.EndsWith('\\'));
 
+    private static readonly HashSet<string> ReservedWindowsNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "CON", "PRN", "AUX", "NUL",
+        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    };
+
+    /// <summary>True when Windows can hold <paramref name="name"/> as a file name: none of <c>\ / : * ? " &lt; &gt; |</c>
+    /// or a control character, not a device name (CON, NUL, COM1 … with or without an extension), and no trailing dot
+    /// or space (Windows drops them silently).</summary>
+    public static bool IsWindowsName(string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        if (name.Length == 0 || name.EndsWith('.') || name.EndsWith(' ')) return false;
+        foreach (var c in name)
+            if (c < ' ' || c is '\\' or '/' or ':' or '*' or '?' or '"' or '<' or '>' or '|') return false;
+        var dot = name.IndexOf('.');
+        return !ReservedWindowsNames.Contains(dot < 0 ? name : name[..dot]);
+    }
+
     /// <summary>True for a VFS path that is exactly a drive (<c>/C:</c>).</summary>
     public static bool IsDriveRoot(string vfs) =>
         vfs.Length == 3 && vfs[0] == '/' && IsDriveSegment(vfs[1..]);

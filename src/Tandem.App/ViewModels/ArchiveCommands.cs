@@ -1,3 +1,4 @@
+using Tandem.Core.Vfs.Local;
 using System.ComponentModel;
 using Tandem.App.Commands;
 using Tandem.App.Resources;
@@ -255,7 +256,7 @@ public sealed class ArchiveCommands : IDisposable
         if (string.IsNullOrEmpty(baseName)) baseName = Loc.Get("Archive_DefaultName");
         var formats = ArchiveFormats.Creatable;
         var to = passive.CurrentPath;
-        var proposal = to.Combine(baseName + "." + ArchiveFormats.DefaultExtension(formats[0])).Path;
+        var proposal = to.Combine(baseName + "." + ArchiveFormats.DefaultExtension(formats[0])).Display();
         var from = BaseDirectoryOf(active, targets[0]);
 
         var answer = await _services.Dialogs.AskPackAsync(new PackRequest(targets.Count, single, proposal, formats,
@@ -289,7 +290,7 @@ public sealed class ArchiveCommands : IDisposable
         if (active.SelectedCount == 0 && !IsArchive(archives[0]) && !await IsArchiveByContentAsync(archives[0])) return;
 
         var answer = await _services.Dialogs.AskUnpackAsync(new UnpackRequest(archives.Count,
-            archives.Count == 1 ? archives[0].Name : null, to.Path, SeparateFolders: archives.Count > 1,
+            archives.Count == 1 ? archives[0].Name : null, to.Display(), SeparateFolders: archives.Count > 1,
             async text => (await UnpackFolderOf(text, from, to)).Error));
         if (answer is null) return;
 
