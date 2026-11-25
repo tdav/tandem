@@ -28,8 +28,9 @@ the app is compiled ahead of time to machine code, so you do not need to install
 ### Windows x64 (preview)
 
 Windows 10/11 x64: `Tandem-<version>-win-x64.zip` in the
-[releases](https://github.com/tdav/tandem/releases) (marked pre-release). It is self-contained: .NET does not need to be
-installed. Unpack it anywhere and run `Tandem.App.exe`. The exe is not signed, so SmartScreen may warn once:
+[releases](https://github.com/tdav/tandem/releases) (marked pre-release). It is Native AOT, compiled ahead of time to
+machine code, so .NET does not need to be installed. Unpack it anywhere and run `Tandem.exe` (keep the
+three DLLs beside it). The exe is not signed, so SmartScreen may warn once:
 "More info" → "Run anyway".
 
 On Windows the shortcuts use Ctrl where macOS uses ⌘, in the style of classic two-pane managers (Ctrl+R reread,
