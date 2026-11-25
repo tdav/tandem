@@ -24,6 +24,24 @@ public sealed class TerminalTests
         Assert.Equal("й中", screen.LineText(0));
     }
 
+    [Theory]
+    [InlineData("", TerminalCursorShape.Bar, true)]
+    [InlineData("\e[2 q", TerminalCursorShape.Block, false)]
+    [InlineData("\e[1 q", TerminalCursorShape.Block, true)]
+    [InlineData("\e[3 q", TerminalCursorShape.Underline, true)]
+    [InlineData("\e[4 q", TerminalCursorShape.Underline, false)]
+    [InlineData("\e[5 q", TerminalCursorShape.Bar, true)]
+    [InlineData("\e[6 q", TerminalCursorShape.Bar, false)]
+    [InlineData("\e[2 q\e[0 q", TerminalCursorShape.Bar, true)]
+    public void Cursor_shape_defaults_to_blinking_bar_and_follows_decscusr(string output, TerminalCursorShape shape,
+        bool blink)
+    {
+        using var screen = new TerminalEmulator(10, 3);
+        screen.Feed(Encoding.ASCII.GetBytes(output));
+        Assert.Equal(shape, screen.CursorShape);
+        Assert.Equal(blink, screen.CursorBlink);
+    }
+
     [Fact]
     public void Extracts_wrapped_text_including_scrollback()
     {

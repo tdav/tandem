@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Threading;
 using Tandem.App.ViewModels.Net;
 using Tandem.Net.Terminal;
 
@@ -16,13 +17,36 @@ public sealed class TerminalControl : Control
     private bool _dragging;
     private double _cellWidth = 8;
     private double _cellHeight = 18;
+    private readonly TerminalCursorBlink _blink = new();
+    private readonly DispatcherTimer _blinkTimer = new() { Interval = TerminalCursorBlink.HalfPeriod };
+    private readonly CursorLayer _cursorLayer;
+    private WindowBase? _window;
 
     public TerminalControl()
     {
         Focusable = true;
         ClipToBounds = true;
-        GotFocus += (_, _) => InvalidateVisual();
-        LostFocus += (_, _) => InvalidateVisual();
+        _cursorLayer = new CursorLayer(this);
+        VisualChildren.Add(_cursorLayer);
+        _blinkTimer.Tick += OnBlinkTick;
+        GotFocus += (_, _) => UpdateBlink();
+        LostFocus += (_, _) => UpdateBlink();
+    }
+
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        _window = TopLevel.GetTopLevel(this) as WindowBase;
+        if (_window is not null) _window.PropertyChanged += OnWindowPropertyChanged;
+        UpdateBlink();
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        if (_window is not null) _window.PropertyChanged -= OnWindowPropertyChanged;
+        _window = null;
+        UpdateBlink();
+        base.OnDetachedFromVisualTree(e);
     }
 
     internal void Attach(TerminalViewModel model)
@@ -33,6 +57,7 @@ public sealed class TerminalControl : Control
         _cellHeight = Math.Ceiling(letter.Height);
         model.ScreenChanged += OnScreenChanged;
         InvalidateVisual();
+        UpdateBlink();
     }
 
     internal void Detach()
@@ -42,6 +67,7 @@ public sealed class TerminalControl : Control
         _anchor = null;
         _dragging = false;
         InvalidateVisual();
+        UpdateBlink();
     }
 
     internal (int Columns, int Rows) GridSize => (Math.Clamp((int)(Bounds.Width / _cellWidth), 2, 500),
@@ -56,16 +82,12 @@ public sealed class TerminalControl : Control
         if (_model is not { } model) return;
 
         int columns, rows, top;
-        (int Column, int Row) cursor;
-        bool showCursor;
         TerminalCell[] cells;
         lock (model.ScreenLock)
         {
             var screen = model.Screen;
             (columns, rows) = (screen.Columns, screen.Rows);
             top = -Math.Min(model.ScrollOffset, screen.ScrollbackCount);
-            cursor = screen.Cursor;
-            showCursor = top == 0 && screen.CursorVisible && IsFocused && model.State == TerminalState.Connected;
             cells = new TerminalCell[columns * rows];
             for (var row = 0; row < rows; row++)
                 for (var column = 0; column < columns; column++)
@@ -113,10 +135,6 @@ public sealed class TerminalControl : Control
                     context.DrawLine(new Pen(fg), new Point(bounds.Left, y), new Point(bounds.Right, y));
             }
         }
-        if (showCursor)
-            context.DrawRectangle(new Pen(Resource("Tandem.TerminalCursor")), new Rect(
-                cursor.Column * _cellWidth + 0.5, cursor.Row * _cellHeight + 0.5, _cellWidth - 1, _cellHeight - 1));
-
         IBrush ColorBrush(TerminalColor color, IBrush fallback)
         {
             if (color.Kind == TerminalColorKind.Default) return fallback;
@@ -146,6 +164,7 @@ public sealed class TerminalControl : Control
         if (MapKey(e.Key) is { } key)
         {
             e.Handled = true;
+            RestartBlink();
             model.SendKey(key, modifiers);
         }
         else if ((modifiers & (TerminalModifiers.Control | TerminalModifiers.Alt)) != 0)
@@ -155,6 +174,7 @@ public sealed class TerminalControl : Control
                 symbol = ((char)('A' + (e.Key - Key.A))).ToString();
             if (string.IsNullOrEmpty(symbol)) return;
             e.Handled = true;
+            RestartBlink();
             model.SendText(symbol, modifiers);
         }
     }
@@ -164,6 +184,7 @@ public sealed class TerminalControl : Control
         base.OnTextInput(e);
         if (e.Handled || string.IsNullOrEmpty(e.Text) || _model is null) return;
         e.Handled = true;
+        RestartBlink();
         _model.SendText(e.Text, TerminalModifiers.None);
     }
 
@@ -223,7 +244,52 @@ public sealed class TerminalControl : Control
         model.ScrollOffset += Math.Sign(e.Delta.Y) * 3;
     }
 
-    private void OnScreenChanged(object? sender, EventArgs e) => InvalidateVisual();
+    private void OnScreenChanged(object? sender, EventArgs e)
+    {
+        InvalidateVisual();
+        RestartBlink();
+    }
+
+    private void OnWindowPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (e.Property == WindowBase.IsActiveProperty) UpdateBlink();
+    }
+
+    /// <summary>Output or a keystroke: show the cursor now and blink from there.</summary>
+    private void RestartBlink()
+    {
+        _blink.Reset();
+        UpdateBlink();
+    }
+
+    /// <summary>Blinks only in the focused terminal of the active window; one timer per control, off otherwise.</summary>
+    private void UpdateBlink()
+    {
+        var blinks = true;
+        if (_model is { } model)
+            lock (model.ScreenLock) blinks = model.Screen.CursorBlink;
+        _blink.Blinks = blinks;
+        _blink.Focused = _model is not null && IsFocused && _window is { IsActive: true };
+        if (_blink.UntilNextToggle is { } wait && IsEffectivelyVisible)
+        {
+            _blinkTimer.Stop();
+            _blinkTimer.Interval = wait;
+            _blinkTimer.Start();
+        }
+        else _blinkTimer.Stop();
+        _cursorLayer.InvalidateVisual();
+    }
+
+    private void OnBlinkTick(object? sender, EventArgs e)
+    {
+        if (_blink.UntilNextToggle is not { } wait || !IsEffectivelyVisible)
+        {
+            _blinkTimer.Stop();
+            return;
+        }
+        _blinkTimer.Interval = wait;
+        _cursorLayer.InvalidateVisual();
+    }
 
     private (int Column, int Line) CellAt(Point point)
     {
@@ -240,6 +306,62 @@ public sealed class TerminalControl : Control
 
     private IBrush Resource(string name) =>
         this.TryFindResource(name, ActualThemeVariant, out var value) && value is IBrush brush ? brush : Brushes.Transparent;
+
+    /// <summary>
+    /// Draws only the cursor, above the cells, so a blink re-renders this layer and not the whole screen.
+    /// </summary>
+    private sealed class CursorLayer : Control
+    {
+        private const double BarWidth = 2;
+        private readonly TerminalControl _owner;
+
+        public CursorLayer(TerminalControl owner)
+        {
+            _owner = owner;
+            IsHitTestVisible = false;
+        }
+
+        public override void Render(DrawingContext context)
+        {
+            if (_owner._model is not { } model || !_owner._blink.IsVisible) return;
+            (int Column, int Row) cursor;
+            TerminalCell cell;
+            TerminalCursorShape shape;
+            lock (model.ScreenLock)
+            {
+                var screen = model.Screen;
+                if (model.ScrollOffset > 0 && screen.ScrollbackCount > 0 || !screen.CursorVisible ||
+                    model.State != TerminalState.Connected) return;
+                cursor = screen.Cursor;
+                cell = screen.CellAt(cursor.Column, cursor.Row);
+                shape = screen.CursorShape;
+            }
+            var (width, height) = (_owner._cellWidth, _owner._cellHeight);
+            var cellRect = new Rect(cursor.Column * width, cursor.Row * height, Math.Max(1, cell.Width) * width, height);
+            var brush = _owner.Resource("Tandem.TerminalForeground");
+            if (!_owner._blink.Focused)
+            {
+                // Common terminal practice: an unfocused cursor is a steady hollow box, whatever its shape.
+                context.DrawRectangle(new Pen(brush), cellRect.Deflate(0.5));
+                return;
+            }
+            switch (shape)
+            {
+                case TerminalCursorShape.Bar:
+                    context.FillRectangle(brush, new Rect(cellRect.X, cellRect.Y, BarWidth, height));
+                    break;
+                case TerminalCursorShape.Underline:
+                    context.FillRectangle(brush, new Rect(cellRect.X, cellRect.Bottom - BarWidth, cellRect.Width, BarWidth));
+                    break;
+                default:
+                    context.FillRectangle(brush, cellRect);
+                    if (!string.IsNullOrWhiteSpace(cell.Text))
+                        context.DrawText(_owner.Format(cell.Text, cell.Style & (CellStyle.Bold | CellStyle.Italic),
+                            _owner.Resource("Tandem.TerminalBackground")), cellRect.TopLeft);
+                    break;
+            }
+        }
+    }
 
     private static IBrush IndexedBrush(int number)
     {
