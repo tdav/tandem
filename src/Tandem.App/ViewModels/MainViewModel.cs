@@ -108,7 +108,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Drops = new DropHandler(workspace, Files);
         Shell = new ShellCommands(workspace, services.Shell, services.QuickLook, services.Dialogs, services.Windows,
             Commands, services.Providers, services.Metadata, services.Temp, ReportFailure, quickLookDelay,
-            services.NativeCopy, settings, services.Processes, quarantine);
+            services.NativeCopy, settings, services.Processes, quarantine, services.Clipboard);
         ButtonBar = new ButtonBarViewModel(workspace, settings, services.Processes, services.Dialogs, ReportFailure);
         CommandLine = new CommandLineViewModel(workspace, services.Processes, workspace.HomeDirectory);
         ArchiveMounts = archiveMounts;

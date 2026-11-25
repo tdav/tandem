@@ -204,7 +204,7 @@ public sealed class SettingsViewModelTests : IDisposable
         Assert.Equal(vm.Shortcuts.Count, vm.VisibleShortcuts.Count);
 
         vm.ShortcutFilter = "cOPy";
-        Assert.Equal([CommandIds.FileCopy], vm.VisibleShortcuts.Select(r => r.CommandId));
+        Assert.Equal([CommandIds.FileCopy, CommandIds.FileCopyPath], vm.VisibleShortcuts.Select(r => r.CommandId));
 
         vm.ShortcutFilter = "Shift+F8";
         Assert.Equal([CommandIds.FileDeletePermanent], vm.VisibleShortcuts.Select(r => r.CommandId));

@@ -611,7 +611,7 @@ public class ShellCommandsTests : LanguageTestBase
 
     private static readonly string[] RowMenuKeys =
     [
-        "Context_Open", "Context_OpenWith", "Context_Reveal", "Context_QuickLook", "Context_Copy", "Context_Move",
+        "Context_Open", "Context_OpenWith", "Context_Reveal", "Context_CopyPath", "Context_QuickLook", "Context_Copy", "Context_Move",
         "Context_Rename", "Context_Delete", "Menu_archive_pack", "Menu_archive_unpack", "Context_Properties",
     ];
 
@@ -625,7 +625,8 @@ public class ShellCommandsTests : LanguageTestBase
         Assert.Equal(RowMenuKeys, menu.Select(i => i.LabelKey));
         Assert.All(menu, i => Assert.Equal(Loc.Get(i.LabelKey), i.Label));
         Assert.Equal(
-            [null, CommandIds.ShellOpenWith, CommandIds.ShellReveal, CommandIds.FileQuickLook, CommandIds.FileCopy,
+            [null, CommandIds.ShellOpenWith, CommandIds.ShellReveal, CommandIds.FileCopyPath, CommandIds.FileQuickLook,
+                CommandIds.FileCopy,
                 CommandIds.FileMove, CommandIds.FileRename, CommandIds.FileDelete, CommandIds.ArchivePack,
                 CommandIds.ArchiveUnpack, CommandIds.FileProperties],
             menu.Select(i => i.CommandId));

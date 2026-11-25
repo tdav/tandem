@@ -37,6 +37,8 @@ public sealed class KeyMap
             (CommandIds.FileRename, "Shift+F6"), (CommandIds.FileRename, "F2"), (CommandIds.FileRename, "Cmd+Shift+R"),
             (CommandIds.FileQuickLook, "Cmd+Y"),
             (CommandIds.FileProperties, "Cmd+I"),
+            // Finder's "Copy as Pathname".
+            (CommandIds.FileCopyPath, "Cmd+Alt+C"),
             (CommandIds.PanelSwitch, "Tab"),
             (CommandIds.PanelRefresh, "Cmd+R"),
             (CommandIds.PanelSwap, "Cmd+U"),

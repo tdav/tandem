@@ -435,6 +435,9 @@
   <data name="Menu_shell_openWith" xml:space="preserve">
     <value>Open With…</value>
   </data>
+  <data name="Menu_file_copyPath" xml:space="preserve">
+    <value>Copy Path</value>
+  </data>
 
   <!-- Main menu: View menu and favourites/history menus -->
   <data name="Menu_Sidebar" xml:space="preserve">
@@ -778,6 +781,21 @@ Details were written to {1}.</value>
   </data>
   <data name="Context_Reveal" xml:space="preserve">
     <value>Show in Finder</value>
+  </data>
+  <data name="Context_CopyPath" xml:space="preserve">
+    <value>Copy Path</value>
+  </data>
+  <data name="CopyPath_Copied" xml:space="preserve">
+    <value>Path copied</value>
+  </data>
+  <data name="CopyPath_CopiedCount_One" xml:space="preserve">
+    <value>{0} path copied</value>
+  </data>
+  <data name="CopyPath_CopiedCount_Few" xml:space="preserve">
+    <value>{0} paths copied</value>
+  </data>
+  <data name="CopyPath_CopiedCount_Many" xml:space="preserve">
+    <value>{0} paths copied</value>
   </data>
   <data name="Context_QuickLook" xml:space="preserve">
     <value>Quick Look</value>

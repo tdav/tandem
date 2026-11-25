@@ -15,10 +15,11 @@ public sealed record OpenWithApps(FileEntry Entry, IReadOnlyList<AppInfo> Apps);
 /// <summary>
 /// The commands that hand items to macOS: Quick Look (Cmd+Y), Reveal in Finder, a terminal in the current folder,
 /// and "Open With" (menu only); Enter on a file opens it with its default application. Also the built-in viewer (F3),
-/// the text editor (F4: the external editor of the settings for a local file when one is set, else the built-in one) and the properties dialog (Cmd+I). Also tells the user when a panel's file cannot be opened as a folder, or is not one.
+/// the text editor (F4: the external editor of the settings for a local file when one is set, else the built-in one) and the properties dialog (Cmd+I). Also Copy Path (Cmd+Alt+C), which puts the full paths of the
+/// items on the clipboard. Also tells the user when a panel's file cannot be opened as a folder, or is not one.
 /// </summary>
 /// <remarks>
-/// Created and used on the UI thread. Everything but the viewer, the editor and the properties dialog works for the
+/// Created and used on the UI thread. Everything but the viewer, the editor, the properties dialog and Copy Path works for the
 /// local provider only and is disabled elsewhere: for an item, its own provider counts (search results list local
 /// items in a folder that is not on the disk); for the terminal, the panel's folder. The viewer and the editor open
 /// a file of any provider off the UI thread, in a window of <see cref="IWindowService"/> (a viewer still opening when the commands are disposed is
@@ -40,7 +41,7 @@ public sealed class ShellCommands : IDisposable
     private static readonly string[] Ids =
     [
         CommandIds.FileView, CommandIds.FileEdit, CommandIds.FileQuickLook, CommandIds.FileProperties,
-        CommandIds.ShellReveal, CommandIds.ShellOpenTerminal, CommandIds.ShellOpenWith,
+        CommandIds.ShellReveal, CommandIds.ShellOpenTerminal, CommandIds.ShellOpenWith, CommandIds.FileCopyPath,
     ];
 
     private readonly WorkspaceViewModel _workspace;
@@ -56,6 +57,7 @@ public sealed class ShellCommands : IDisposable
     private readonly IFileMetadataService? _metadata;
     private readonly TempFileStore _temp;
     private readonly QuarantineCarrier? _quarantine;
+    private readonly ITextClipboard? _clipboard;
     private readonly Action<Exception> _reportFailure;
     private readonly Func<TimeSpan, CancellationToken, Task> _delay;
     private readonly List<PanelViewModel> _watched = [];
@@ -73,13 +75,16 @@ public sealed class ShellCommands : IDisposable
     /// attributes); none is copied when null.</param>
     /// <param name="settings">Names the external editor F4 starts (with <paramref name="processes"/>) for a local
     /// file; the built-in editor always when either is null.</param>
+    /// <param name="clipboard">Receives the paths of Copy Path; the command is off when null.</param>
     public ShellCommands(WorkspaceViewModel workspace, IShellIntegration shell, IQuickLook quickLook,
         IDialogService dialogs, IWindowService windows, CommandRegistry commands, ProviderRegistry providers, IFileMetadataService? metadata,
         TempFileStore temp, Action<Exception> reportFailure,
         Func<TimeSpan, CancellationToken, Task>? quickLookDelay = null, INativeCopy? nativeCopy = null,
-        SettingsService? settings = null, IProcessRunner? processes = null, QuarantineCarrier? quarantine = null)
+        SettingsService? settings = null, IProcessRunner? processes = null, QuarantineCarrier? quarantine = null,
+        ITextClipboard? clipboard = null)
     {
         _quarantine = quarantine;
+        _clipboard = clipboard;
         _nativeCopy = nativeCopy;
         _settings = settings;
         _processes = processes;
@@ -102,6 +107,7 @@ public sealed class ShellCommands : IDisposable
         commands.Register(CommandIds.ShellReveal, RevealAsync, () => LocalCursorEntry() is not null);
         commands.Register(CommandIds.ShellOpenTerminal, OpenTerminalAsync, IsActiveLocal);
         commands.Register(CommandIds.ShellOpenWith, RequestOpenWithMenu, () => LocalCursorEntry() is not null);
+        commands.Register(CommandIds.FileCopyPath, CopyPathAsync, () => _clipboard is not null && PathsToCopy().Count > 0);
 
         workspace.PropertyChanged += OnWorkspacePropertyChanged;
         WatchPanels();
@@ -187,6 +193,28 @@ public sealed class ShellCommands : IDisposable
             panel.OpenFailed -= OnOpenFailed;
         }
         _watched.Clear();
+    }
+
+    // ---- Copy Path ----------------------------------------------------------------------------------------
+
+    /// <summary>Puts <see cref="PathsToCopy"/> on the clipboard, one per line, and says so in the panel's status
+    /// line.</summary>
+    private async Task CopyPathAsync()
+    {
+        if (Active is not { } panel || _clipboard is null || PathsToCopy() is not { Count: > 0 } paths) return;
+        await _clipboard.SetTextAsync(string.Join('\n', paths));
+        panel.ShowNotice(paths.Count == 1 ? Loc.Get("CopyPath_Copied") : Loc.Count("CopyPath_CopiedCount", paths.Count));
+    }
+
+    /// <summary>The full paths of the marked items of the active panel, else of the cursor item; the cursor on ".."
+    /// stands for the folder shown. A local item is its path on the disk (a search result is a local item); any other
+    /// is written as the path line writes its location (<see cref="PanelViewModel.DisplayPathOf"/>: the archive's path
+    /// and the path inside, a server's address and the path on it). Empty when nothing is shown.</summary>
+    private IReadOnlyList<string> PathsToCopy()
+    {
+        if (Active is not { } panel || panel.CurrentPath == default) return [];
+        if (panel.SelectedCount == 0 && panel.CursorRow is { IsParentLink: true }) return [panel.DisplayPath];
+        return panel.GetOperationTargets().Select(entry => panel.DisplayPathOf(entry.Path)).ToArray();
     }
 
     // ---- Targets and availability -----------------------------------------------------------------------
