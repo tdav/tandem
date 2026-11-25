@@ -4,7 +4,7 @@
              xmlns:v="using:Tandem.App.Views"
              x:Class="Tandem.App.Views.FKeyBar"
              x:DataType="vm:MainViewModel">
-    <!-- F3–F8: a click runs the key's command; a command not available yet shows disabled. -->
+    <!-- F3–F8: always enabled; a click runs the key's command, or does nothing while it is unavailable. -->
     <Border Background="{DynamicResource Tandem.BarBackground}" BorderBrush="{DynamicResource Tandem.DividerBrush}"
             BorderThickness="0,1,0,0">
         <ItemsControl ItemsSource="{Binding FKeys}">
@@ -17,7 +17,7 @@
                 <DataTemplate x:DataType="vm:FKeyItem">
                     <Button Classes="flat" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                             Tag="{Binding CommandId}"
-                            Command="{Binding $parent[v:FKeyBar].((vm:MainViewModel)DataContext).RunCommand}"
+                            Command="{Binding $parent[v:FKeyBar].((vm:MainViewModel)DataContext).FKeyCommand}"
                             CommandParameter="{Binding CommandId}">
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <!-- An unbound command shows its label only. -->
