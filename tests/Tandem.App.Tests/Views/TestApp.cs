@@ -375,10 +375,13 @@ internal sealed class RecordingClipboard : ITextClipboard
 {
     public List<string> Texts { get; } = [];
 
-    public Task SetTextAsync(string text)
+    /// <summary>When false, nothing is taken and every call reports failure.</summary>
+    public bool Available { get; set; } = true;
+
+    public Task<bool> SetTextAsync(string text)
     {
-        Texts.Add(text);
-        return Task.CompletedTask;
+        if (Available) Texts.Add(text);
+        return Task.FromResult(Available);
     }
 }
 

@@ -135,6 +135,85 @@ public class CopyPathTests : LanguageTestBase
     }
 
     [AvaloniaFact]
+    public async Task Parent_link_in_search_results_copies_the_folder_searched()
+    {
+        await using var app = await StartAsync();
+        await app.Left.NavigateToAsync(app.Main.SearchResults.Add(VfsPath.Local("/home"), "Search: *.txt in /home",
+            [VfsPath.Local("/home/notes.txt")]));
+        Cursor(app.Left, "..");
+
+        Assert.True(app.Main.Commands.CanExecute(CommandIds.FileCopyPath));
+        Assert.True(await app.Main.Commands.ExecuteAsync(CommandIds.FileCopyPath));
+
+        Assert.Equal(["/home"], app.Clipboard.Texts);
+    }
+
+    [AvaloniaFact]
+    public async Task Nothing_to_copy_in_the_list_of_result_sets()
+    {
+        await using var app = await StartAsync();
+        app.Main.SearchResults.Add(VfsPath.Local("/home"), "Search: *.txt in /home", [VfsPath.Local("/home/notes.txt")]);
+        await app.Left.NavigateToAsync(new VfsPath(Tandem.Core.Search.SearchResultsProvider.ProviderId, "/"));
+        Assert.NotEmpty(app.Left.Rows);
+
+        Assert.False(app.Main.Commands.CanExecute(CommandIds.FileCopyPath));
+        app.Left.SelectWhere(_ => true);
+        Assert.False(app.Main.Commands.CanExecute(CommandIds.FileCopyPath));
+        Assert.False(await app.Main.Commands.ExecuteAsync(CommandIds.FileCopyPath));
+
+        Assert.Empty(app.Clipboard.Texts);
+    }
+
+    [AvaloniaFact]
+    public async Task Name_with_a_control_character_is_not_copied()
+    {
+        var remote = new InMemoryFileSystem("remote");
+        remote.AddFile("/in/evil\nrm -rf ~.txt", "x");
+        remote.AddFile("/in/fine.txt", "x");
+        await using var app = await TestApp.StartAsync(show: false, extraProviders: [remote]);
+        await app.Left.NavigateToAsync(new VfsPath("remote", "/in"));
+        app.Left.SelectWhere(_ => true);
+
+        Assert.True(await app.Main.Commands.ExecuteAsync(CommandIds.FileCopyPath));
+
+        Assert.Empty(app.Clipboard.Texts);
+        Assert.Equal("The name contains control characters; the path was not copied", app.Left.Notice);
+    }
+
+    [AvaloniaFact]
+    public async Task Clipboard_that_takes_nothing_is_told_not_hidden()
+    {
+        await using var app = await StartAsync();
+        app.Clipboard.Available = false;
+        Cursor(app.Left, "notes.txt");
+
+        Assert.True(await app.Main.Commands.ExecuteAsync(CommandIds.FileCopyPath));
+
+        Assert.Empty(app.Clipboard.Texts);
+        Assert.Equal("The path could not be copied", app.Left.Notice);
+    }
+
+    [Fact]
+    public async Task Window_clipboard_without_a_window_reports_failure() =>
+        Assert.False(await new Tandem.App.Services.WindowTextClipboard().SetTextAsync("/home/notes.txt"));
+
+    [AvaloniaFact]
+    public async Task Switching_to_an_item_announces_the_availability_change()
+    {
+        await using var app = await StartAsync();
+        await app.Left.NavigateToAsync(new VfsPath(Empty, "/"));
+        Assert.False(app.Main.Commands.CanExecute(CommandIds.FileCopyPath));
+        Cursor(app.Right, "notes.txt");
+        var changes = 0;
+        app.Main.Commands.CanExecuteChanged += (_, _) => changes++;
+
+        await app.Main.Commands.ExecuteAsync(CommandIds.PanelSwitch);
+
+        Assert.True(app.Main.Commands.CanExecute(CommandIds.FileCopyPath));
+        Assert.True(changes > 0);
+    }
+
+    [AvaloniaFact]
     public async Task Nothing_to_copy_in_an_empty_panel()
     {
         await using var app = await StartAsync();

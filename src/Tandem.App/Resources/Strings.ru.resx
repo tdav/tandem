@@ -788,6 +788,12 @@
   <data name="CopyPath_CopiedCount_Many" xml:space="preserve">
     <value>Скопировано {0} путей</value>
   </data>
+  <data name="CopyPath_ControlCharacters" xml:space="preserve">
+    <value>Имя содержит управляющие символы, путь не скопирован</value>
+  </data>
+  <data name="CopyPath_Failed" xml:space="preserve">
+    <value>Не удалось скопировать путь</value>
+  </data>
   <data name="Context_QuickLook" xml:space="preserve">
     <value>Быстрый просмотр</value>
   </data>

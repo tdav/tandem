@@ -5,6 +5,7 @@ using Tandem.App.Services;
 using Tandem.App.ViewModels.Editing;
 using Tandem.App.ViewModels.Viewing;
 using Tandem.Core.Platform;
+using Tandem.Core.Search;
 using Tandem.Core.Vfs;
 
 namespace Tandem.App.ViewModels;
@@ -107,7 +108,7 @@ public sealed class ShellCommands : IDisposable
         commands.Register(CommandIds.ShellReveal, RevealAsync, () => LocalCursorEntry() is not null);
         commands.Register(CommandIds.ShellOpenTerminal, OpenTerminalAsync, IsActiveLocal);
         commands.Register(CommandIds.ShellOpenWith, RequestOpenWithMenu, () => LocalCursorEntry() is not null);
-        commands.Register(CommandIds.FileCopyPath, CopyPathAsync, () => _clipboard is not null && PathsToCopy().Count > 0);
+        commands.Register(CommandIds.FileCopyPath, CopyPathAsync, CanCopyPath);
 
         workspace.PropertyChanged += OnWorkspacePropertyChanged;
         WatchPanels();
@@ -198,24 +199,53 @@ public sealed class ShellCommands : IDisposable
     // ---- Copy Path ----------------------------------------------------------------------------------------
 
     /// <summary>Puts <see cref="PathsToCopy"/> on the clipboard, one per line, and says so in the panel's status
-    /// line.</summary>
+    /// line. A path with a control character (a line break would split it into lines that a shell runs) is not
+    /// copied, nor are the others with it; a clipboard that takes nothing is told too.</summary>
     private async Task CopyPathAsync()
     {
-        if (Active is not { } panel || _clipboard is null || PathsToCopy() is not { Count: > 0 } paths) return;
-        await _clipboard.SetTextAsync(string.Join('\n', paths));
+        if (Active is not { } panel || _clipboard is null || PathsToCopy(panel) is not { Count: > 0 } paths) return;
+        if (paths.Any(path => path.Any(char.IsControl)))
+        {
+            panel.ShowNotice(Loc.Get("CopyPath_ControlCharacters"));
+            return;
+        }
+        if (!await _clipboard.SetTextAsync(string.Join('\n', paths)))
+        {
+            panel.ShowNotice(Loc.Get("CopyPath_Failed"));
+            return;
+        }
         panel.ShowNotice(paths.Count == 1 ? Loc.Get("CopyPath_Copied") : Loc.Count("CopyPath_CopiedCount", paths.Count));
     }
 
-    /// <summary>The full paths of the marked items of the active panel, else of the cursor item; the cursor on ".."
-    /// stands for the folder shown. A local item is its path on the disk (a search result is a local item); any other
-    /// is written as the path line writes its location (<see cref="PanelViewModel.DisplayPathOf"/>: the archive's path
-    /// and the path inside, a server's address and the path on it). Empty when nothing is shown.</summary>
-    private IReadOnlyList<string> PathsToCopy()
+    /// <summary>Whether Copy Path has something to copy, without building the paths: a folder is shown, its rows
+    /// are not result sets (the root of the search results), and ".." alone, in a folder that is not a real path
+    /// (a result set), leads to a folder searched.</summary>
+    private bool CanCopyPath()
     {
-        if (Active is not { } panel || panel.CurrentPath == default) return [];
-        if (panel.SelectedCount == 0 && panel.CursorRow is { IsParentLink: true }) return [panel.DisplayPath];
-        return panel.GetOperationTargets().Select(entry => panel.DisplayPathOf(entry.Path)).ToArray();
+        if (_clipboard is null || Active is not { } panel || panel.CurrentPath == default) return false;
+        if (panel.SelectedCount == 0 && panel.CursorRow is null) return false;
+        if (!IsSearch(panel.CurrentPath)) return true;
+        if (panel.CurrentPath.IsRoot) return false;
+        return panel.SelectedCount > 0 || panel.CursorRow is { IsParentLink: false } ||
+               _providers.UpOf(panel.CurrentPath) is not null;
     }
+
+    /// <summary>The full paths of the marked items of <paramref name="panel"/>, else of the cursor item; the cursor on
+    /// ".." stands for the folder shown, or for a result set the folder searched. A local item is its path on the
+    /// disk (a search result is a local item); any other is written as the path line writes its location
+    /// (<see cref="PanelViewModel.DisplayPathOf"/>: the archive's path and the path inside, a server's address and
+    /// the path on it). Empty when <see cref="CanCopyPath"/> is false.</summary>
+    private IReadOnlyList<string> PathsToCopy(PanelViewModel panel)
+    {
+        if (!CanCopyPath()) return [];
+        if (panel.SelectedCount > 0 || panel.CursorRow is { IsParentLink: false })
+            return panel.GetOperationTargets().Select(entry => panel.DisplayPathOf(entry.Path)).ToArray();
+        if (!IsSearch(panel.CurrentPath)) return [panel.DisplayPath];
+        return _providers.UpOf(panel.CurrentPath) is { } up ? [panel.DisplayPathOf(up.Directory)] : [];
+    }
+
+    private static bool IsSearch(VfsPath path) =>
+        string.Equals(path.ProviderId, SearchResultsProvider.ProviderId, StringComparison.Ordinal);
 
     // ---- Targets and availability -----------------------------------------------------------------------
 
@@ -283,6 +313,9 @@ public sealed class ShellCommands : IDisposable
                 break;
             case nameof(PanelViewModel.CursorIndex):
                 if (sender == Active) FollowCursor();
+                UpdateAvailability();
+                break;
+            case nameof(PanelViewModel.SelectedCount):
                 UpdateAvailability();
                 break;
         }
