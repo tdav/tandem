@@ -7,3 +7,5 @@ dist/
 .superpowers/
 /.vs/Tandem.slnx
 /.vs/ProjectEvaluation
+
+.claude/process/
