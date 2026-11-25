@@ -1,7 +1,9 @@
 <Project>
   <PropertyGroup>
     <TargetFramework>net11.0</TargetFramework>
-    <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
+    <!-- macOS Apple Silicon by default; on a Windows host (CI) win-x64. An explicit -r wins over both. -->
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and $([MSBuild]::IsOSPlatform('Windows'))">win-x64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">osx-arm64</RuntimeIdentifier>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>

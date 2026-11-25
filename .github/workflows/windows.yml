@@ -1,0 +1,52 @@
+name: windows
+
+on:
+  push:
+    branches: [main, windows-release]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test-and-publish:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '11.0.100'
+
+      - name: Restore
+        run: dotnet restore Tandem.slnx
+
+      - name: Test Core
+        if: always()
+        run: dotnet test tests/Tandem.Core.Tests --no-restore --logger "console;verbosity=normal"
+      - name: Test Archives
+        if: always()
+        run: dotnet test tests/Tandem.Archives.Tests --no-restore --logger "console;verbosity=normal"
+      - name: Test Net
+        if: always()
+        run: dotnet test tests/Tandem.Net.Tests --no-restore --logger "console;verbosity=normal"
+      - name: Test Platform.Windows
+        if: always() && hashFiles('tests/Tandem.Platform.Windows.Tests/*.csproj') != ''
+        run: dotnet test tests/Tandem.Platform.Windows.Tests --no-restore --logger "console;verbosity=normal"
+      - name: Test App
+        if: always()
+        run: dotnet test tests/Tandem.App.Tests --no-restore --logger "console;verbosity=normal"
+
+      - name: Publish win-x64
+        if: always()
+        shell: pwsh
+        run: |
+          dotnet publish src/Tandem.App -c Release -r win-x64 --self-contained -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true -o publish/Tandem
+          Get-ChildItem publish/Tandem
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Tandem-win-x64
+          path: publish/Tandem
+          if-no-files-found: warn
