@@ -51,7 +51,7 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusive
     public async IAsyncEnumerable<FileEntry> EnumerateAsync(VfsPath directory,
         [EnumeratorCancellation] CancellationToken ct)
     {
-        if (Windows && directory.IsRoot && string.Equals(directory.ProviderId, Id, StringComparison.Ordinal))
+        if (Windows && directory.IsRoot && IsOwn(directory))
         {
             foreach (var drive in await Task.Run(DriveEntries, ct))
             {
@@ -80,7 +80,7 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusive
         }
     }
 
-    public Task<FileEntry?> GetEntryAsync(VfsPath path, CancellationToken ct) => Windows && path.IsRoot
+    public Task<FileEntry?> GetEntryAsync(VfsPath path, CancellationToken ct) => Windows && path.IsRoot && IsOwn(path)
         ? Task.FromResult<FileEntry?>(RootEntry(path))
         : RunAsync(path, ct, p =>
     {
@@ -92,7 +92,7 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusive
 
     /// <summary>As realpath(3) does, without needing the end to exist: walks the path name by name from the root,
     /// replacing every link met by its target, so ".." always steps out of a real folder.</summary>
-    public Task<VfsPath> ResolveLinksAsync(VfsPath path, CancellationToken ct) => Windows && path.IsRoot
+    public Task<VfsPath> ResolveLinksAsync(VfsPath path, CancellationToken ct) => Windows && path.IsRoot && IsOwn(path)
         ? Task.FromResult(path)
         : RunAsync(path, ct, _ =>
     {
@@ -161,6 +161,8 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusive
             throw new VfsAccessDeniedException("Cannot delete the root.");
         if (IsRealDirectory(info))
             Directory.Delete(p, recursive); // does not follow links inside the tree
+        else if (Windows && info.Attributes.HasFlag(FileAttributes.Directory))
+            Directory.Delete(p, recursive: false); // a directory link or junction: Windows removes only the link
         else
             File.Delete(p); // a file or a link (the link itself, never its target)
     });
@@ -209,7 +211,11 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusive
     {
         ArgumentException.ThrowIfNullOrEmpty(target);
         if (Exists(new FileInfo(p))) throw new VfsAlreadyExistsException($"'{p}' already exists.");
-        File.CreateSymbolicLink(p, target);
+        // Windows has two kinds of link: one to a directory must be made as such, or it cannot be opened.
+        if (Windows && Directory.Exists(Path.Combine(Path.GetDirectoryName(p) ?? "", target)))
+            Directory.CreateSymbolicLink(p, target);
+        else
+            File.CreateSymbolicLink(p, target);
     });
 
     public Task SetModifiedAsync(VfsPath path, DateTimeOffset modified, CancellationToken ct) => RunAsync(path, ct, p =>
@@ -236,7 +242,7 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusive
     });
 
     /// <summary>The mount point of the longest mounted volume that contains the path (links are not resolved).</summary>
-    public Task<string> GetVolumeKeyAsync(VfsPath path, CancellationToken ct) => Windows && path.IsRoot
+    public Task<string> GetVolumeKeyAsync(VfsPath path, CancellationToken ct) => Windows && path.IsRoot && IsOwn(path)
         ? Task.FromResult("/")
         : RunAsync(path, ct, _ =>
         DriveInfo.GetDrives()
@@ -251,7 +257,7 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusive
     public IDisposable? Watch(VfsPath directory, Action changed)
     {
         ArgumentNullException.ThrowIfNull(changed);
-        if (Windows && directory.IsRoot) return null; // the drive list: nothing on disk to watch
+        if (Windows && directory.IsRoot && IsOwn(directory)) return null; // the drive list: nothing on disk to watch
         var p = ToOsPath(directory);
         return Translate(p, () =>
         {
@@ -270,6 +276,8 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusive
     }
 
     // ---- Internals -----------------------------------------------------------------------------------
+
+    private bool IsOwn(VfsPath path) => string.Equals(path.ProviderId, Id, StringComparison.Ordinal);
 
     private string ToOsPath(VfsPath path)
     {

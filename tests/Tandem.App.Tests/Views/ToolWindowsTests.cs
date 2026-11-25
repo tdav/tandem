@@ -88,8 +88,8 @@ public class ToolWindowsTests : LanguageTestBase
 
     private static void Press(Window window, Key key)
     {
-        window.KeyPress(key, RawInputModifiers.None, PhysicalKey.None, null);
-        if (window.IsVisible) window.KeyRelease(key, RawInputModifiers.None, PhysicalKey.None, null);
+        window.KeyPress(key, TestKeys.Platform(RawInputModifiers.None), PhysicalKey.None, null);
+        if (window.IsVisible) window.KeyRelease(key, TestKeys.Platform(RawInputModifiers.None), PhysicalKey.None, null);
         Dispatcher.UIThread.RunJobs();
     }
 

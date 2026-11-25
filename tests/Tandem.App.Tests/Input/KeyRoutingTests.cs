@@ -58,7 +58,7 @@ public class KeyRoutingTests
     [InlineData("Shift+F8", true)]
     public void While_editing_only_cmd_chords_the_editor_does_not_need_reach_commands(string chord, bool routed)
     {
-        Assert.Equal(routed, KeyRouting.ShouldRouteWhileEditing(KeyChord.Parse(chord)));
+        Assert.Equal(routed, KeyRouting.ShouldRouteWhileEditing(KeyChord.Parse(chord), windows: false));
     }
 
     [Theory]

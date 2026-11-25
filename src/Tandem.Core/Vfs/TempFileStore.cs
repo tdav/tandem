@@ -115,6 +115,8 @@ public sealed class TempFileStore : IDisposable
         if (!info.Exists && !System.IO.Directory.Exists(path) && info.LinkTarget is null) return;
         if (info.LinkTarget is null && info.Attributes.HasFlag(FileAttributes.Directory))
             System.IO.Directory.Delete(path, recursive: true);
+        else if (OperatingSystem.IsWindows() && info.Attributes.HasFlag(FileAttributes.Directory))
+            System.IO.Directory.Delete(path, recursive: false); // a directory link: Windows removes the link only
         else
             File.Delete(path);
     }

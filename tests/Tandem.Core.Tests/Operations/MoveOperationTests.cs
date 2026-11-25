@@ -284,7 +284,7 @@ public sealed class MoveOperationTests
     /// <summary>Every entry under <paramref name="temp"/>, relative, with the names' real letter case.</summary>
     private static IEnumerable<string> Tree(TempDir temp) =>
         Directory.EnumerateFileSystemEntries(temp.Path, "*", SearchOption.AllDirectories)
-            .Select(p => Path.GetRelativePath(temp.Path, p))
+            .Select(p => Path.GetRelativePath(temp.Path, p).Replace('\\', '/'))
             .Order(StringComparer.Ordinal);
 
     private static void SkipIfCaseSensitive(TempDir temp)

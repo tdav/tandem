@@ -283,8 +283,8 @@ public class ArchiveWindowTests : LanguageTestBase
         Dispatcher.UIThread.RunJobs();
         editor.KeyTextInput("X");
         Dispatcher.UIThread.RunJobs();
-        editor.KeyPress(Key.S, RawInputModifiers.Meta, PhysicalKey.S, "s");
-        editor.KeyRelease(Key.S, RawInputModifiers.Meta, PhysicalKey.S, "s");
+        editor.KeyPress(Key.S, TestKeys.Platform(RawInputModifiers.Meta), PhysicalKey.S, "s");
+        editor.KeyRelease(Key.S, TestKeys.Platform(RawInputModifiers.Meta), PhysicalKey.S, "s");
         await TestApp.WaitUntil(() =>
         {
             Dispatcher.UIThread.RunJobs();
@@ -473,8 +473,8 @@ public class ArchiveWindowTests : LanguageTestBase
 
     private static void PressEnter(Window window)
     {
-        window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
-        if (window.IsVisible) window.KeyRelease(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        window.KeyPress(Key.Enter, TestKeys.Platform(RawInputModifiers.None), PhysicalKey.Enter, null);
+        if (window.IsVisible) window.KeyRelease(Key.Enter, TestKeys.Platform(RawInputModifiers.None), PhysicalKey.Enter, null);
         Dispatcher.UIThread.RunJobs();
     }
 

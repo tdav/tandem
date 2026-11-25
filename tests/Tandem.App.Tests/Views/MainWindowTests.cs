@@ -81,9 +81,9 @@ public class MainWindowTests : LanguageTestBase
         await using var app = await TestApp.StartAsync();
         var before = app.Left.CursorIndex;
 
-        app.Window.KeyPress(Key.N, RawInputModifiers.Meta, PhysicalKey.N, "n");
+        app.Window.KeyPress(Key.N, TestKeys.Platform(RawInputModifiers.Meta), PhysicalKey.N, "n");
         app.Type("n");
-        app.Window.KeyRelease(Key.N, RawInputModifiers.Meta, PhysicalKey.N, "n");
+        app.Window.KeyRelease(Key.N, TestKeys.Platform(RawInputModifiers.Meta), PhysicalKey.N, "n");
         app.Pump();
 
         Assert.Equal(before, app.Left.CursorIndex);

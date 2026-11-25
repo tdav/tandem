@@ -21,7 +21,8 @@ public sealed class LocalProviderTests : IDisposable
     public void Has_local_id_and_capabilities()
     {
         Assert.Equal("local", _fs.Id);
-        Assert.Equal(ProviderCapabilities.Write | ProviderCapabilities.Trash | ProviderCapabilities.UnixPermissions |
+        Assert.Equal(ProviderCapabilities.Write | ProviderCapabilities.Trash |
+                     (OperatingSystem.IsWindows() ? 0 : ProviderCapabilities.UnixPermissions) |
                      ProviderCapabilities.Symlinks | ProviderCapabilities.Watch, _fs.Capabilities);
     }
 
@@ -29,6 +30,7 @@ public sealed class LocalProviderTests : IDisposable
     [Fact]
     public async Task Links_resolve_against_the_real_folder_not_the_path_text()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Calls libc (realpath, rename) of macOS.");
         Directory.CreateDirectory(_temp.Combine("a"));
         Directory.CreateDirectory(_temp.Combine("b/c/d"));
         File.WriteAllText(_temp.Combine("a/x"), "wrong");
@@ -48,6 +50,7 @@ public sealed class LocalProviderTests : IDisposable
     [Fact]
     public async Task Resolving_a_dangling_link_gives_the_missing_target_and_a_loop_fails()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Calls libc (realpath, rename) of macOS.");
         File.CreateSymbolicLink(_temp.Combine("dangling"), "missing.txt");
         File.CreateSymbolicLink(_temp.Combine("loop1"), "loop2");
         File.CreateSymbolicLink(_temp.Combine("loop2"), "loop1");
@@ -110,6 +113,7 @@ public sealed class LocalProviderTests : IDisposable
     [Fact]
     public async Task Mode_roundtrips()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix permissions; Windows has none to take away.");
         var path = _temp.Root.Combine("f.txt");
         File.WriteAllText(path.Path, "x");
         const UnixFileMode mode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead; // 0640
@@ -123,6 +127,7 @@ public sealed class LocalProviderTests : IDisposable
     [Fact]
     public async Task Unreadable_directory_throws_AccessDenied()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix permissions; Windows has none to take away.");
         var locked = _temp.Combine("locked");
         Directory.CreateDirectory(locked);
         File.SetUnixFileMode(locked, UnixFileMode.None);
@@ -235,7 +240,7 @@ public sealed class LocalProviderTests : IDisposable
     {
         Directory.CreateDirectory(_temp.Combine("dir"));
         File.WriteAllText(_temp.Combine("dir/inside.txt"), "x");
-        File.CreateSymbolicLink(_temp.Combine("dlink"), "dir");
+        Directory.CreateSymbolicLink(_temp.Combine("dlink"), "dir");
         File.CreateSymbolicLink(_temp.Combine("broken"), "nowhere");
 
         var entries = await ListAsync(_fs, _temp.Root);
@@ -254,6 +259,7 @@ public sealed class LocalProviderTests : IDisposable
     [Fact]
     public async Task A_link_whose_target_cannot_be_read_is_still_a_link_never_a_directory()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix permissions; Windows has none to take away.");
         Directory.CreateDirectory(_temp.Combine("dir"));
         File.WriteAllText(_temp.Combine("dir/inside.txt"), "x");
         var link = _temp.Combine("unreadable");
@@ -330,6 +336,7 @@ public sealed class LocalProviderTests : IDisposable
     [Fact]
     public async Task Case_only_rename_does_not_use_exclusive_rename_and_succeeds()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Calls libc (realpath, rename) of macOS.");
         var rename = new RecordingRename();
         var fs = new LocalFileSystemProvider(new UnrestrictedAccessBroker(), rename);
         File.WriteAllText(_temp.Combine("name.txt"), "x");
@@ -407,7 +414,7 @@ public sealed class LocalProviderTests : IDisposable
     {
         Directory.CreateDirectory(_temp.Combine("dir"));
         File.WriteAllText(_temp.Combine("dir/inside.txt"), "x");
-        File.CreateSymbolicLink(_temp.Combine("dlink"), "dir");
+        Directory.CreateSymbolicLink(_temp.Combine("dlink"), "dir");
 
         await _fs.DeleteAsync(_temp.Root.Combine("dlink"), recursive: true, Ct);
 

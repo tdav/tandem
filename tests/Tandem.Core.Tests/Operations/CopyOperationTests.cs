@@ -390,7 +390,7 @@ public sealed class CopyOperationTests
         _providers.Register(new LocalFileSystemProvider(new UnrestrictedAccessBroker()));
         File.WriteAllText(temp.Combine("a.txt"), "local");
         Directory.CreateDirectory(temp.Combine("real"));
-        File.CreateSymbolicLink(temp.Combine("link"), temp.Combine("real"));
+        Directory.CreateSymbolicLink(temp.Combine("link"), temp.Combine("real"));
 
         var result = await Copy([VfsPath.Local(temp.Combine("a.txt"))], VfsPath.Local(temp.Combine("link"))).RunAsync();
 
@@ -596,13 +596,14 @@ public sealed class CopyOperationTests
         Assert.Equal(RejectionReason.SourceEqualsDestination, error.Reason);
         Assert.Empty(_interaction.Conflicts);
         Assert.Equal(["a", "a/x.txt"], Directory.EnumerateFileSystemEntries(temp.Path, "*", SearchOption.AllDirectories)
-            .Select(p => Path.GetRelativePath(temp.Path, p)).Order(StringComparer.Ordinal));
+            .Select(p => Path.GetRelativePath(temp.Path, p).Replace('\\', '/')).Order(StringComparer.Ordinal));
         Assert.Equal("x", File.ReadAllText(temp.Combine("a/x.txt")));
     }
 
     [Fact]
     public async Task A_link_whose_target_cannot_be_read_is_an_item_error()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix permissions; Windows has none to take away.");
         using var temp = new TempDir();
         Directory.CreateDirectory(temp.Combine("src/dir"));
         Directory.CreateDirectory(temp.Combine("dst"));

@@ -31,8 +31,8 @@ public class DialogWindowTests : LanguageTestBase
 
     private static void Press(Window window, Key key)
     {
-        window.KeyPress(key, RawInputModifiers.None, PhysicalKey.None, null);
-        if (window.IsVisible) window.KeyRelease(key, RawInputModifiers.None, PhysicalKey.None, null); // closed by the press
+        window.KeyPress(key, TestKeys.Platform(RawInputModifiers.None), PhysicalKey.None, null);
+        if (window.IsVisible) window.KeyRelease(key, TestKeys.Platform(RawInputModifiers.None), PhysicalKey.None, null); // closed by the press
         Dispatcher.UIThread.RunJobs();
     }
 

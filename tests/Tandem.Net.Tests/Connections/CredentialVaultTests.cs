@@ -102,6 +102,7 @@ public sealed class CredentialVaultTests
     [Fact]
     public async Task Saves_only_owner_read_and_write_permissions_on_creation_and_replacement()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix permissions; Windows has none to take away.");
         using var directory = new TempDir();
         using var vault = new CredentialVault(directory.Path);
         var path = directory.Combine(CredentialVault.FileName);
@@ -212,6 +213,7 @@ public sealed class CredentialVaultTests
     [Fact]
     public async Task Failed_save_leaves_disk_and_memory_untouched()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix permissions; Windows has none to take away.");
         using var directory = new TempDir();
         using var vault = new CredentialVault(directory.Path);
         await vault.CreateAsync(MasterPassword, [new VaultEntry(Profile, "original", null, null)], Ct);

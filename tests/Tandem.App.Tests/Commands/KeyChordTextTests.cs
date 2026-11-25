@@ -41,5 +41,5 @@ public class KeyChordTextTests
     [InlineData("Shift+Space", "⇧Space")]
     [InlineData("Insert", "Insert")]
     public void Chord_is_shown_in_mac_style(string chord, string shown) =>
-        Assert.Equal(shown, KeyChordText.Format(KeyChord.Parse(chord)));
+        Assert.Equal(shown, KeyChordText.Format(KeyChord.Parse(chord), windows: false));
 }

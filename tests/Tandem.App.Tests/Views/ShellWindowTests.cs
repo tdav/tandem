@@ -285,7 +285,7 @@ public class ShellWindowTests : LanguageTestBase
         var groupRead = dialog.GetVisualDescendants().OfType<CheckBox>().ElementAt(3);
 
         Box(dialog, "Octal").Text = "9z";
-        dialog.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        dialog.KeyPress(Key.Enter, TestKeys.Platform(RawInputModifiers.None), PhysicalKey.Enter, null);
         await Task.Delay(20);
         Dispatcher.UIThread.RunJobs();
         Assert.True(dialog.IsVisible);
@@ -296,7 +296,7 @@ public class ShellWindowTests : LanguageTestBase
         Box(dialog, "Octal").Text = "600";
         Dispatcher.UIThread.RunJobs();
         Assert.Equal(false, groupRead.IsChecked); // the flags follow the octal field
-        dialog.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        dialog.KeyPress(Key.Enter, TestKeys.Platform(RawInputModifiers.None), PhysicalKey.Enter, null);
         await TestApp.WaitUntil(() => showing.IsCompleted);
 
         Assert.True(await showing);
@@ -312,7 +312,7 @@ public class ShellWindowTests : LanguageTestBase
         var showing = service.ShowPropertiesAsync(vm);
         var dialog = DialogOf(owner);
 
-        dialog.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        dialog.KeyPress(Key.Escape, TestKeys.Platform(RawInputModifiers.None), PhysicalKey.Escape, null);
         await TestApp.WaitUntil(() => showing.IsCompleted);
 
         Assert.False(await showing);
@@ -339,12 +339,12 @@ public class ShellWindowTests : LanguageTestBase
         var dialog = DialogOf(owner);
 
         Box(dialog, "Octal").Text = "600";
-        dialog.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        dialog.KeyPress(Key.Enter, TestKeys.Platform(RawInputModifiers.None), PhysicalKey.Enter, null);
         Dispatcher.UIThread.RunJobs();
         Assert.True(vm.IsApplying);
         var cancel = dialog.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "Cancel");
         Assert.False(cancel.IsEnabled);
-        dialog.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null);
+        dialog.KeyPress(Key.Escape, TestKeys.Platform(RawInputModifiers.None), PhysicalKey.Escape, null);
         dialog.Close();
         Dispatcher.UIThread.RunJobs();
         Assert.True(dialog.IsVisible);

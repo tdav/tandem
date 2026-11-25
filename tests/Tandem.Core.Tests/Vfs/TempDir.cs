@@ -18,7 +18,9 @@ public sealed class TempDir : IDisposable
 
     public VfsPath Root => VfsPath.Local(Path);
 
-    public string Combine(string relative) => System.IO.Path.Combine(Path, relative);
+    /// <summary>The OS path of a '/'-separated relative path (on Windows with '\\').</summary>
+    public string Combine(string relative) =>
+        System.IO.Path.Combine(Path, relative.Replace('/', System.IO.Path.DirectorySeparatorChar));
 
     public void Dispose()
     {

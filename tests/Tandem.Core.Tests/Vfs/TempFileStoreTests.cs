@@ -70,6 +70,7 @@ public sealed class TempFileStoreTests : IDisposable
     [Fact]
     public async Task Cancelled_materialize_stays_cancelled_when_cleanup_fails()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix permissions; Windows has none to take away.");
         _mem.AddFile("/a/big.bin", new byte[1_000_000]);
         var store = new TempFileStore(StoreDirectory);
         using var cancel = CancellationTokenSource.CreateLinkedTokenSource(Ct);

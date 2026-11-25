@@ -5,6 +5,9 @@ namespace Tandem.App.Tests.Commands;
 
 public class KeyChordRulesTests
 {
+    /// <summary>These tests pin the macOS rules; KeyMapWindowsTests covers Windows.</summary>
+    private static bool MacAssignable(KeyChord chord) => KeyChordRules.RefusalOf(chord, windows: false) is null;
+
     [Theory]
     [InlineData("F5", true)]
     [InlineData("Alt+F7", true)]
@@ -49,15 +52,15 @@ public class KeyChordRulesTests
     [InlineData("Cmd+LeftShift", false)]
     [InlineData("Ctrl+LWin", false)]
     public void IsAssignable(string chord, bool expected) =>
-        Assert.Equal(expected, KeyChordRules.IsAssignable(KeyChord.Parse(chord)));
+        Assert.Equal(expected, MacAssignable(KeyChord.Parse(chord)));
 
     [Fact]
     public void A_chord_without_a_key_is_not_assignable() =>
-        Assert.False(KeyChordRules.IsAssignable(new KeyChord(Key.None, KeyModifiers.Meta)));
+        Assert.False(MacAssignable(new KeyChord(Key.None, KeyModifiers.Meta)));
 
     [Fact]
     public void Every_default_chord_is_assignable() =>
-        Assert.All(KeyMap.Default.Bindings, b => Assert.True(KeyChordRules.IsAssignable(b.Chord), b.Chord.ToString()));
+        Assert.All(KeyMap.Default.Bindings, b => Assert.True(MacAssignable(b.Chord), b.Chord.ToString()));
 
     [Fact]
     public void Every_stage_3_chord_is_assignable()
@@ -69,6 +72,6 @@ public class KeyChordRulesTests
         ];
 
         Assert.Equal(14, chords.Length);
-        Assert.All(chords, chord => Assert.True(KeyChordRules.IsAssignable(KeyChord.Parse(chord)), chord));
+        Assert.All(chords, chord => Assert.True(MacAssignable(KeyChord.Parse(chord)), chord));
     }
 }

@@ -346,6 +346,7 @@ public sealed class JsonStateStoreTests : IDisposable
     [Fact]
     public void Unreadable_file_gives_default()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix permissions; Windows has none to take away.");
         Store().Save(Sample());
         File.SetUnixFileMode(StateFile, UnixFileMode.None);
         try
@@ -384,6 +385,7 @@ public sealed class JsonStateStoreTests : IDisposable
     [Fact]
     public void Save_into_unwritable_directory_throws_io_exception_and_keeps_old_file()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix permissions; Windows has none to take away.");
         var store = Store();
         store.Save(AppState.Default(Home));
         File.SetUnixFileMode(StateDir, UnixFileMode.UserRead | UnixFileMode.UserExecute);

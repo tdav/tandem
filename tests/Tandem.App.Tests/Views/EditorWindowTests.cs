@@ -60,8 +60,8 @@ public class EditorWindowTests : LanguageTestBase
     private static void Press(Window window, Key key, RawInputModifiers modifiers, PhysicalKey physical,
         string? symbol = null)
     {
-        window.KeyPress(key, modifiers, physical, symbol);
-        if (window.IsVisible) window.KeyRelease(key, modifiers, physical, symbol); // the key may have closed it
+        window.KeyPress(key, TestKeys.Platform(modifiers), physical, symbol);
+        if (window.IsVisible) window.KeyRelease(key, TestKeys.Platform(modifiers), physical, symbol); // the key may have closed it
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
     }
 

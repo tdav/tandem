@@ -176,13 +176,13 @@ public sealed class TerminalViewModelTests
         {
             await TestApp.WaitUntil(() => model.State == TerminalState.Connected);
             window.KeyTextInput("й");
-            window.KeyPress(Key.Up, RawInputModifiers.None, PhysicalKey.ArrowUp, "");
-            window.KeyRelease(Key.Up, RawInputModifiers.None, PhysicalKey.ArrowUp, "");
+            window.KeyPress(Key.Up, TestKeys.Platform(RawInputModifiers.None), PhysicalKey.ArrowUp, "");
+            window.KeyRelease(Key.Up, TestKeys.Platform(RawInputModifiers.None), PhysicalKey.ArrowUp, "");
             var ct = TestContext.Current.CancellationToken;
             Assert.Equal("й", await transport.ReadSentAsync(ct));
             Assert.Equal("\e[A", await transport.ReadSentAsync(ct));
 
-            window.KeyPress(Key.W, RawInputModifiers.Meta, PhysicalKey.W, "w");
+            window.KeyPress(Key.W, TestKeys.Platform(RawInputModifiers.Meta), PhysicalKey.W, "w");
             await TestApp.WaitUntil(() => !window.IsVisible);
         }
         finally

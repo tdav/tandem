@@ -45,8 +45,8 @@ public class ViewerWindowTests : LanguageTestBase
     private static void Press(Window window, Key key, PhysicalKey physical,
         RawInputModifiers modifiers = RawInputModifiers.None)
     {
-        window.KeyPress(key, modifiers, physical, null);
-        if (window.IsVisible) window.KeyRelease(key, modifiers, physical, null); // the key may have closed it
+        window.KeyPress(key, TestKeys.Platform(modifiers), physical, null);
+        if (window.IsVisible) window.KeyRelease(key, TestKeys.Platform(modifiers), physical, null); // the key may have closed it
         Dispatcher.UIThread.RunJobs();
     }
 

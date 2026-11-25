@@ -61,12 +61,12 @@ public class SettingsWindowTests : LanguageTestBase, IDisposable
         Pump(window);
         if (!recorder.IsRecording)
         {
-            window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
-            window.KeyRelease(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+            window.KeyPress(Key.Enter, TestKeys.Platform(RawInputModifiers.None), PhysicalKey.Enter, null);
+            window.KeyRelease(Key.Enter, TestKeys.Platform(RawInputModifiers.None), PhysicalKey.Enter, null);
             Pump(window);
         }
-        window.KeyPress(key, modifiers, physical, null);
-        window.KeyRelease(key, modifiers, physical, null);
+        window.KeyPress(key, TestKeys.Platform(modifiers), physical, null);
+        window.KeyRelease(key, TestKeys.Platform(modifiers), physical, null);
         Pump(window);
     }
 
@@ -198,8 +198,8 @@ public class SettingsWindowTests : LanguageTestBase, IDisposable
 
         void Key(Key key, RawInputModifiers modifiers = RawInputModifiers.None)
         {
-            window.KeyPress(key, modifiers, PhysicalKey.None, null);
-            window.KeyRelease(key, modifiers, PhysicalKey.None, null);
+            window.KeyPress(key, TestKeys.Platform(modifiers), PhysicalKey.None, null);
+            window.KeyRelease(key, TestKeys.Platform(modifiers), PhysicalKey.None, null);
             Pump(window);
         }
 

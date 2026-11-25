@@ -33,7 +33,7 @@ public sealed class MultiRenameWindowTests : LanguageTestBase
         Assert.Contains("before.txt", text);
         Assert.Contains("after.txt", text);
 
-        window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.None, null);
+        window.KeyPress(Key.Escape, TestKeys.Platform(RawInputModifiers.None), PhysicalKey.None, null);
         app.Pump();
         Assert.Null(await result);
         Assert.False(window.IsVisible);

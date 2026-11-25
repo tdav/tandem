@@ -46,11 +46,11 @@ public class SearchWindowTests : LanguageTestBase
     private static void Press(Window window, Key key, PhysicalKey physical,
         RawInputModifiers modifiers = RawInputModifiers.None)
     {
-        window.KeyPress(key, modifiers, physical, null);
+        window.KeyPress(key, TestKeys.Platform(modifiers), physical, null);
         if (window.IsVisible)
         {
             // The key may close the window, also later: from a job that the release itself runs first.
-            try { window.KeyRelease(key, modifiers, physical, null); }
+            try { window.KeyRelease(key, TestKeys.Platform(modifiers), physical, null); }
             catch (ObjectDisposedException) when (!window.IsVisible) { }
         }
         Dispatcher.UIThread.RunJobs();

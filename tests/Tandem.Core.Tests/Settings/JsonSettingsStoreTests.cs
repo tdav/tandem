@@ -372,6 +372,7 @@ public sealed class JsonSettingsStoreTests : IDisposable
     [Fact]
     public void Unreadable_file_gives_defaults_and_is_left_alone()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix permissions; Windows has none to take away.");
         Store().Save(Sample());
         File.SetUnixFileMode(SettingsFile, UnixFileMode.None);
         try
@@ -416,6 +417,7 @@ public sealed class JsonSettingsStoreTests : IDisposable
     [Fact]
     public void Failed_save_keeps_previous_file()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix permissions; Windows has none to take away.");
         var store = Store();
         store.Save(Sample());
         var before = File.ReadAllText(SettingsFile);

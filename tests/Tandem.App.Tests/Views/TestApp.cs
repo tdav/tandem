@@ -227,8 +227,8 @@ internal sealed class TestApp : IAsyncDisposable
     public void Press(Key key, RawInputModifiers modifiers = RawInputModifiers.None,
         PhysicalKey physical = PhysicalKey.None, string? symbol = null)
     {
-        Window.KeyPress(key, modifiers, physical, symbol);
-        Window.KeyRelease(key, modifiers, physical, symbol);
+        Window.KeyPress(key, TestKeys.Platform(modifiers), physical, symbol);
+        Window.KeyRelease(key, TestKeys.Platform(modifiers), physical, symbol);
         Pump();
     }
 
