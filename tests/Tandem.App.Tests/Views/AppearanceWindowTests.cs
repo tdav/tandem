@@ -262,7 +262,8 @@ public class AppearanceWindowTests : LanguageTestBase, IDisposable
                 Assert.False(Picture(name).IsEffectivelyVisible);
                 var body = Body(name);
                 Assert.True(body.IsEffectivelyVisible);
-                Assert.Same(hidden, body.Fill);
+                // A folder's body is the hidden colour; a file's page is the pale accent.
+                Assert.Same(name == ".config" ? hidden : Resource(app, "Tandem.HiddenIconAccent"), body.Fill);
                 Assert.Same(Resource(app, "Tandem.HiddenIconBorder"), body.Stroke);
                 Assert.Equal(new Size(16, 16), body.Bounds.Size);
             }
@@ -286,7 +287,7 @@ public class AppearanceWindowTests : LanguageTestBase, IDisposable
         app.Left.Rows.Single(r => r.Name == ".env").IsSelected = true;
         app.Pump();
         Assert.Same(Resource(app, "Tandem.MarkedForeground"), Cell(RowOf(app, PanelSide.Left, ".env"), "RowName").Foreground);
-        Assert.Same(Resource(app, "Tandem.HiddenIcon"), Body(".env").Fill);
+        Assert.Same(Resource(app, "Tandem.HiddenIconAccent"), Body(".env").Fill);
     }
 
     [AvaloniaFact]
