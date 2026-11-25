@@ -21,6 +21,7 @@ public sealed class TerminalControl : Control
     private readonly DispatcherTimer _blinkTimer = new() { Interval = TerminalCursorBlink.HalfPeriod };
     private readonly CursorLayer _cursorLayer;
     private WindowBase? _window;
+    private bool _cursorShown = true;
 
     public TerminalControl()
     {
@@ -273,10 +274,11 @@ public sealed class TerminalControl : Control
         if (_blink.UntilNextToggle is { } wait && IsEffectivelyVisible)
         {
             _blinkTimer.Stop();
-            _blinkTimer.Interval = wait;
+            _blinkTimer.Interval = wait + TickSlack;
             _blinkTimer.Start();
         }
         else _blinkTimer.Stop();
+        _cursorShown = _blink.IsVisible;
         _cursorLayer.InvalidateVisual();
     }
 
@@ -287,9 +289,15 @@ public sealed class TerminalControl : Control
             _blinkTimer.Stop();
             return;
         }
-        _blinkTimer.Interval = wait;
+        // A tick may land a little before the phase boundary; aiming just past the next one keeps the timer from
+        // spinning on a near-zero interval.
+        _blinkTimer.Interval = wait + TickSlack;
+        if (_cursorShown == _blink.IsVisible) return;
+        _cursorShown = _blink.IsVisible;
         _cursorLayer.InvalidateVisual();
     }
+
+    private static readonly TimeSpan TickSlack = TimeSpan.FromMilliseconds(1);
 
     private (int Column, int Line) CellAt(Point point)
     {
