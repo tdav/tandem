@@ -34,13 +34,18 @@ public static class KeyRouting
     /// Backspace/Delete, Cmd with an arrow). Plain keys, Shift and Alt (which types characters on macOS) stay with the
     /// editor.
     /// </summary>
-    public static bool ShouldRouteWhileEditing(KeyChord chord)
+    public static bool ShouldRouteWhileEditing(KeyChord chord) => ShouldRouteWhileEditing(chord, PlatformKeys.IsWindows);
+
+    /// <summary>As <see cref="ShouldRouteWhileEditing(KeyChord)"/> for macOS or for Windows. On Windows Ctrl takes
+    /// Cmd's part, and Ctrl+Alt stays with the editor: it is AltGr, which types characters on many layouts.</summary>
+    public static bool ShouldRouteWhileEditing(KeyChord chord, bool windows)
     {
         var (key, modifiers) = (chord.Key, chord.Modifiers);
         if (key is >= Key.F1 and <= Key.F24) return true;
         if ((modifiers & (KeyModifiers.Meta | KeyModifiers.Control)) == 0) return false;
+        if (windows && modifiers.HasFlag(KeyModifiers.Control) && modifiers.HasFlag(KeyModifiers.Alt)) return false;
 
-        var cmd = modifiers.HasFlag(KeyModifiers.Meta);
+        var cmd = modifiers.HasFlag(windows ? KeyModifiers.Control : KeyModifiers.Meta);
         if (cmd && key is Key.A or Key.C or Key.V or Key.X or Key.Z) return false;
         if ((cmd || modifiers.HasFlag(KeyModifiers.Alt)) && key is Key.Back or Key.Delete) return false;
         if (cmd && key is Key.Left or Key.Right or Key.Up or Key.Down) return false;

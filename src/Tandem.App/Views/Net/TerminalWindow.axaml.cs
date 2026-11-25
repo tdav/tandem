@@ -1,3 +1,4 @@
+using Tandem.App.Input;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -18,7 +19,7 @@ public sealed partial class TerminalWindow : Window
         DataContext = model;
         AddHandler(KeyDownEvent, (_, e) =>
         {
-            if ((e.Key == Key.W && e.KeyModifiers == KeyModifiers.Meta) ||
+            if ((e.Key == Key.W && e.KeyModifiers == (PlatformKeys.IsWindows ? KeyModifiers.Control | KeyModifiers.Shift : KeyModifiers.Meta)) ||
                 (e.Key == Key.Escape && model.State == TerminalState.Connecting))
             {
                 e.Handled = true;

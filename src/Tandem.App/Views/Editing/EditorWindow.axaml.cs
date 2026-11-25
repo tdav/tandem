@@ -17,8 +17,8 @@ namespace Tandem.App.Views.Editing;
 /// </summary>
 public partial class EditorWindow : Window
 {
-    private static readonly KeyChord SaveChord = KeyChord.Parse("Cmd+S");
-    private static readonly KeyChord CloseChord = KeyChord.Parse("Cmd+W");
+    private static readonly KeyChord SaveChord = new KeyChord(Key.S, PlatformKeys.Command);
+    private static readonly KeyChord CloseChord = new KeyChord(Key.W, PlatformKeys.Command);
     private static readonly KeyChord EscapeChord = new(Key.Escape, KeyModifiers.None);
 
     private readonly IDialogService? _dialogs;

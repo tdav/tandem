@@ -76,14 +76,14 @@ public static class Composition
         var dialogs = new DialogService();
         var netDialogs = new NetDialogs(() => dialogs.Owner);
         var secrets = new MacKeychainSecretStore();
-        var stateDirectory = Path.Combine(homeDirectory, "Library", "Application Support", "Tandem");
+        var stateDirectory = AppDirectories.State(homeDirectory);
         var net = new NetConnections(providers, new ConnectionStore(stateDirectory), new TrustStore(stateDirectory),
             secrets, new DialogNetPrompts(netDialogs), CreateSessionFactories(), CreateKeyReader(providers, homeDirectory),
             new CredentialVault(stateDirectory));
         return new AppServices(providers, new MacVolumeService(), new MacShellIntegration(processes),
             new MacQuickLook(processes), new MacFileMetadataService(broker), new MacTrash(broker),
             new MacNativeCopy(broker), processes, new OperationQueue(), broker, log, dialogs,
-            new TempFileStore(TempFileStore.DefaultDirectory(homeDirectory)), new WindowService(dialogs, providers),
+            new TempFileStore(AppDirectories.Temp(homeDirectory)), new WindowService(dialogs, providers),
             new ToolWindows(), new MacQuarantine(broker), net, netDialogs, secrets,
             new SshConsoles(net, new SshShellTransportFactory()));
     }
@@ -107,7 +107,9 @@ public static class Composition
         {
             "~" => homeDirectory,
             _ when path.StartsWith("~/", StringComparison.Ordinal) => Path.Join(homeDirectory, path[2..]),
-            _ when !Path.IsPathRooted(path) => Path.Join(homeDirectory, path),
+            _ when OperatingSystem.IsWindows() && path.StartsWith(@"~\", StringComparison.Ordinal) =>
+                Path.Join(homeDirectory, path[2..]),
+            _ when !Path.IsPathFullyQualified(path) => Path.Join(homeDirectory, path),
             _ => path,
         };
         var file = VfsPath.Local(absolute);
@@ -128,9 +130,8 @@ public static class Composition
         }
     };
 
-    /// <summary>Where the app writes unexpected errors: <c>~/Library/Logs/Tandem/tandem.log</c>.</summary>
-    public static string DefaultLogFile(string homeDirectory) =>
-        Path.Combine(homeDirectory, "Library", "Logs", "Tandem", "tandem.log");
+    /// <summary>Where the app writes unexpected errors: <see cref="AppDirectories.LogFile"/>.</summary>
+    public static string DefaultLogFile(string homeDirectory) => AppDirectories.LogFile(homeDirectory);
 
     /// <summary>The main view model on <paramref name="services"/> and <paramref name="settings"/>; not loaded
     /// yet. Registers a <see cref="SearchResultsProvider"/> in <see cref="AppServices.Providers"/> unless one with its id

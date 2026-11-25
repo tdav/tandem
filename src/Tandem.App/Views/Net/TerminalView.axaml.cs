@@ -1,3 +1,4 @@
+using Tandem.App.Input;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -70,9 +71,20 @@ public sealed partial class TerminalView : UserControl
 
     private async void OnTerminalKeyDown(object? sender, KeyEventArgs e)
     {
-        if (_model is not { } model || !e.KeyModifiers.HasFlag(KeyModifiers.Meta)) return;
-        e.Handled = true;
-        if (e.KeyModifiers != KeyModifiers.Meta) return;
+        if (_model is not { } model) return;
+        if (PlatformKeys.IsWindows)
+        {
+            // Ctrl belongs to the remote shell (Ctrl+C interrupts); the clipboard is Ctrl+Shift+C/V, as in Windows
+            // Terminal.
+            if (e.KeyModifiers != (KeyModifiers.Control | KeyModifiers.Shift) || e.Key is not (Key.C or Key.V)) return;
+            e.Handled = true;
+        }
+        else
+        {
+            if (!e.KeyModifiers.HasFlag(KeyModifiers.Meta)) return;
+            e.Handled = true;
+            if (e.KeyModifiers != KeyModifiers.Meta) return;
+        }
         if (e.Key == Key.C) await model.CopySelectionAsync();
         else if (e.Key == Key.V) await model.PasteAsync();
     }

@@ -1,4 +1,5 @@
 using Tandem.Core.Vfs;
+using Tandem.Core.Vfs.Local;
 
 namespace Tandem.App.ViewModels;
 
@@ -108,7 +109,9 @@ public sealed class DropHandler(WorkspaceViewModel workspace, FileCommands files
         for (var i = 0; i < localPaths.Count; i++)
         {
             var path = localPaths[i];
-            if (string.IsNullOrEmpty(path) || !path.StartsWith('/') || path.Contains('\0')) return null;
+            var absolute = path?.StartsWith('/') == true ||
+                           (LocalPath.Current == LocalPathStyle.Windows && Path.IsPathFullyQualified(path ?? ""));
+            if (string.IsNullOrEmpty(path) || !absolute || path.Contains('\0')) return null;
             try
             {
                 sources[i] = VfsPath.Local(path);

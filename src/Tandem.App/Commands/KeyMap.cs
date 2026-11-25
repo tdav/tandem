@@ -1,3 +1,4 @@
+using Avalonia.Input;
 using Tandem.Core.Settings;
 
 namespace Tandem.App.Commands;
@@ -84,6 +85,68 @@ public sealed class KeyMap
             (CommandIds.NetDisconnect, "Cmd+Shift+K"), (CommandIds.NetDisconnect, "Ctrl+Shift+F"),
             (CommandIds.NetConsole, "Cmd+Alt+K"),
         }.Select(b => (b.Item1, KeyChord.Parse(b.Item2))));
+
+    /// <summary>The default bindings of the running system: <see cref="Default"/> on macOS,
+    /// <see cref="ForWindows"/> of it on Windows.</summary>
+    public static KeyMap Platform { get; } = Input.PlatformKeys.IsWindows ? ForWindows(Default) : Default;
+
+    /// <summary>
+    /// The Windows bindings made from the macOS ones, in their order: Cmd becomes Ctrl. A chord the macOS map already
+    /// gives with Ctrl wins over a translated one, and a translation that would take a chord twice is dropped
+    /// (Cmd+M and Ctrl+M both multi-rename; Cmd+F for search loses to Ctrl+F, connect, as in classic two-pane
+    /// managers). The Ctrl+Cmd chords (sorting, pinning) take the chords Windows two-pane managers use: Ctrl+F3…F7 to
+    /// sort, Ctrl+Alt+R to reverse, Ctrl+Alt+P to pin. Delete and Shift+Delete are added for deleting.
+    /// </summary>
+    public static KeyMap ForWindows(KeyMap mac)
+    {
+        ArgumentNullException.ThrowIfNull(mac);
+        var special = new Dictionary<string, string>
+        {
+            [CommandIds.SortByName] = "Ctrl+F3",
+            [CommandIds.SortByExtension] = "Ctrl+F4",
+            [CommandIds.SortByDate] = "Ctrl+F5",
+            [CommandIds.SortBySize] = "Ctrl+F6",
+            [CommandIds.SortByMode] = "Ctrl+F7",
+            [CommandIds.SortReverse] = "Ctrl+Alt+R",
+            [CommandIds.TabTogglePin] = "Ctrl+Alt+P",
+        };
+        var extra = new (string CommandId, string Chord)[]
+        {
+            (CommandIds.FileDelete, "Delete"),
+            (CommandIds.FileDeletePermanent, "Shift+Delete"),
+        };
+
+        var native = mac.Bindings.Where(b => !b.Chord.Modifiers.HasFlag(KeyModifiers.Meta))
+            .Select(b => b.Chord).ToHashSet();
+        var taken = new HashSet<KeyChord>();
+        var result = new List<(string, KeyChord)>();
+        foreach (var (id, chord) in mac.Bindings)
+        {
+            KeyChord windows;
+            if (!chord.Modifiers.HasFlag(KeyModifiers.Meta)) windows = chord;
+            else if (chord.Modifiers.HasFlag(KeyModifiers.Control))
+            {
+                if (!special.TryGetValue(id, out var text)) continue;
+                windows = KeyChord.Parse(text);
+            }
+            else
+            {
+                windows = chord with { Modifiers = (chord.Modifiers & ~KeyModifiers.Meta) | KeyModifiers.Control };
+                if (native.Contains(windows)) continue; // the macOS map's own Ctrl chord wins
+            }
+            if (taken.Add(windows)) result.Add((id, windows));
+        }
+        foreach (var (id, text) in extra)
+        {
+            var chord = KeyChord.Parse(text);
+            if (taken.Add(chord))
+            {
+                var at = result.FindLastIndex(b => b.Item1 == id);
+                result.Insert(at + 1, (id, chord));
+            }
+        }
+        return new KeyMap(result);
+    }
 
     /// <summary>All bindings in order; for a key map editor and for showing shortcuts in menus.</summary>
     public IReadOnlyList<(string CommandId, KeyChord Chord)> Bindings { get; }

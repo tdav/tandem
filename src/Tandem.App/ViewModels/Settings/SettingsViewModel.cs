@@ -203,7 +203,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         var current = settings.Current;
-        keyMap ??= KeyMap.Default.WithOverrides(current.KeyBindings);
+        keyMap ??= KeyMap.Platform.WithOverrides(current.KeyBindings);
         _theme = current.Theme;
         _fontSize = current.FontSize;
         _rowHeight = current.RowHeight;
@@ -216,7 +216,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         Buttons = new(current.Buttons.Select(b => new UserButtonRow
             { Title = b.Title, Program = b.Program, Arguments = b.Arguments }));
         _shortcuts = CommandIds.All
-            .Select(id => new ShortcutRow(id, keyMap.ChordsFor(id), KeyMap.Default.ChordsFor(id)))
+            .Select(id => new ShortcutRow(id, keyMap.ChordsFor(id), KeyMap.Platform.ChordsFor(id)))
             .ToArray();
         VisibleShortcuts = new(_shortcuts);
     }
@@ -395,7 +395,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             LeftColumns = LeftColumns.Select(c => c.ToSetting()).ToArray(),
             RightColumns = RightColumns.Select(c => c.ToSetting()).ToArray(),
             FileColors = FileColors.Select(r => r.ToRule()).ToArray(),
-            KeyBindings = [..keyMap.OverridesAgainst(KeyMap.Default), ..unknown],
+            KeyBindings = [..keyMap.OverridesAgainst(KeyMap.Platform), ..unknown],
             Buttons = Buttons.Select(b => b.ToButton()).ToArray(),
             ExternalEditor = string.IsNullOrWhiteSpace(ExternalEditor) ? null : ExternalEditor.Trim(),
         });

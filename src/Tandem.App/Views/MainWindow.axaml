@@ -9,8 +9,8 @@
         Title="Tandem"
         MinWidth="640" MinHeight="400">
     <!-- Top to bottom: the button bar, the two panels (with the sidebar on the left), the command line, the F-key
-         bar. -->
-    <DockPanel>
+         bar. On Windows a menu bar goes on top (MainWindow adds it: macOS shows the menu in the system's bar). -->
+    <DockPanel x:Name="RootDock">
         <Panel x:Name="ButtonBarHost" DockPanel.Dock="Top" IsVisible="{Binding Workspace.View.ButtonBar}">
             <v:ButtonBar x:Name="ButtonBar" />
         </Panel>

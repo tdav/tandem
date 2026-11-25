@@ -41,6 +41,12 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        if (Input.PlatformKeys.IsWindows)
+        {
+            var menuBar = new NativeMenuBar();
+            DockPanel.SetDock(menuBar, Dock.Top);
+            RootDock.Children.Insert(0, menuBar);
+        }
     }
 
     /// <param name="main">A loaded main view model.</param>

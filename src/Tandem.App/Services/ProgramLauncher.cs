@@ -25,7 +25,8 @@ public static class ProgramLauncher
         ArgumentNullException.ThrowIfNull(arguments);
         ArgumentNullException.ThrowIfNull(homeDirectory);
         if (program == "~") program = homeDirectory;
-        else if (program.StartsWith("~/", StringComparison.Ordinal))
+        else if (program.StartsWith("~/", StringComparison.Ordinal) ||
+                 (OperatingSystem.IsWindows() && program.StartsWith(@"~\", StringComparison.Ordinal)))
             program = Path.Join(homeDirectory, program[2..]);
 
         return program.TrimEnd('/').EndsWith(".app", StringComparison.OrdinalIgnoreCase)

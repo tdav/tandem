@@ -67,7 +67,7 @@ public partial class App : Application
         {
             if (!OperatingSystem.IsMacOS()) throw new PlatformNotSupportedException("Tandem runs on macOS only.");
             _services = Composition.CreatePlatformServices(_log!, home);
-            var stateDirectory = Path.Combine(home, "Library", "Application Support", "Tandem");
+            var stateDirectory = AppDirectories.State(home);
             _main = await Composition.StartAsync(_services, stateDirectory, home);
             _main.CommandFailed += (_, e) => ReportUnexpected(e, "command");
             _window = new MainWindow(_main);

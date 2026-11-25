@@ -15,7 +15,7 @@ namespace Tandem.App.Views.Viewing;
 public partial class ViewerWindow : Window
 {
     private static readonly KeyChord[] CloseChords =
-        [new(Key.Escape, KeyModifiers.None), new(Key.F3, KeyModifiers.None), KeyChord.Parse("Cmd+W")];
+        [new(Key.Escape, KeyModifiers.None), new(Key.F3, KeyModifiers.None), new KeyChord(Key.W, PlatformKeys.Command)];
 
     /// <summary>For the designer only.</summary>
     public ViewerWindow()

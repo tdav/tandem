@@ -79,7 +79,11 @@ public static class MainMenu
     {
         ArgumentNullException.ThrowIfNull(main);
         var menu = new NativeMenu();
-        menu.Items.Add(Submenu("Menu_File", Commands(main, FileCommands)));
+        // Windows has no application menu: its one item, Settings, ends the File menu.
+        var fileItems = Commands(main, FileCommands);
+        if (OperatingSystem.IsWindows())
+            fileItems = [.. fileItems, new NativeMenuItemSeparator(), CommandItem(main, CommandIds.AppSettings)];
+        menu.Items.Add(Submenu("Menu_File", fileItems));
         menu.Items.Add(Submenu("Menu_Selection", Commands(main, SelectionCommands)));
         menu.Items.Add(Submenu("Menu_Go", Commands(main, GoCommands)));
         menu.Items.Add(Submenu("Menu_Tools", Commands(main, ToolsCommands)));

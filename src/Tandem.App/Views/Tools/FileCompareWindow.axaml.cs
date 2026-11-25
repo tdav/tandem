@@ -1,3 +1,4 @@
+using Tandem.App.Input;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Documents;
@@ -102,8 +103,8 @@ public sealed partial class FileCompareWindow : Window
             case (Key.Escape, KeyModifiers.None): Close(); break;
             case (Key.Up, KeyModifiers.Alt): Move(previous: true); break;
             case (Key.Down, KeyModifiers.Alt): Move(previous: false); break;
-            case (Key.D1, KeyModifiers.Meta): model.Mode = CompareMode.Text; break;
-            case (Key.D2, KeyModifiers.Meta): model.Mode = CompareMode.Binary; break;
+            case (Key.D1, var m) when m == PlatformKeys.Command: model.Mode = CompareMode.Text; break;
+            case (Key.D2, var m) when m == PlatformKeys.Command: model.Mode = CompareMode.Binary; break;
             default: return;
         }
         e.Handled = true;

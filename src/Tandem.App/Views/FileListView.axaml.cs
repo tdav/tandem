@@ -211,7 +211,7 @@ public partial class FileListView : UserControl
         }
 
         e.Handled = true;
-        var cmd = e.KeyModifiers.HasFlag(KeyModifiers.Meta);
+        var cmd = PlatformKeys.HasCommand(e.KeyModifiers);
         if (point.Properties.IsRightButtonPressed)
         {
             // The cursor goes to the row first, so the menu acts on the row under the pointer.
@@ -348,7 +348,7 @@ public partial class FileListView : UserControl
         var effect = offered.HasFlag(DragDropEffects.Copy) ? DragDropEffects.Copy
             : offered.HasFlag(DragDropEffects.Move) ? DragDropEffects.Move
             : DragDropEffects.Link;
-        return (paths, target, effect, e.KeyModifiers.HasFlag(KeyModifiers.Meta));
+        return (paths, target, effect, PlatformKeys.HasCommand(e.KeyModifiers));
     }
 
     /// <summary>A dialog of the app (owned by its window; the progress window is not a dialog) is open.</summary>

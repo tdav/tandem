@@ -1,3 +1,4 @@
+using Tandem.App.Input;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -27,7 +28,7 @@ public sealed partial class SyncWindow : Window
     private void OnRowsKeyDown(object? sender, KeyEventArgs e)
     {
         if (DataContext is not SyncViewModel { CanEdit: true }) return;
-        if (e.Key == Key.A && e.KeyModifiers == KeyModifiers.Meta)
+        if (e.Key == Key.A && e.KeyModifiers == PlatformKeys.Command)
         {
             SyncRows.SelectAll();
             e.Handled = true;

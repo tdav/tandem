@@ -28,13 +28,19 @@ public sealed class TempFileStore : IDisposable
     public static string DefaultDirectory(string homeDirectory) =>
         Path.Combine(homeDirectory, "Library", "Caches", "Tandem", "tmp");
 
-    /// <summary>A new path <c>{Directory}/{guid}/{name}</c>. The folder is created, the file is not.</summary>
-    /// <exception cref="ArgumentException"><paramref name="name"/> is not a single file name.</exception>
+    /// <summary>A new path <c>{Directory}/{guid}/{name}</c>. The folder is created, the file is not. On Windows the
+    /// characters a Windows name cannot hold (<c>:*?"&lt;&gt;|</c>, as a server or an archive may use) become
+    /// '_'.</summary>
+    /// <exception cref="ArgumentException"><paramref name="name"/> is not a single file name (on Windows also
+    /// when it holds a '\\').</exception>
     public string NewFile(string name)
     {
         ArgumentNullException.ThrowIfNull(name);
-        if (name.Length == 0 || name == "." || name == ".." || name.Contains('/') || name.Contains('\0'))
+        if (name.Length == 0 || name == "." || name == ".." || name.Contains('/') || name.Contains('\0') ||
+            (OperatingSystem.IsWindows() && name.Contains('\\')))
             throw new ArgumentException($"'{name}' is not a single file name.", nameof(name));
+        if (OperatingSystem.IsWindows())
+            foreach (var bad in ":*?\"<>|") name = name.Replace(bad, '_');
         var folder = Path.Combine(Directory, Guid.NewGuid().ToString("N"));
         System.IO.Directory.CreateDirectory(folder);
         return Path.Combine(folder, name);

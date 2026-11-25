@@ -71,7 +71,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Workspace = workspace;
         Services = services;
         Settings = settings;
-        _keyMap = KeyMap.Default.WithOverrides(settings.Current.KeyBindings);
+        _keyMap = KeyMap.Platform.WithOverrides(settings.Current.KeyBindings);
         _fileColorRules = settings.Current.FileColors;
         _fileColors = new FileColors(_fileColorRules);
         _theme = settings.Current.Theme;
@@ -398,7 +398,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         Left.OnSettingsChanged(settings, fileColorsChanged);
         Right.OnSettingsChanged(settings, fileColorsChanged);
 
-        var keyMap = KeyMap.Default.WithOverrides(settings.KeyBindings);
+        var keyMap = KeyMap.Platform.WithOverrides(settings.KeyBindings);
         if (keyMap.Bindings.SequenceEqual(KeyMap.Bindings)) return;
         KeyMap = keyMap;
         FKeys = BuildFKeys();

@@ -34,11 +34,11 @@ public partial class ViewerView : UserControl
     private static readonly KeyChord Space = new(Key.Space, KeyModifiers.None);
     private static readonly KeyChord Home = new(Key.Home, KeyModifiers.None);
     private static readonly KeyChord End = new(Key.End, KeyModifiers.None);
-    private static readonly KeyChord TextChord = KeyChord.Parse("Cmd+1");
-    private static readonly KeyChord HexChord = KeyChord.Parse("Cmd+2");
-    private static readonly KeyChord ImageChord = KeyChord.Parse("Cmd+3");
-    private static readonly KeyChord NextEncodingChord = KeyChord.Parse("Cmd+E");
-    private static readonly KeyChord CopyChord = KeyChord.Parse("Cmd+C");
+    private static readonly KeyChord TextChord = new KeyChord(Key.D1, PlatformKeys.Command);
+    private static readonly KeyChord HexChord = new KeyChord(Key.D2, PlatformKeys.Command);
+    private static readonly KeyChord ImageChord = new KeyChord(Key.D3, PlatformKeys.Command);
+    private static readonly KeyChord NextEncodingChord = new KeyChord(Key.E, PlatformKeys.Command);
+    private static readonly KeyChord CopyChord = new KeyChord(Key.C, PlatformKeys.Command);
 
     private ViewerViewModel? _viewer;
     private bool _showingOffset;

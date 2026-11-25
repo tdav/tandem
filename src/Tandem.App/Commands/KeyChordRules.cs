@@ -51,14 +51,33 @@ public static class KeyChordRules
     /// </summary>
     public static bool IsAssignable(KeyChord chord) => RefusalOf(chord) is null;
 
-    /// <summary>Why <paramref name="chord"/> cannot be bound (see <see cref="IsAssignable"/>), or null when it
-    /// can.</summary>
-    public static ChordRefusal? RefusalOf(KeyChord chord)
+    /// <summary>The chords Windows keeps for itself (close the window, switch apps, the window menu, Start, Task
+    /// Manager); on Windows every chord with the Windows key (Meta) is the system's as well.</summary>
+    private static readonly KeyChord[] WindowsSystemChords =
+    [
+        new(Key.F4, KeyModifiers.Alt),
+        new(Key.Tab, KeyModifiers.Alt),
+        new(Key.Tab, KeyModifiers.Alt | KeyModifiers.Shift),
+        new(Key.Escape, KeyModifiers.Alt),
+        new(Key.Space, KeyModifiers.Alt),
+        new(Key.Escape, KeyModifiers.Control),
+        new(Key.Escape, KeyModifiers.Control | KeyModifiers.Shift),
+        new(Key.Delete, KeyModifiers.Control | KeyModifiers.Alt),
+    ];
+
+    /// <summary>Why <paramref name="chord"/> cannot be bound on the running system (see <see cref="IsAssignable"/>),
+    /// or null when it can.</summary>
+    public static ChordRefusal? RefusalOf(KeyChord chord) => RefusalOf(chord, Input.PlatformKeys.IsWindows);
+
+    /// <summary>As <see cref="RefusalOf(KeyChord)"/> for macOS or for Windows.</summary>
+    public static ChordRefusal? RefusalOf(KeyChord chord, bool windows)
     {
         var (key, modifiers) = (chord.Key, chord.Modifiers);
         if (key is Key.None || IsModifierKey(key)) return ChordRefusal.NoKey;
+        if (windows && (modifiers.HasFlag(KeyModifiers.Meta) || WindowsSystemChords.Contains(chord)))
+            return ChordRefusal.System;
         if (key is Key.Enter or Key.Escape) return ChordRefusal.PanelKey;
-        if (SystemChords.Contains(chord)) return ChordRefusal.System;
+        if (!windows && SystemChords.Contains(chord)) return ChordRefusal.System;
         if (key is >= Key.F1 and <= Key.F24) return null;
         if ((modifiers & CmdOrCtrl) != 0) return null;
         return key is Key.Tab or Key.Space or Key.Back or Key.Delete or Key.Insert

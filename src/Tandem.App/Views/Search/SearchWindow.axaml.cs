@@ -18,7 +18,7 @@ namespace Tandem.App.Views.Search;
 /// </summary>
 public partial class SearchWindow : Window
 {
-    private static readonly KeyChord CloseChord = KeyChord.Parse("Cmd+W");
+    private static readonly KeyChord CloseChord = new KeyChord(Key.W, PlatformKeys.Command);
 
     /// <summary>For the designer only.</summary>
     public SearchWindow()
