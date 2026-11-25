@@ -117,6 +117,7 @@ public class CommandLineTests : LanguageTestBase
     [InlineData("cd", "/home")]
     public async Task Cd_navigates(string input, string expected)
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "zsh and Unix cd; CdCommandParserWindowsTests covers Windows.");
         await using var f = await StartAsync();
         f.Line.Text = input;
 
@@ -198,6 +199,7 @@ public class CommandLineTests : LanguageTestBase
     [InlineData("cd a b", "CommandLine_CdTooManyArguments")]
     public async Task Unsupported_cd_reports_and_stays(string input, string message)
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "zsh and Unix cd; CdCommandParserWindowsTests covers Windows.");
         await using var f = await StartAsync();
         f.Line.Text = input;
 
@@ -215,6 +217,7 @@ public class CommandLineTests : LanguageTestBase
     [AvaloniaFact]
     public async Task Other_command_runs_zsh_in_panel_directory()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "zsh and Unix cd; CdCommandParserWindowsTests covers Windows.");
         await using var f = await StartAsync();
         var running = await StartCommandAsync(f, "ls -la");
 
@@ -237,6 +240,7 @@ public class CommandLineTests : LanguageTestBase
     [InlineData("echo \"$HOME\" *.txt; ls")]
     public async Task The_command_is_passed_as_one_argument_exactly_as_typed(string text)
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "zsh and Unix cd; CdCommandParserWindowsTests covers Windows.");
         await using var f = await StartAsync();
         var running = await StartCommandAsync(f, text);
 
@@ -706,6 +710,7 @@ public class CommandLineTests : LanguageTestBase
     [AvaloniaFact]
     public async Task Real_zsh_runs_the_command_in_the_panel_folder()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "zsh and Unix cd; CdCommandParserWindowsTests covers Windows.");
         var folder = Directory.CreateTempSubdirectory("tandem-cmdline-").FullName;
         try
         {

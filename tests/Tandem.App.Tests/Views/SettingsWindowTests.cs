@@ -128,6 +128,7 @@ public class SettingsWindowTests : LanguageTestBase, IDisposable
     [AvaloniaFact]
     public async Task Application_menu_has_the_settings_item()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "The macOS application menu; Windows puts Settings in the File menu.");
         await using var app = await TestApp.StartAsync();
         var menu = NativeMenu.GetMenu(Application.Current!);
         Assert.NotNull(menu);

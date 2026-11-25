@@ -27,6 +27,7 @@ public sealed class CompositionNetTests
     [Fact]
     public async Task Reader_expands_tilde_and_uses_the_registered_local_provider()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix home paths.");
         var providers = new ProviderRegistry();
         var local = new InMemoryFileSystem(VfsPath.LocalProviderId);
         var data = Encoding.UTF8.GetBytes("fixture");

@@ -206,6 +206,7 @@ public class KeyMapTests
     [Fact]
     public void Override_replaces_chords_of_that_command_only()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests covers Windows.");
         var map = Override(new KeyBindingOverride(CommandIds.FileCopy, ["Ctrl+Cmd+K", "Shift+F5"]));
 
         Assert.Equal([C("Ctrl+Cmd+K"), C("Shift+F5")], map.ChordsFor(CommandIds.FileCopy));
@@ -221,6 +222,7 @@ public class KeyMapTests
     [Fact]
     public void Override_takes_a_chord_away_from_its_default_owner()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests covers Windows.");
         var map = Override(new KeyBindingOverride(CommandIds.FileCopy, ["Ctrl+Cmd+P"]));
 
         Assert.Equal(CommandIds.FileCopy, map.Find(C("Ctrl+Cmd+P")));
@@ -239,6 +241,7 @@ public class KeyMapTests
     [Fact]
     public void Unknown_command_and_bad_chord_are_ignored()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests covers Windows.");
         var map = Override(
             new KeyBindingOverride("no.such.command", ["F5"]),
             new KeyBindingOverride(CommandIds.FileMove, ["Cmd+K", "Bogus+Q", "", null!, "K", "Enter", "Cmd+K"]),
@@ -257,6 +260,7 @@ public class KeyMapTests
     [Fact]
     public void Later_override_wins_a_disputed_chord()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests covers Windows.");
         var map = Override(
             new KeyBindingOverride(CommandIds.FileCopy, ["Cmd+K", "Shift+F5"]),
             new KeyBindingOverride(CommandIds.FileMove, ["Cmd+K"]));
@@ -269,6 +273,7 @@ public class KeyMapTests
     [Fact]
     public void Override_can_bind_a_menu_only_command()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests covers Windows.");
         var map = Override(new KeyBindingOverride(CommandIds.ShellReveal, ["Cmd+Alt+R"]));
 
         Assert.Equal(CommandIds.ShellReveal, map.Find(C("Cmd+Alt+R")));
@@ -277,6 +282,7 @@ public class KeyMapTests
     [Fact]
     public void OverridesAgainst_lists_only_changed_commands()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests covers Windows.");
         Assert.Empty(KeyMap.Default.OverridesAgainst(KeyMap.Default));
 
         var map = Override(new KeyBindingOverride(CommandIds.FileCopy, ["Ctrl+Cmd+P"]));

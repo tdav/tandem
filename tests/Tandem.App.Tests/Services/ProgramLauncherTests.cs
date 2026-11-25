@@ -40,6 +40,7 @@ public class ProgramLauncherTests
     [InlineData("~other/tool", "~other/tool")]
     public void Tilde_expands_to_home(string program, string fileName)
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS programs and paths.");
         var spec = ProgramLauncher.Build(program, [], "/cur", "/Users/me");
 
         Assert.Equal(fileName, spec.FileName);
@@ -112,6 +113,7 @@ public class ProgramLauncherTests
     [Fact]
     public async Task Real_program_starts_without_a_shell_and_takes_arguments_verbatim()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS programs and paths.");
         // A harmless real run: /bin/echo prints its arguments; a shell would have split or expanded them.
         var runner = new Tandem.Platform.Mac.ProcessRunner();
         string[] arguments = ["a b", "$HOME", "\"q\"", "*", "; ls"];

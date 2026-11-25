@@ -34,6 +34,7 @@ public sealed class SettingsViewModelTests : IDisposable
     [Fact]
     public void Lists_every_command_with_label_and_current_chords()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd).");
         var service = Service(AppSettings.Default with
         {
             KeyBindings = [new KeyBindingOverride(CommandIds.FileCopy, ["Ctrl+Cmd+K"])],
@@ -67,6 +68,7 @@ public sealed class SettingsViewModelTests : IDisposable
     [Fact]
     public void Assign_adds_a_chord_and_marks_the_row_changed()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd).");
         var vm = new SettingsViewModel(Service());
         var mkdir = Row(vm, CommandIds.FileMkdir);
         var changed = new List<string?>();
@@ -86,6 +88,7 @@ public sealed class SettingsViewModelTests : IDisposable
     [Fact]
     public void Unassignable_chord_is_refused()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd).");
         var vm = new SettingsViewModel(Service());
         var copy = Row(vm, CommandIds.FileCopy);
 
@@ -99,6 +102,7 @@ public sealed class SettingsViewModelTests : IDisposable
     [Fact]
     public void Taken_chord_reports_owner_and_take_moves_it()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd).");
         var vm = new SettingsViewModel(Service());
         var move = Row(vm, CommandIds.FileMove);
         var copy = Row(vm, CommandIds.FileCopy);
@@ -118,6 +122,7 @@ public sealed class SettingsViewModelTests : IDisposable
     [Fact]
     public void RemoveChord_unbinds_only_that_chord()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd).");
         var vm = new SettingsViewModel(Service());
         var view = Row(vm, CommandIds.FileView);
 
@@ -131,6 +136,7 @@ public sealed class SettingsViewModelTests : IDisposable
     [Fact]
     public void Reset_one_restores_that_commands_defaults()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd).");
         var vm = new SettingsViewModel(Service());
         var move = Row(vm, CommandIds.FileMove);
         var copy = Row(vm, CommandIds.FileCopy);
@@ -170,6 +176,7 @@ public sealed class SettingsViewModelTests : IDisposable
     [Fact]
     public void Apply_saves_only_differences_from_defaults()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd).");
         var service = Service();
         var vm = new SettingsViewModel(service);
         var changes = 0;
@@ -200,6 +207,7 @@ public sealed class SettingsViewModelTests : IDisposable
     [Fact]
     public void Filter_matches_label_and_chord_text()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd).");
         var vm = new SettingsViewModel(Service());
         Assert.Equal(vm.Shortcuts.Count, vm.VisibleShortcuts.Count);
 

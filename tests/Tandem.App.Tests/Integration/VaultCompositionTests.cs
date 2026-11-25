@@ -22,6 +22,7 @@ public sealed class VaultCompositionTests
     [Fact]
     public async Task Private_key_reader_rejects_oversized_files()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix home paths.");
         var providers = new ProviderRegistry();
         var local = new InMemoryFileSystem(VfsPath.LocalProviderId);
         local.AddFile("/test-home/key", new byte[1_048_577]);

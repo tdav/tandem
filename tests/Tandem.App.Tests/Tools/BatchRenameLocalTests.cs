@@ -13,6 +13,7 @@ public sealed class BatchRenameLocalTests
     [Fact]
     public async Task Thousand_files_can_be_renamed_using_the_counter_and_restored_byte_for_byte()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Uses the macOS platform layer.");
         const int count = 1000;
         const string suffix = ".txt";
         var ct = TestContext.Current.CancellationToken;

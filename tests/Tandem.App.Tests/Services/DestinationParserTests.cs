@@ -53,6 +53,7 @@ public class DestinationParserTests : LanguageTestBase
     [InlineData("//dst//", 3, "/dst", null, false)]
     public async Task Valid_destinations(string text, int count, string directory, string? newName, bool create)
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix home paths; LocalPathTypedTests covers Windows.");
         var result = await Parse(text, count);
 
         Assert.Null(result.Error);

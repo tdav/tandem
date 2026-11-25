@@ -34,6 +34,7 @@ public sealed class EditorLocalDiskTests : IDisposable
     [AvaloniaFact]
     public async Task Save_keeps_finder_tags_extended_attributes_and_mode()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Uses the macOS platform layer and paths.");
         var file = Path.Combine(_folder, "notes.txt");
         await File.WriteAllTextAsync(file, "line one\r\n", TestContext.Current.CancellationToken);
         File.SetUnixFileMode(file, (UnixFileMode)0b111_101_101); // 0o755
@@ -61,6 +62,7 @@ public sealed class EditorLocalDiskTests : IDisposable
     [AvaloniaFact]
     public async Task Link_inside_a_linked_folder_edits_the_file_the_system_resolves()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Uses the macOS platform layer and paths.");
         Directory.CreateDirectory(Path.Combine(_folder, "a"));
         Directory.CreateDirectory(Path.Combine(_folder, "b/c/d"));
         await File.WriteAllTextAsync(Path.Combine(_folder, "a/x"), "wrong", TestContext.Current.CancellationToken);
@@ -89,6 +91,7 @@ public sealed class EditorLocalDiskTests : IDisposable
     [AvaloniaFact]
     public async Task Save_through_a_relative_symlink_edits_the_target_and_keeps_the_link()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Uses the macOS platform layer and paths.");
         var target = Path.Combine(_folder, "real.txt");
         await File.WriteAllTextAsync(target, "real", TestContext.Current.CancellationToken);
         var link = Path.Combine(_folder, "link.txt");
@@ -111,6 +114,7 @@ public sealed class EditorLocalDiskTests : IDisposable
     [AvaloniaFact]
     public async Task Second_spelling_or_a_link_of_an_open_file_activates_its_editor()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Uses the macOS platform layer and paths.");
         var file = Path.Combine(_folder, "x.txt");
         await File.WriteAllTextAsync(file, "x", TestContext.Current.CancellationToken);
         await File.WriteAllTextAsync(Path.Combine(_folder, "other.txt"), "o", TestContext.Current.CancellationToken);

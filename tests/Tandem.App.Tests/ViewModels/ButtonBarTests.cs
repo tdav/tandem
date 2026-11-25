@@ -65,6 +65,7 @@ public class ButtonBarTests : LanguageTestBase
     [AvaloniaFact]
     public async Task Button_in_the_right_panel_uses_its_folder_and_cursor()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS application bundles.");
         var processes = new FakeProcessRunner();
         var open = new UserButton("Open", "~/bin/show.app", "%n %f");
         await using var app = await StartAsync(processes, buttons: open);
