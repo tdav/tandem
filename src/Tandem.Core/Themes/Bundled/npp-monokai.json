@@ -1,0 +1,109 @@
+{
+  "name": "Monokai (Notepad++)",
+  "origin": {
+    "basedOn": "По мотивам темы Notepad++ «Monokai»",
+    "source": "https://github.com/notepad-plus-plus/notepad-plus-plus/blob/master/PowerEditor/installer/themes/Monokai.xml",
+    "author": "Copyright (c) 2008 Fabio Zendhi Nagao",
+    "license": "MIT (текст разрешения в файле темы)",
+    "note": "Цвет каждого токена взят из XML темы без изменений; поле usage называет стиль-источник. Шрифты и размеры — встроенной темы Stone."
+  },
+  "color": {
+    "tokens": [
+      {
+        "name": "surface",
+        "value": "#272822",
+        "usage": "Monokai.xml «Default Style bg»"
+      },
+      {
+        "name": "surface-raised",
+        "value": "#2e3436",
+        "usage": "Monokai.xml «Line number margin bg»"
+      },
+      {
+        "name": "bar",
+        "value": "#2e3436",
+        "usage": "Monokai.xml «Line number margin bg»"
+      },
+      {
+        "name": "bar-hover",
+        "value": "#3e3d32",
+        "usage": "Monokai.xml «Current line background colour bg»"
+      },
+      {
+        "name": "bar-pressed",
+        "value": "#49483e",
+        "usage": "Monokai.xml «Selected text colour bg»"
+      },
+      {
+        "name": "field",
+        "value": "#272822",
+        "usage": "Monokai.xml «Default Style bg»"
+      },
+      {
+        "name": "line",
+        "value": "#888a85",
+        "usage": "Monokai.xml «Indent guideline style fg»"
+      },
+      {
+        "name": "edge",
+        "value": "#eeeeec",
+        "usage": "Monokai.xml «Line number margin fg»"
+      },
+      {
+        "name": "ink",
+        "value": "#f8f8f2",
+        "usage": "Monokai.xml «Default Style fg»"
+      },
+      {
+        "name": "ink-muted",
+        "value": "#eeeeec",
+        "usage": "Monokai.xml «Line number margin fg»"
+      },
+      {
+        "name": "ink-disabled",
+        "value": "#75715e",
+        "usage": "Monokai.xml «C++ COMMENT fg»"
+      },
+      {
+        "name": "accent",
+        "value": "#66d9ef",
+        "usage": "Monokai.xml «C++ INSTRUCTION WORD fg»"
+      },
+      {
+        "name": "on-accent",
+        "value": "#272822",
+        "usage": "Monokai.xml «Default Style bg»"
+      },
+      {
+        "name": "cursor",
+        "value": "#49483e",
+        "usage": "Monokai.xml «Selected text colour bg»"
+      },
+      {
+        "name": "focus",
+        "value": "#fce94f",
+        "usage": "Monokai.xml «Brace highlight style fg»"
+      },
+      {
+        "name": "on-focus",
+        "value": "#272822",
+        "usage": "Monokai.xml «Default Style bg»"
+      },
+      {
+        "name": "folder",
+        "value": "#f92672",
+        "usage": "Monokai.xml «C++ TYPE WORD fg»"
+      },
+      {
+        "name": "file",
+        "value": "#75715e",
+        "usage": "Monokai.xml «C++ COMMENT fg»"
+      },
+      {
+        "name": "syntax",
+        "value": "#e6db74",
+        "usage": "Monokai.xml «C++ STRING fg»"
+      }
+    ]
+  }
+}

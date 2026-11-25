@@ -1,0 +1,109 @@
+{
+  "name": "Bespin (Notepad++)",
+  "origin": {
+    "basedOn": "По мотивам темы Notepad++ «Bespin»",
+    "source": "https://github.com/notepad-plus-plus/notepad-plus-plus/blob/master/PowerEditor/installer/themes/Bespin.xml",
+    "author": "Copyright (c) 2009 Oren Farhi, Orizen Designs",
+    "license": "MIT (текст разрешения в файле темы)",
+    "note": "Цвет каждого токена взят из XML темы без изменений; поле usage называет стиль-источник. Шрифты и размеры — встроенной темы Stone."
+  },
+  "color": {
+    "tokens": [
+      {
+        "name": "surface",
+        "value": "#2a211c",
+        "usage": "Bespin.xml «Default Style bg»"
+      },
+      {
+        "name": "surface-raised",
+        "value": "#4c4a41",
+        "usage": "Bespin.xml «Line number margin bg»"
+      },
+      {
+        "name": "bar",
+        "value": "#4c4a41",
+        "usage": "Bespin.xml «Line number margin bg»"
+      },
+      {
+        "name": "bar-hover",
+        "value": "#4b3c34",
+        "usage": "Bespin.xml «Current line background colour bg»"
+      },
+      {
+        "name": "bar-pressed",
+        "value": "#6a5448",
+        "usage": "Bespin.xml «Fold margin bg»"
+      },
+      {
+        "name": "field",
+        "value": "#2a211c",
+        "usage": "Bespin.xml «Default Style bg»"
+      },
+      {
+        "name": "line",
+        "value": "#888a85",
+        "usage": "Bespin.xml «Indent guideline style fg»"
+      },
+      {
+        "name": "edge",
+        "value": "#e5c138",
+        "usage": "Bespin.xml «Line number margin fg»"
+      },
+      {
+        "name": "ink",
+        "value": "#ffaa00",
+        "usage": "Bespin.xml «C++ OPERATOR fg»"
+      },
+      {
+        "name": "ink-muted",
+        "value": "#e5c138",
+        "usage": "Bespin.xml «Line number margin fg»"
+      },
+      {
+        "name": "ink-disabled",
+        "value": "#1e9ae0",
+        "usage": "Bespin.xml «C++ COMMENT fg»"
+      },
+      {
+        "name": "accent",
+        "value": "#f6f080",
+        "usage": "Bespin.xml «C++ INSTRUCTION WORD fg»"
+      },
+      {
+        "name": "on-accent",
+        "value": "#2a211c",
+        "usage": "Bespin.xml «Default Style bg»"
+      },
+      {
+        "name": "cursor",
+        "value": "#4b3c34",
+        "usage": "Bespin.xml «Current line background colour bg»"
+      },
+      {
+        "name": "focus",
+        "value": "#e5c138",
+        "usage": "Bespin.xml «Brace highlight style fg»"
+      },
+      {
+        "name": "on-focus",
+        "value": "#2a211c",
+        "usage": "Bespin.xml «Default Style bg»"
+      },
+      {
+        "name": "folder",
+        "value": "#ffaa00",
+        "usage": "Bespin.xml «C++ TYPE WORD fg»"
+      },
+      {
+        "name": "file",
+        "value": "#1e9ae0",
+        "usage": "Bespin.xml «C++ COMMENT fg»"
+      },
+      {
+        "name": "syntax",
+        "value": "#55e439",
+        "usage": "Bespin.xml «C++ STRING fg»"
+      }
+    ]
+  }
+}

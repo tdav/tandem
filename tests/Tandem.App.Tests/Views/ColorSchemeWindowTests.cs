@@ -69,11 +69,15 @@ public class ColorSchemeWindowTests : LanguageTestBase, IDisposable
 
         var choice = Named<ComboBox>(window, "ColorSchemeChoice");
         var options = window.Settings.ColorSchemes;
-        Assert.Equal([BuiltInThemes.StoneId, "x"], options.Select(o => o.Id));
-        Assert.Equal("X", options[1].Label);
+        // The built-in theme first, then the files: the bundled themes installed on start and the user's "x".
+        var expected = BundledThemes.FileNames.Select(Path.GetFileNameWithoutExtension).Append("x").Order();
+        Assert.Equal(BuiltInThemes.StoneId, options[0].Id);
+        Assert.Equal(expected, options.Skip(1).Select(o => o.Id).Order());
+        var x = options.Single(o => o.Id == "x");
+        Assert.Equal("X", x.Label);
         Assert.Same(options[0], choice.SelectedItem);
 
-        choice.SelectedItem = options[1];
+        choice.SelectedItem = x;
         Pump(window);
         Click(window, Named<Button>(window, "Apply"));
 
@@ -159,7 +163,8 @@ public class ColorSchemeWindowTests : LanguageTestBase, IDisposable
     {
         await using var app = await TestApp.StartAsync();
         var directory = ThemeCatalog.DirectoryIn(app.StateDirectory);
-        Assert.False(Directory.Exists(directory));
+        // The start installs the bundled themes there; removed, the button must make the folder again.
+        Directory.Delete(directory, recursive: true);
         var window = await OpenAsync(app);
 
         Click(window, Named<Button>(window, "OpenThemesFolder"));

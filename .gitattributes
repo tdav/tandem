@@ -1,0 +1,4 @@
+# Windows cmd needs CRLF (labels and goto break on LF-only files); POSIX shells need LF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.sh  text eol=lf

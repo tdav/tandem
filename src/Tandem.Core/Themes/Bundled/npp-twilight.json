@@ -1,0 +1,109 @@
+{
+  "name": "Twilight (Notepad++)",
+  "origin": {
+    "basedOn": "По мотивам темы Notepad++ «Twilight»",
+    "source": "https://github.com/notepad-plus-plus/notepad-plus-plus/blob/master/PowerEditor/installer/themes/Twilight.xml",
+    "author": "Copyright (c) 2008 Fabio Zendhi Nagao, 2011–2014 Renato Silva",
+    "license": "MIT (текст разрешения в файле темы)",
+    "note": "Цвет каждого токена взят из XML темы без изменений; поле usage называет стиль-источник. Шрифты и размеры — встроенной темы Stone."
+  },
+  "color": {
+    "tokens": [
+      {
+        "name": "surface",
+        "value": "#141414",
+        "usage": "Twilight.xml «Default Style bg»"
+      },
+      {
+        "name": "surface-raised",
+        "value": "#2e3436",
+        "usage": "Twilight.xml «Line number margin bg»"
+      },
+      {
+        "name": "bar",
+        "value": "#2e3436",
+        "usage": "Twilight.xml «Line number margin bg»"
+      },
+      {
+        "name": "bar-hover",
+        "value": "#292929",
+        "usage": "Twilight.xml «Current line background colour bg»"
+      },
+      {
+        "name": "bar-pressed",
+        "value": "#3e3e3e",
+        "usage": "Twilight.xml «Selected text colour bg»"
+      },
+      {
+        "name": "field",
+        "value": "#141414",
+        "usage": "Twilight.xml «Default Style bg»"
+      },
+      {
+        "name": "line",
+        "value": "#888a85",
+        "usage": "Twilight.xml «Indent guideline style fg»"
+      },
+      {
+        "name": "edge",
+        "value": "#eeeeec",
+        "usage": "Twilight.xml «Line number margin fg»"
+      },
+      {
+        "name": "ink",
+        "value": "#f8f8f8",
+        "usage": "Twilight.xml «Default Style fg»"
+      },
+      {
+        "name": "ink-muted",
+        "value": "#eeeeec",
+        "usage": "Twilight.xml «Line number margin fg»"
+      },
+      {
+        "name": "ink-disabled",
+        "value": "#888a85",
+        "usage": "Twilight.xml «Indent guideline style fg»"
+      },
+      {
+        "name": "accent",
+        "value": "#f9ee98",
+        "usage": "Twilight.xml «C++ INSTRUCTION WORD fg»"
+      },
+      {
+        "name": "on-accent",
+        "value": "#141414",
+        "usage": "Twilight.xml «Default Style bg»"
+      },
+      {
+        "name": "cursor",
+        "value": "#3e3e3e",
+        "usage": "Twilight.xml «Selected text colour bg»"
+      },
+      {
+        "name": "focus",
+        "value": "#fce94f",
+        "usage": "Twilight.xml «Brace highlight style fg»"
+      },
+      {
+        "name": "on-focus",
+        "value": "#141414",
+        "usage": "Twilight.xml «Default Style bg»"
+      },
+      {
+        "name": "folder",
+        "value": "#cda869",
+        "usage": "Twilight.xml «C++ TYPE WORD fg»"
+      },
+      {
+        "name": "file",
+        "value": "#eeeeec",
+        "usage": "Twilight.xml «Line number margin fg»"
+      },
+      {
+        "name": "syntax",
+        "value": "#cda869",
+        "usage": "Twilight.xml «C++ OPERATOR fg»"
+      }
+    ]
+  }
+}

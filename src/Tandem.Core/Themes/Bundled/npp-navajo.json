@@ -1,0 +1,109 @@
+{
+  "name": "Navajo (Notepad++)",
+  "origin": {
+    "basedOn": "По мотивам темы Notepad++ «Navajo»",
+    "source": "https://github.com/notepad-plus-plus/notepad-plus-plus/blob/master/PowerEditor/installer/themes/Navajo.xml",
+    "author": "Paul Neubauer, по navajo.vim Р. Эдварда Ралстона (R. Edward Ralston)",
+    "license": "CC BY 3.0 Unported",
+    "note": "Цвет каждого токена взят из XML темы без изменений; поле usage называет стиль-источник. Шрифты и размеры — встроенной темы Stone."
+  },
+  "color": {
+    "tokens": [
+      {
+        "name": "surface",
+        "value": "#ba9c80",
+        "usage": "Navajo.xml «Default Style bg»"
+      },
+      {
+        "name": "surface-raised",
+        "value": "#808080",
+        "usage": "Navajo.xml «Line number margin bg»"
+      },
+      {
+        "name": "bar",
+        "value": "#808080",
+        "usage": "Navajo.xml «Line number margin bg»"
+      },
+      {
+        "name": "bar-hover",
+        "value": "#b39674",
+        "usage": "Navajo.xml «Current line background colour bg»"
+      },
+      {
+        "name": "bar-pressed",
+        "value": "#bcbcbc",
+        "usage": "Navajo.xml «Selected text colour bg»"
+      },
+      {
+        "name": "field",
+        "value": "#ba9c80",
+        "usage": "Navajo.xml «Default Style bg»"
+      },
+      {
+        "name": "line",
+        "value": "#181880",
+        "usage": "Navajo.xml «Indent guideline style fg»"
+      },
+      {
+        "name": "edge",
+        "value": "#000000",
+        "usage": "Navajo.xml «Line number margin fg»"
+      },
+      {
+        "name": "ink",
+        "value": "#000000",
+        "usage": "Navajo.xml «Default Style fg»"
+      },
+      {
+        "name": "ink-muted",
+        "value": "#010101",
+        "usage": "Navajo.xml «C++ OPERATOR fg»"
+      },
+      {
+        "name": "ink-disabled",
+        "value": "#181880",
+        "usage": "Navajo.xml «C++ COMMENT fg»"
+      },
+      {
+        "name": "accent",
+        "value": "#1e8b47",
+        "usage": "Navajo.xml «C++ TYPE WORD fg»"
+      },
+      {
+        "name": "on-accent",
+        "value": "#000000",
+        "usage": "Navajo.xml «Default Style fg»"
+      },
+      {
+        "name": "cursor",
+        "value": "#bcbcbc",
+        "usage": "Navajo.xml «Selected text colour bg»"
+      },
+      {
+        "name": "focus",
+        "value": "#000000",
+        "usage": "Navajo.xml «Brace highlight style fg»"
+      },
+      {
+        "name": "on-focus",
+        "value": "#ba9c80",
+        "usage": "Navajo.xml «Default Style bg»"
+      },
+      {
+        "name": "folder",
+        "value": "#870087",
+        "usage": "Navajo.xml «C++ PREPROCESSOR fg»"
+      },
+      {
+        "name": "file",
+        "value": "#181880",
+        "usage": "Navajo.xml «C++ COMMENT fg»"
+      },
+      {
+        "name": "syntax",
+        "value": "#010101",
+        "usage": "Navajo.xml «C++ OPERATOR fg»"
+      }
+    ]
+  }
+}

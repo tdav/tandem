@@ -229,6 +229,14 @@ public static class Composition
         };
         var state = await Task.Run(() =>
         {
+            try
+            {
+                BundledThemes.Install(ThemeCatalog.DirectoryIn(stateDirectory));
+            }
+            catch (Exception e)
+            {
+                services.Log.Write(e, "theme");
+            }
             settings.Load();
             services.Net?.Load();
             return store.Load(homeDirectory);

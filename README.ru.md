@@ -98,7 +98,12 @@ build/make-app.sh                 # пакет dist/Tandem.app (Release, osx-arm
 build/make-aot-app.sh             # пакет dist/Tandem.app в Native AOT и архив dist/Tandem-<версия>-macOS-arm64.zip
 build/verify-app.sh               # проверка пакета: структура, Info.plist, архитектура, подпись, пробный запуск
 open dist/Tandem.app              # запуск
+build/publish-macos.sh            # Native AOT dist/macos-universal/Tandem.app (arm64 + x64) и его zip
+build\publish-windows.bat         # Windows: Native AOT publish\win-x64\Tandem.exe (аргумент arm64 / all)
 ```
+
+Публикация Native AOT, что для неё нужно (MSVC на Windows, Xcode command line tools на macOS) и параметры:
+[build/README.md](build/README.md) (на английском).
 
 `build/create-dev-cert.sh` — необязательный разовый шаг: создаёт в связке ключей входа самоподписанный сертификат
 «Tandem Local Dev», чтобы разрешения macOS на папки не сбрасывались после каждой пересборки. Без него пакет

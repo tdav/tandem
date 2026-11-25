@@ -1,0 +1,166 @@
+{
+  "name": "Solarized (Notepad++)",
+  "origin": {
+    "basedOn": "По мотивам темы Notepad++ «Solarized-light» и «Solarized»",
+    "source": "https://github.com/notepad-plus-plus/notepad-plus-plus/blob/master/PowerEditor/installer/themes/Solarized-light.xml, https://github.com/notepad-plus-plus/notepad-plus-plus/blob/master/PowerEditor/installer/themes/Solarized.xml",
+    "author": "Paul Neubauer, по Solarized Итана Шуновера (Ethan Schoonover)",
+    "license": "CC BY 3.0 Unported",
+    "note": "Цвет каждого токена взят из XML темы без изменений; поле usage называет стиль-источник. Шрифты и размеры — встроенной темы Stone."
+  },
+  "color": {
+    "tokens": [
+      {
+        "name": "surface",
+        "value": {
+          "light": "#fdf6e3",
+          "dark": "#002b36"
+        },
+        "usage": "light: Solarized-light.xml «Default Style bg»; dark: Solarized.xml «Default Style bg»"
+      },
+      {
+        "name": "surface-raised",
+        "value": {
+          "light": "#eee8d5",
+          "dark": "#073642"
+        },
+        "usage": "light: Solarized-light.xml «Line number margin bg»; dark: Solarized.xml «Line number margin bg»"
+      },
+      {
+        "name": "bar",
+        "value": {
+          "light": "#eee8d5",
+          "dark": "#073642"
+        },
+        "usage": "light: Solarized-light.xml «Line number margin bg»; dark: Solarized.xml «Line number margin bg»"
+      },
+      {
+        "name": "bar-hover",
+        "value": {
+          "light": "#eee8d5",
+          "dark": "#073642"
+        },
+        "usage": "light: Solarized-light.xml «Current line background colour bg»; dark: Solarized.xml «Current line background colour bg»"
+      },
+      {
+        "name": "bar-pressed",
+        "value": {
+          "light": "#eee8d5",
+          "dark": "#073642"
+        },
+        "usage": "light: Solarized-light.xml «Fold margin bg»; dark: Solarized.xml «Fold margin bg»"
+      },
+      {
+        "name": "field",
+        "value": {
+          "light": "#fdf6e3",
+          "dark": "#002b36"
+        },
+        "usage": "light: Solarized-light.xml «Default Style bg»; dark: Solarized.xml «Default Style bg»"
+      },
+      {
+        "name": "line",
+        "value": {
+          "light": "#93a1a1",
+          "dark": "#586e75"
+        },
+        "usage": "light: Solarized-light.xml «Indent guideline style fg»; dark: Solarized.xml «Indent guideline style fg»"
+      },
+      {
+        "name": "edge",
+        "value": {
+          "light": "#586e75",
+          "dark": "#93a1a1"
+        },
+        "usage": "light: Solarized-light.xml «C++ OPERATOR fg»; dark: Solarized.xml «C++ OPERATOR fg»"
+      },
+      {
+        "name": "ink",
+        "value": {
+          "light": "#073642",
+          "dark": "#93a1a1"
+        },
+        "usage": "light: Solarized-light.xml «Caret colour fg»; dark: Solarized.xml «C++ OPERATOR fg»"
+      },
+      {
+        "name": "ink-muted",
+        "value": {
+          "light": "#586e75",
+          "dark": "#839496"
+        },
+        "usage": "light: Solarized-light.xml «C++ OPERATOR fg»; dark: Solarized.xml «Default Style fg»"
+      },
+      {
+        "name": "ink-disabled",
+        "value": {
+          "light": "#93a1a1",
+          "dark": "#586e75"
+        },
+        "usage": "light: Solarized-light.xml «C++ COMMENT fg»; dark: Solarized.xml «C++ COMMENT fg»"
+      },
+      {
+        "name": "accent",
+        "value": {
+          "light": "#dc322f",
+          "dark": "#859900"
+        },
+        "usage": "light: Solarized-light.xml «C++ PREPROCESSOR fg»; dark: Solarized.xml «C++ INSTRUCTION WORD fg»"
+      },
+      {
+        "name": "on-accent",
+        "value": {
+          "light": "#fdf6e3",
+          "dark": "#002b36"
+        },
+        "usage": "light: Solarized-light.xml «Default Style bg»; dark: Solarized.xml «Default Style bg»"
+      },
+      {
+        "name": "cursor",
+        "value": {
+          "light": "#eee8d5",
+          "dark": "#073642"
+        },
+        "usage": "light: Solarized-light.xml «Current line background colour bg»; dark: Solarized.xml «Current line background colour bg»"
+      },
+      {
+        "name": "focus",
+        "value": {
+          "light": "#073642",
+          "dark": "#eee8d5"
+        },
+        "usage": "light: Solarized-light.xml «Caret colour fg»; dark: Solarized.xml «Caret colour fg»"
+      },
+      {
+        "name": "on-focus",
+        "value": {
+          "light": "#fdf6e3",
+          "dark": "#002b36"
+        },
+        "usage": "light: Solarized-light.xml «Default Style bg»; dark: Solarized.xml «Default Style bg»"
+      },
+      {
+        "name": "folder",
+        "value": {
+          "light": "#dc322f",
+          "dark": "#b58900"
+        },
+        "usage": "light: Solarized-light.xml «C++ PREPROCESSOR fg»; dark: Solarized.xml «C++ TYPE WORD fg»"
+      },
+      {
+        "name": "file",
+        "value": {
+          "light": "#586e75",
+          "dark": "#93a1a1"
+        },
+        "usage": "light: Solarized-light.xml «C++ OPERATOR fg»; dark: Solarized.xml «C++ OPERATOR fg»"
+      },
+      {
+        "name": "syntax",
+        "value": {
+          "light": "#586e75",
+          "dark": "#93a1a1"
+        },
+        "usage": "light: Solarized-light.xml «C++ OPERATOR fg»; dark: Solarized.xml «C++ OPERATOR fg»"
+      }
+    ]
+  }
+}

@@ -1,0 +1,109 @@
+{
+  "name": "Obsidian (Notepad++)",
+  "origin": {
+    "basedOn": "По мотивам темы Notepad++ «Obsidian»",
+    "source": "https://github.com/notepad-plus-plus/notepad-plus-plus/blob/master/PowerEditor/installer/themes/Obsidian.xml",
+    "author": "Joni Eskelinen (Obsidian v2, 2009–2013)",
+    "license": "в файле темы не указана",
+    "note": "Цвет каждого токена взят из XML темы без изменений; поле usage называет стиль-источник. Шрифты и размеры — встроенной темы Stone."
+  },
+  "color": {
+    "tokens": [
+      {
+        "name": "surface",
+        "value": "#293134",
+        "usage": "Obsidian.xml «Default Style bg»"
+      },
+      {
+        "name": "surface-raised",
+        "value": "#3f4b4e",
+        "usage": "Obsidian.xml «Line number margin bg»"
+      },
+      {
+        "name": "bar",
+        "value": "#3f4b4e",
+        "usage": "Obsidian.xml «Line number margin bg»"
+      },
+      {
+        "name": "bar-hover",
+        "value": "#2f393c",
+        "usage": "Obsidian.xml «Current line background colour bg»"
+      },
+      {
+        "name": "bar-pressed",
+        "value": "#404e51",
+        "usage": "Obsidian.xml «Selected text colour bg»"
+      },
+      {
+        "name": "field",
+        "value": "#293134",
+        "usage": "Obsidian.xml «Default Style bg»"
+      },
+      {
+        "name": "line",
+        "value": "#394448",
+        "usage": "Obsidian.xml «Indent guideline style fg»"
+      },
+      {
+        "name": "edge",
+        "value": "#81969a",
+        "usage": "Obsidian.xml «Line number margin fg»"
+      },
+      {
+        "name": "ink",
+        "value": "#e0e2e4",
+        "usage": "Obsidian.xml «Default Style fg»"
+      },
+      {
+        "name": "ink-muted",
+        "value": "#e8e2b7",
+        "usage": "Obsidian.xml «C++ OPERATOR fg»"
+      },
+      {
+        "name": "ink-disabled",
+        "value": "#81969a",
+        "usage": "Obsidian.xml «Line number margin fg»"
+      },
+      {
+        "name": "accent",
+        "value": "#93c763",
+        "usage": "Obsidian.xml «C++ INSTRUCTION WORD fg»"
+      },
+      {
+        "name": "on-accent",
+        "value": "#293134",
+        "usage": "Obsidian.xml «Default Style bg»"
+      },
+      {
+        "name": "cursor",
+        "value": "#404e51",
+        "usage": "Obsidian.xml «Selected text colour bg»"
+      },
+      {
+        "name": "focus",
+        "value": "#f3db2e",
+        "usage": "Obsidian.xml «Brace highlight style fg»"
+      },
+      {
+        "name": "on-focus",
+        "value": "#293134",
+        "usage": "Obsidian.xml «Default Style bg»"
+      },
+      {
+        "name": "folder",
+        "value": "#678cb1",
+        "usage": "Obsidian.xml «C++ TYPE WORD fg»"
+      },
+      {
+        "name": "file",
+        "value": "#81969a",
+        "usage": "Obsidian.xml «Line number margin fg»"
+      },
+      {
+        "name": "syntax",
+        "value": "#ffcd22",
+        "usage": "Obsidian.xml «C++ NUMBER fg»"
+      }
+    ]
+  }
+}

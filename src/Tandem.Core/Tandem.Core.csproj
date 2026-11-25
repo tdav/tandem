@@ -6,5 +6,7 @@
   <ItemGroup>
     <!-- The built-in theme "Stone": the Tandem design system's tokens.json. -->
     <EmbeddedResource Include="Themes/stone.json" LogicalName="Tandem.Core.Themes.stone.json" />
+    <!-- The themes installed into the user's themes folder on start (BundledThemes). -->
+    <EmbeddedResource Include="Themes/Bundled/*.json" LogicalName="Tandem.Core.Themes.Bundled.%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>
