@@ -11,7 +11,10 @@ public readonly record struct VfsPath(string ProviderId, string Path)
 
     public string Path { get; init => field = Normalize(value); } = Normalize(Path);
 
-    public static VfsPath Local(string path) => new(LocalProviderId, path);
+    /// <summary>A path of the local provider. Takes VFS form or an absolute OS path of the running system
+    /// (<see cref="Local.LocalPath.FromOs"/>; on macOS the two are the same).</summary>
+    public static VfsPath Local(string path) =>
+        new(LocalProviderId, Vfs.Local.LocalPath.FromOs(path, Vfs.Local.LocalPath.Current));
 
     /// <summary>The last segment; "" for the root.</summary>
     public string Name => IsRoot ? "" : Path[(Path.LastIndexOf('/') + 1)..];
