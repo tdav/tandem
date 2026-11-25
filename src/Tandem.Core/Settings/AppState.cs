@@ -9,10 +9,15 @@ public sealed record TabState(string ProviderId, string Path, SortColumn SortCol
 /// <summary>The tabs of one panel; <see cref="ActiveTab"/> is an index into <see cref="Tabs"/>.</summary>
 public sealed record PanelState(IReadOnlyList<TabState> Tabs, int ActiveTab);
 
-/// <summary>Which optional parts of the main window are shown. A file written before <see cref="ButtonBar"/> existed
-/// reads it as shown.</summary>
+/// <summary>How a panel lists its folder: <see cref="Full"/> in rows with columns (name, extension, size, date,
+/// mode), <see cref="Brief"/> as names only, in columns filled top to bottom and then left to right.</summary>
+public enum ListMode { Full, Brief }
+
+/// <summary>Which optional parts of the main window are shown, and how each side lists its folder
+/// (<see cref="LeftList"/>, <see cref="RightList"/>). A file written before <see cref="ButtonBar"/> existed reads it as
+/// shown; one written before the list modes reads both sides as <see cref="ListMode.Full"/>.</summary>
 public sealed record ViewState(bool Sidebar = false, bool VolumeBars = true, bool CommandLine = true, bool FKeyBar = true,
-    bool ButtonBar = true);
+    bool ButtonBar = true, ListMode LeftList = ListMode.Full, ListMode RightList = ListMode.Full);
 
 /// <summary>Main window placement; <see cref="SplitRatio"/> is the left panel's share of the width.</summary>
 public sealed record WindowState(double X, double Y, double Width, double Height, bool Maximized, double SplitRatio);

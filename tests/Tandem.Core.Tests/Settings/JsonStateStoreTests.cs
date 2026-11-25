@@ -453,6 +453,35 @@ public sealed class JsonStateStoreTests : IDisposable
     }
 
     [Fact]
+    public void State_file_without_list_modes_loads_both_panels_in_the_full_view()
+    {
+        var json = SampleJson();
+        var view = json["View"]!.AsObject();
+        view.Remove("LeftList");
+        view.Remove("RightList");
+        WriteRaw(json.ToJsonString());
+
+        var state = Store().Load(Home);
+
+        Assert.Equal(ListMode.Full, state.View.LeftList);
+        Assert.Equal(ListMode.Full, state.View.RightList);
+        Assert.True(state.View.Sidebar);
+        Assert.False(File.Exists(BadFile));
+    }
+
+    [Fact]
+    public void List_modes_are_saved_per_panel_by_name()
+    {
+        var state = Sample() with { View = Sample().View with { LeftList = ListMode.Brief } };
+        Store().Save(state);
+
+        var view = JsonNode.Parse(File.ReadAllText(StateFile))!["View"]!;
+        Assert.Equal("Brief", view["LeftList"]!.GetValue<string>());
+        Assert.Equal("Full", view["RightList"]!.GetValue<string>());
+        Assert.Equal(state.View, Store().Load(Home).View);
+    }
+
+    [Fact]
     public void State_version_is_still_1_and_saved_file_is_accepted_by_stage1_rules()
     {
         Assert.Equal(1, AppState.CurrentVersion);

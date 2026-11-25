@@ -45,6 +45,8 @@ public class KeyMapWindowsTests
     [InlineData(CommandIds.SortByMode, "Ctrl+F7")]
     [InlineData(CommandIds.SortReverse, "Ctrl+Alt+R")]
     [InlineData(CommandIds.TabTogglePin, "Ctrl+Alt+P")]
+    [InlineData(CommandIds.ViewBrief, "Ctrl+F1")]
+    [InlineData(CommandIds.ViewFull, "Ctrl+F2")]
     [InlineData(CommandIds.SearchFiles, "Alt+F7")]
     [InlineData(CommandIds.NetConnect, "Ctrl+K", "Ctrl+F")]
     [InlineData(CommandIds.ToolsMultiRename, "Ctrl+M")]

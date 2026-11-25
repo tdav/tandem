@@ -16,6 +16,7 @@ internal sealed partial class SettingsJsonContext : JsonSerializerContext
             new JsonStringEnumConverter<ThemeChoice>(allowIntegerValues: false),
             new JsonStringEnumConverter<ColumnId>(allowIntegerValues: false),
             new JsonStringEnumConverter<SortColumn>(allowIntegerValues: false),
+            new JsonStringEnumConverter<ListMode>(allowIntegerValues: false),
         },
     });
 }
