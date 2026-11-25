@@ -46,6 +46,7 @@ jobs:
         run: |
           dotnet publish src/Tandem.App -c Release -r win-x64 -p:DebugType=none -p:DebugSymbols=false -o publish/Tandem
           Rename-Item publish/Tandem/Tandem.App.exe Tandem.exe
+          Remove-Item publish/Tandem/*.pdb -ErrorAction SilentlyContinue # debug symbols of the native libraries
           Get-ChildItem publish/Tandem | Format-Table Name, Length
           # Native AOT leaves no managed assemblies: the exe must not be a .NET apphost with Tandem.App.dll beside it.
           if (Test-Path publish/Tandem/Tandem.App.dll) { throw "not a Native AOT build" }
