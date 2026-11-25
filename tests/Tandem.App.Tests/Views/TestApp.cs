@@ -390,7 +390,9 @@ internal sealed class RecordingShell : IShellIntegration
 
     private Task Record(string call, string path)
     {
-        if (!path.StartsWith('/') && call != "settings") throw new ArgumentException("Relative path.", nameof(path));
+        // Absolute: '/'-rooted (the in-memory disk's made-up paths) or, on Windows, a real C:\ path (temporary copies).
+        if (!path.StartsWith('/') && !Path.IsPathFullyQualified(path) && call != "settings")
+            throw new ArgumentException("Relative path.", nameof(path));
         if (Failure is { } failure) throw failure;
         Calls.Add((call, path));
         return VerdictAsync(ExitGate?.Task, ExitFailure);
