@@ -78,3 +78,65 @@ public class LocalPathTests
     public void Current_matches_the_running_os() =>
         Assert.Equal(OperatingSystem.IsWindows() ? Win : Unix, LocalPath.Current);
 }
+
+public class LocalPathTypedTests
+{
+    private const LocalPathStyle Win = LocalPathStyle.Windows;
+    private const LocalPathStyle Unix = LocalPathStyle.Unix;
+
+    [Theory]
+    [InlineData("~", @"C:\Users\me")]
+    [InlineData(@"~\Docs", @"C:\Users\me\Docs")]
+    [InlineData("~/Docs", @"C:\Users\me\Docs")]
+    [InlineData(@"D:\x", @"D:\x")]
+    [InlineData("d:", "d:")]
+    [InlineData(@"\\srv\share", @"\\srv\share")]
+    [InlineData("/C:/x", "/C:/x")]
+    [InlineData("/", "/")]
+    public void ExpandTyped_windows_absolute(string text, string expected) =>
+        Assert.Equal(expected, LocalPath.ExpandTyped(text, @"C:\Users\me", Win));
+
+    [Theory]
+    [InlineData("sub")]
+    [InlineData(@"sub\dir")]
+    [InlineData("C:rel")]
+    [InlineData("~other")]
+    public void ExpandTyped_windows_relative_is_null(string text) =>
+        Assert.Null(LocalPath.ExpandTyped(text, @"C:\Users\me", Win));
+
+    [Theory]
+    [InlineData("~", "/Users/me")]
+    [InlineData("~/Docs", "/Users/me/Docs")]
+    [InlineData("/x", "/x")]
+    public void ExpandTyped_unix(string text, string expected) =>
+        Assert.Equal(expected, LocalPath.ExpandTyped(text, "/Users/me/", Unix));
+
+    [Theory]
+    [InlineData(@"~\Docs")]
+    [InlineData(@"C:\x")]
+    [InlineData("sub")]
+    public void ExpandTyped_unix_relative_is_null(string text) =>
+        Assert.Null(LocalPath.ExpandTyped(text, "/Users/me", Unix));
+
+    [Theory]
+    [InlineData(@"a\b", Win, "a/b")]
+    [InlineData(@"a\b", Unix, @"a\b")]
+    public void RelativeToVfs(string text, LocalPathStyle style, string expected) =>
+        Assert.Equal(expected, LocalPath.RelativeToVfs(text, style));
+
+    [Theory]
+    [InlineData("x/", Win, true)]
+    [InlineData(@"x\", Win, true)]
+    [InlineData(@"x\", Unix, false)]
+    [InlineData("x/", Unix, true)]
+    public void EndsWithSeparator(string text, LocalPathStyle style, bool expected) =>
+        Assert.Equal(expected, LocalPath.EndsWithSeparator(text, style));
+
+    [Theory]
+    [InlineData("/", Win, "/")]
+    [InlineData("/C:", Win, @"C:\")]
+    [InlineData("/C:/Users", Win, @"C:\Users")]
+    [InlineData("/Users", Unix, "/Users")]
+    public void Display(string vfs, LocalPathStyle style, string expected) =>
+        Assert.Equal(expected, LocalPath.Display(vfs, style));
+}

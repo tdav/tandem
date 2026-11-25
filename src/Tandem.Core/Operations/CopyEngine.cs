@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using Tandem.Core.Platform;
 using Tandem.Core.Vfs;
+using Tandem.Core.Vfs.Local;
 
 namespace Tandem.Core.Operations;
 
@@ -301,7 +302,7 @@ internal sealed class CopyEngine(CopyPlanner planner, ProviderRegistry providers
                 .ConfigureAwait(false);
             // Last: the flags it copies (a locked folder) would stop the time and mode from being set.
             if (UsesNativeCopy(item.Source.Path, item.Destination))
-                await nativeCopy!.CopyDirectoryMetadataAsync(item.Source.Path.Path, item.Destination.Path,
+                await nativeCopy!.CopyDirectoryMetadataAsync(item.Source.Path.ToOsPath(), item.Destination.ToOsPath(),
                     CancellationToken.None).ConfigureAwait(false);
         }, ct);
     }
@@ -332,7 +333,7 @@ internal sealed class CopyEngine(CopyPlanner planner, ProviderRegistry providers
                     // The platform copies the whole file in one call; cancellation reaches it through ct and a
                     // pause through the checkpoint it passes between blocks.
                     var progress = new RunningTotal(Count);
-                    await nativeCopy!.CopyFileAsync(source.Path.Path, part.Path, progress,
+                    await nativeCopy!.CopyFileAsync(source.Path.ToOsPath(), part.ToOsPath(), progress,
                         operation.WaitWhilePausedAsync, ct).ConfigureAwait(false);
                 }
                 else
@@ -353,7 +354,7 @@ internal sealed class CopyEngine(CopyPlanner planner, ProviderRegistry providers
             // The platform copy left the Finder lock (and the like) off the part file so that it could be finished;
             // the file in place gets it now.
             if (native)
-                await nativeCopy!.CopyFlagsAsync(source.Path.Path, destination.Path, CancellationToken.None)
+                await nativeCopy!.CopyFlagsAsync(source.Path.ToOsPath(), destination.ToOsPath(), CancellationToken.None)
                     .ConfigureAwait(false);
         }
         catch

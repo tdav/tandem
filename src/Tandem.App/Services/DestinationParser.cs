@@ -1,5 +1,6 @@
 using Tandem.App.Resources;
 using Tandem.Core.Vfs;
+using Tandem.Core.Vfs.Local;
 
 namespace Tandem.App.Services;
 
@@ -48,20 +49,21 @@ public static class DestinationParser
         if (string.IsNullOrWhiteSpace(text)) return DestinationParseResult.Fail(Loc.Get("Destination_Empty"));
 
         var providerId = destinationDirectory.ProviderId;
-        var expanded = text;
-        if (providerId == VfsPath.LocalProviderId && (text == "~" || text.StartsWith("~/", StringComparison.Ordinal)))
-            expanded = homeDirectory.TrimEnd('/') + text[1..];
+        var local = providerId == VfsPath.LocalProviderId;
+        var style = local ? LocalPath.Current : LocalPathStyle.Unix;
+        var absolute = local ? LocalPath.ExpandTyped(text, homeDirectory, style)
+            : text.StartsWith('/') ? text : null;
 
         string raw;
-        if (expanded.StartsWith('/'))
+        if (absolute is not null)
         {
-            raw = expanded;
+            raw = absolute;
         }
         else
         {
             if (baseDirectory.ProviderId != providerId)
                 return DestinationParseResult.Fail(Loc.Get("Destination_RelativeOtherSource"));
-            raw = baseDirectory.Path.TrimEnd('/') + "/" + expanded;
+            raw = baseDirectory.Path.TrimEnd('/') + "/" + LocalPath.RelativeToVfs(text, style);
         }
 
         VfsPath path;
@@ -77,13 +79,13 @@ public static class DestinationParser
         try
         {
             var kind = await probe(path, ct).ConfigureAwait(false);
-            if (expanded.EndsWith('/') || path.IsRoot)
+            if (LocalPath.EndsWithSeparator(text, style) || path.IsRoot)
             {
                 return kind switch
                 {
                     DestinationKind.Directory => new(new DestinationTarget(path, null, false), null),
                     DestinationKind.Missing => new(new DestinationTarget(path, null, true), null),
-                    _ => DestinationParseResult.Fail(Loc.Format("Destination_NotAFolder", path.Path)),
+                    _ => DestinationParseResult.Fail(Loc.Format("Destination_NotAFolder", path.Display())),
                 };
             }
 
@@ -99,12 +101,12 @@ public static class DestinationParser
 
             if (itemCount > 1) return DestinationParseResult.Fail(Loc.Format("Destination_NewNameManyItems", name));
             if (await probe(parent, ct).ConfigureAwait(false) != DestinationKind.Directory)
-                return DestinationParseResult.Fail(Loc.Format("Destination_FolderMissing", parent.Path));
+                return DestinationParseResult.Fail(Loc.Format("Destination_FolderMissing", parent.Display()));
             return new(new DestinationTarget(parent, ownName ? null : name, false), null);
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
-            return DestinationParseResult.Fail(Loc.Format("Destination_Unreadable", path.Path, e.Message));
+            return DestinationParseResult.Fail(Loc.Format("Destination_Unreadable", path.Display(), e.Message));
         }
     }
 

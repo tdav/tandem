@@ -4,6 +4,7 @@ using Tandem.App.Resources;
 using Tandem.App.Services;
 using Tandem.Core.Platform;
 using Tandem.Core.Vfs;
+using Tandem.Core.Vfs.Local;
 
 namespace Tandem.App.ViewModels;
 
@@ -131,7 +132,7 @@ public sealed partial class PropertiesViewModel : ObservableObject
     public async Task LoadAsync()
     {
         if (_metadata is not { } metadata) return;
-        var path = _entry.Path.Path;
+        var path = _entry.Path.ToOsPath();
         try
         {
             var owner = await Task.Run(() => metadata.GetOwner(path));
@@ -184,7 +185,7 @@ public sealed partial class PropertiesViewModel : ObservableObject
                 var tags = ParseTags(_tagsText);
                 if (!tags.SequenceEqual(_appliedTags, StringComparer.Ordinal))
                 {
-                    var path = _entry.Path.Path;
+                    var path = _entry.Path.ToOsPath();
                     await Task.Run(() => metadata.SetTags(path, tags));
                     _appliedTags = tags;
                     HasApplied = true;

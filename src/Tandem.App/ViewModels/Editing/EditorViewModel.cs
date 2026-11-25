@@ -8,6 +8,7 @@ using Tandem.Core.Operations;
 using Tandem.Core.Platform;
 using Tandem.Core.Viewing;
 using Tandem.Core.Vfs;
+using Tandem.Core.Vfs.Local;
 
 namespace Tandem.App.ViewModels.Editing;
 
@@ -458,7 +459,7 @@ public sealed partial class EditorViewModel : ObservableObject
             {
                 try
                 {
-                    await nativeCopy.CopyFileMetadataAsync(target.Path, part.Path, ct).ConfigureAwait(false);
+                    await nativeCopy.CopyFileMetadataAsync(target.ToOsPath(), part.ToOsPath(), ct).ConfigureAwait(false);
                 }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException)
                 {

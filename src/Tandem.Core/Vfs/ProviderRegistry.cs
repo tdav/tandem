@@ -97,10 +97,12 @@ public sealed class ProviderRegistry
     }
 
     /// <summary>The path as the user reads it: <see cref="IHostedProvider.GetDisplayPath"/> for a hosted provider,
-    /// otherwise <see cref="VfsPath.Path"/>.</summary>
+    /// for a local path its OS form (<see cref="Local.LocalPath.Display(VfsPath)"/>), otherwise
+    /// <see cref="VfsPath.Path"/>.</summary>
     /// <exception cref="KeyNotFoundException">The path's provider is not registered.</exception>
     public string DisplayPath(VfsPath path) =>
-        For(path) is IHostedProvider hosted ? hosted.GetDisplayPath(path) : path.Path;
+        For(path) is IHostedProvider hosted ? hosted.GetDisplayPath(path)
+        : Local.LocalPath.Display(path);
 
     /// <summary>A location worth saving (a tab, history) that will still exist after a restart:
     /// <paramref name="path"/> itself when <see cref="HostLocationOf"/> has none, otherwise the persistent location

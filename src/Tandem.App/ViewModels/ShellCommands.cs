@@ -6,6 +6,7 @@ using Tandem.App.ViewModels.Editing;
 using Tandem.App.ViewModels.Viewing;
 using Tandem.Core.Platform;
 using Tandem.Core.Vfs;
+using Tandem.Core.Vfs.Local;
 
 namespace Tandem.App.ViewModels;
 
@@ -121,7 +122,7 @@ public sealed class ShellCommands : IDisposable
     public async Task<OpenWithApps?> QueryOpenWithAsync()
     {
         if (Active is not { } panel || LocalCursorEntry() is not { } entry) return null;
-        var (shell, path) = (_shell, entry.Path.Path);
+        var (shell, path) = (_shell, entry.Path.ToOsPath());
         IReadOnlyList<AppInfo> apps = [];
         try
         {
@@ -145,7 +146,7 @@ public sealed class ShellCommands : IDisposable
         ArgumentNullException.ThrowIfNull(entry);
         ArgumentNullException.ThrowIfNull(app);
         if (entry.Path.ProviderId != VfsPath.LocalProviderId) return;
-        _ = RunAsync(() => _shell.OpenWith(entry.Path.Path, app), Loc.Format("Shell_OpenFailed", entry.Name));
+        _ = RunAsync(() => _shell.OpenWith(entry.Path.ToOsPath(), app), Loc.Format("Shell_OpenFailed", entry.Name));
     }
 
     /// <summary>The button of an access-denied panel: the system settings page for Full Disk Access.</summary>
@@ -210,7 +211,7 @@ public sealed class ShellCommands : IDisposable
     /// <summary>The local items among the operation targets.</summary>
     private IReadOnlyList<string> QuickLookTargets() =>
         Active is { } panel && panel.CurrentPath != default
-            ? panel.GetOperationTargets().Where(IsLocal).Select(e => e.Path.Path).ToArray()
+            ? panel.GetOperationTargets().Where(IsLocal).Select(e => e.Path.ToOsPath()).ToArray()
             : [];
 
     private void OnWorkspacePropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -276,7 +277,7 @@ public sealed class ShellCommands : IDisposable
     {
         var failureText = Loc.Format("Shell_OpenFailed", entry.Name);
         if (entry.Path.ProviderId == VfsPath.LocalProviderId)
-            _ = RunAsync(() => _shell.OpenDefault(entry.Path.Path), failureText);
+            _ = RunAsync(() => _shell.OpenDefault(entry.Path.ToOsPath()), failureText);
         else
             _ = OpenCopyAsync(sender as PanelViewModel, entry, failureText);
     }
@@ -349,7 +350,7 @@ public sealed class ShellCommands : IDisposable
         if (!localCopy && entry.Path.ProviderId == VfsPath.LocalProviderId && _settings?.Current.ExternalEditor is { } program &&
             _processes is not null)
         {
-            await EditExternallyAsync(program, entry.Path.Path);
+            await EditExternallyAsync(program, entry.Path.ToOsPath());
             return;
         }
         EditorViewModel editor;
@@ -386,7 +387,7 @@ public sealed class ShellCommands : IDisposable
         Task<string?> verdict;
         try
         {
-            var folder = Path.GetDirectoryName(path) ?? "/";
+            var folder = Path.GetDirectoryName(path) ?? Path.GetPathRoot(path) ?? "/";
             verdict = ProgramLauncher.Start(_processes!,
                 ProgramLauncher.Build(program, [path], folder, _workspace.HomeDirectory));
         }
@@ -433,13 +434,13 @@ public sealed class ShellCommands : IDisposable
 
     private Task RevealAsync() =>
         LocalCursorEntry() is { } entry
-            ? RunAsync(() => _shell.RevealInFinder(entry.Path.Path), Loc.Format("Shell_RevealFailed", entry.Name))
+            ? RunAsync(() => _shell.RevealInFinder(entry.Path.ToOsPath()), Loc.Format("Shell_RevealFailed", entry.Name))
             : Task.CompletedTask;
 
     private Task OpenTerminalAsync() =>
         Active is { } panel && IsLocal(panel)
-            ? RunAsync(() => _shell.OpenTerminal(panel.CurrentPath.Path),
-                Loc.Format("Shell_TerminalFailed", panel.CurrentPath.Path))
+            ? RunAsync(() => _shell.OpenTerminal(panel.CurrentPath.ToOsPath()),
+                Loc.Format("Shell_TerminalFailed", panel.CurrentPath.Display()))
             : Task.CompletedTask;
 
     private Task RequestOpenWithMenu()

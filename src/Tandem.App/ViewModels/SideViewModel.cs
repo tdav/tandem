@@ -9,6 +9,7 @@ using Tandem.Core.Listing;
 using Tandem.Core.Platform;
 using Tandem.Core.Settings;
 using Tandem.Core.Vfs;
+using Tandem.Core.Vfs.Local;
 
 namespace Tandem.App.ViewModels;
 
@@ -99,7 +100,7 @@ public sealed partial class SideViewModel : ObservableObject
             if (_panel is not { CurrentPath: var path } || path == default ||
                 path.ProviderId != VfsPath.LocalProviderId) return "";
             var volume = _main.Volumes
-                .Where(v => IsOnVolume(path.Path, v.MountPoint))
+                .Where(v => IsOnVolume(path.Path, VfsPath.Local(v.MountPoint).Path))
                 .MaxBy(v => v.MountPoint.Length);
             return volume is null
                 ? ""
@@ -328,12 +329,16 @@ public sealed partial class SideViewModel : ObservableObject
         }
     }
 
-    /// <summary>A typed path, or null when it is not one: absolute, or starting with "~" for the home folder.</summary>
+    /// <summary>A typed path, or null when it is not one: absolute, or starting with "~" for the home folder. A
+    /// local path may be typed in the running system's own form (on Windows <c>C:\x</c>, <c>~\x</c>).</summary>
     internal static VfsPath? ParsePath(string text, string providerId, string homeDirectory)
     {
-        if (text == "~" || text.StartsWith("~/", StringComparison.Ordinal))
-            text = homeDirectory + text[1..];
-        if (!text.StartsWith('/')) return null;
+        if (providerId == VfsPath.LocalProviderId)
+        {
+            if (LocalPath.ExpandTyped(text, homeDirectory, LocalPath.Current) is not { } absolute) return null;
+            text = absolute;
+        }
+        else if (!text.StartsWith('/')) return null;
         try
         {
             return new VfsPath(providerId, text);

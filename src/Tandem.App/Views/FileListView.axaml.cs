@@ -11,6 +11,7 @@ using Tandem.App.Input;
 using Tandem.App.ViewModels;
 using Tandem.Core.Settings;
 using Tandem.Core.Vfs;
+using Tandem.Core.Vfs.Local;
 
 namespace Tandem.App.Views;
 
@@ -283,7 +284,7 @@ public partial class FileListView : UserControl
         var data = new DataTransfer();
         foreach (var entry in items)
         {
-            var path = entry.Path.Path;
+            var path = entry.Path.ToOsPath();
             IStorageItem? item = entry.IsDirectoryLike
                 ? await storage.TryGetFolderFromPathAsync(path)
                 : await storage.TryGetFileFromPathAsync(path);

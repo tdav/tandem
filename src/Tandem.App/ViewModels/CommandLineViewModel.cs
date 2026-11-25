@@ -6,6 +6,7 @@ using Tandem.App.Resources;
 using Tandem.App.Services;
 using Tandem.Core.Platform;
 using Tandem.Core.Vfs;
+using Tandem.Core.Vfs.Local;
 
 namespace Tandem.App.ViewModels;
 
@@ -31,7 +32,10 @@ public sealed partial class CommandLineViewModel : ObservableObject, IDisposable
 {
     public const int MaxOutputLines = 5000;
     public const int MaxHistory = 100;
-    public const string Shell = "/bin/zsh";
+    /// <summary>The shell a command runs in: zsh as a login shell on macOS, cmd.exe on Windows.</summary>
+    public static readonly string Shell = OperatingSystem.IsWindows() ? "cmd.exe" : "/bin/zsh";
+
+    private static readonly string ShellSwitch = OperatingSystem.IsWindows() ? "/c" : "-lc";
 
     /// <summary>Longer output lines are shortened to this many characters, followed by a marker.</summary>
     public const int MaxLineLength = 2000;
@@ -144,7 +148,7 @@ public sealed partial class CommandLineViewModel : ObservableObject, IDisposable
         try
         {
             var folder = panel.CurrentPath;
-            if (CdCommandParser.Parse(text, folder.Path, _homeDirectory) is { } cd)
+            if (CdCommandParser.Parse(text, folder.Path, _homeDirectory, LocalPath.Current) is { } cd)
                 await ChangeFolderAsync(panel, cd, text);
             else
                 await RunAsync(panel, folder, text);
@@ -248,7 +252,7 @@ public sealed partial class CommandLineViewModel : ObservableObject, IDisposable
             if (Text == text) Text = ""; // not what was typed meanwhile
         }
         else
-            Report(panel.Error ?? Loc.Format("CommandLine_CdFailed", target.Path)); // the panel's reason names the folder
+            Report(panel.Error ?? Loc.Format("CommandLine_CdFailed", target.Display())); // the panel's reason names the folder
     }
 
     // ---- Running a command ----------------------------------------------------------------------------------
@@ -258,7 +262,7 @@ public sealed partial class CommandLineViewModel : ObservableObject, IDisposable
         IRunningProcess process;
         try
         {
-            process = _runner.Start(new ProcessSpec(Shell, ["-lc", text], folder.Path));
+            process = _runner.Start(new ProcessSpec(Shell, [ShellSwitch, text], folder.ToOsPath()));
         }
         catch (Exception e)
         {
@@ -271,7 +275,7 @@ public sealed partial class CommandLineViewModel : ObservableObject, IDisposable
         _process = process;
         IsRunning = true;
         Text = "";
-        Report($"{folder.Path}> {text}");
+        Report($"{folder.Display()}> {text}");
 
         string? failure = null;
         var cutShort = false;
@@ -478,7 +482,9 @@ public sealed partial class CommandLineViewModel : ObservableObject, IDisposable
     {
         var path = _panel?.CurrentPath ?? default;
         var shown = path != default;
-        Prompt = shown ? path.Path : "";
-        IsAvailable = shown && path.ProviderId == VfsPath.LocalProviderId;
+        Prompt = shown ? path.Display() : "";
+        // On Windows the drive list "/" is no folder a command can run in.
+        IsAvailable = shown && path.ProviderId == VfsPath.LocalProviderId &&
+                      !(LocalPath.Current == LocalPathStyle.Windows && path.IsRoot);
     }
 }

@@ -1,6 +1,7 @@
 using Tandem.Core.Operations;
 using Tandem.Core.Platform;
 using Tandem.Core.Vfs;
+using Tandem.Core.Vfs.Local;
 
 namespace Tandem.Core.Tools.Sync;
 
@@ -110,7 +111,7 @@ public sealed class SyncOperation : FileOperation
                     }
                     else if (_trash is not null && provider.Capabilities.HasFlag(ProviderCapabilities.Trash))
                     {
-                        await _trash.MoveToTrashAsync(source.Path, ct).ConfigureAwait(false);
+                        await _trash.MoveToTrashAsync(source.ToOsPath(), ct).ConfigureAwait(false);
                     }
                     else
                     {

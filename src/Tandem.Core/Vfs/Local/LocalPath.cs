@@ -70,6 +70,49 @@ public static class LocalPath
         return ToOs(path.Path, Current);
     }
 
+    /// <summary>The path as the user reads it: the OS form; on Windows the drive list <c>/</c> stays "/" (it has no
+    /// OS form, and "/" typed back leads to it).</summary>
+    public static string Display(string vfs, LocalPathStyle style) =>
+        style == LocalPathStyle.Windows && vfs == "/" ? "/" : ToOs(vfs, style);
+
+    /// <summary>A local path as the user reads it on the running system
+    /// (<see cref="Display(string, LocalPathStyle)"/>); any other provider's path as it is. For hosted providers
+    /// (archives) prefer <see cref="ProviderRegistry.DisplayPath"/>, which names the host too.</summary>
+    public static string Display(this VfsPath path) =>
+        path.ProviderId == VfsPath.LocalProviderId ? Display(path.Path, Current) : path.Path;
+
+    /// <summary>A path the user typed, made absolute when it is absolute or starts with the home folder: "~",
+    /// "~/x" (on Windows also "~\x"), an absolute OS path or a '/'-rooted VFS path. Null for a relative path
+    /// (including "~other" and, on Windows, a drive-relative "C:x"). The result is OS or VFS form, which
+    /// <see cref="VfsPath"/> accepts for the local provider.</summary>
+    public static string? ExpandTyped(string text, string homeDirectory, LocalPathStyle style)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        ArgumentNullException.ThrowIfNull(homeDirectory);
+        var windows = style == LocalPathStyle.Windows;
+        if (text == "~") return windows ? homeDirectory : homeDirectory.TrimEnd('/') is { Length: > 0 } h ? h : "/";
+        if (text.StartsWith("~/", StringComparison.Ordinal) || (windows && text.StartsWith(@"~\", StringComparison.Ordinal)))
+        {
+            var home = homeDirectory.TrimEnd('/', windows ? '\\' : '/');
+            return windows ? home + "\\" + text[2..].Replace('/', '\\') : home + "/" + text[2..];
+        }
+        if (text.StartsWith('/')) return text;
+        if (!windows) return null;
+        if (text.StartsWith(@"\\", StringComparison.Ordinal)) return text;
+        return text.Length >= 2 && char.IsAsciiLetter(text[0]) && text[1] == ':' &&
+               (text.Length == 2 || text[2] is '\\' or '/')
+            ? text
+            : null;
+    }
+
+    /// <summary>A relative path the user typed, with '/' separators (on Windows '\' is a separator too).</summary>
+    public static string RelativeToVfs(string text, LocalPathStyle style) =>
+        style == LocalPathStyle.Windows ? text.Replace('\\', '/') : text;
+
+    /// <summary>True when typed text ends with a separator ("put it in this folder").</summary>
+    public static bool EndsWithSeparator(string text, LocalPathStyle style) =>
+        text.EndsWith('/') || (style == LocalPathStyle.Windows && text.EndsWith('\\'));
+
     /// <summary>True for a VFS path that is exactly a drive (<c>/C:</c>).</summary>
     public static bool IsDriveRoot(string vfs) =>
         vfs.Length == 3 && vfs[0] == '/' && IsDriveSegment(vfs[1..]);

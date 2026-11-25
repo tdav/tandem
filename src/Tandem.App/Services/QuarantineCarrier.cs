@@ -1,5 +1,6 @@
 using Tandem.Core.Platform;
 using Tandem.Core.Vfs;
+using Tandem.Core.Vfs.Local;
 
 namespace Tandem.App.Services;
 
@@ -49,9 +50,9 @@ public sealed class QuarantineCarrier(ProviderRegistry providers, IQuarantine qu
             if (!read)
             {
                 read = true;
-                value = Read(file.Path);
+                value = Read(file.ToOsPath());
             }
-            if (value is not null && written.ProviderId == VfsPath.LocalProviderId) Write(written.Path, value);
+            if (value is not null && written.ProviderId == VfsPath.LocalProviderId) Write(written.ToOsPath(), value);
         };
     }
 
@@ -59,7 +60,7 @@ public sealed class QuarantineCarrier(ProviderRegistry providers, IQuarantine qu
     /// source lies in, if it has one. Does I/O: call it off the UI thread.</summary>
     public void MarkCopy(VfsPath source, string localCopy)
     {
-        if (OutermostFile(source) is { } file && Read(file.Path) is { } value) Write(localCopy, value);
+        if (OutermostFile(source) is { } file && Read(file.ToOsPath()) is { } value) Write(localCopy, value);
     }
 
     private byte[]? Read(string path)

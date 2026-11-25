@@ -1,6 +1,7 @@
 using Tandem.App.ViewModels.Editing;
 using Tandem.Core.Operations;
 using Tandem.Core.Vfs;
+using Tandem.Core.Vfs.Local;
 
 namespace Tandem.App.ViewModels.Net;
 
@@ -121,7 +122,7 @@ public sealed class RemoteEdit
                 await local.DeleteAsync(folder, recursive: true, CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
-        try { _temp.Release(LocalCopy.Path); }
+        try { _temp.Release(LocalCopy.ToOsPath()); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
     }
 

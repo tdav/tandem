@@ -1,3 +1,4 @@
+using Tandem.Core.Vfs.Local;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Tandem.App.ViewModels.Net;
@@ -116,6 +117,13 @@ public sealed partial class TabViewModel : ObservableObject, IDisposable
 
     private static string TitleOf(string displayPath)
     {
+        if (LocalPath.Current == LocalPathStyle.Windows &&
+            LocalPath.ExpandTyped(displayPath, "", LocalPathStyle.Windows) is not null && !displayPath.StartsWith('/'))
+        {
+            // C:\Users\me, C:\, \\srv\share, C:\a.zip/inner: the last name, or the drive itself.
+            var parts = displayPath.Split('\\', '/', StringSplitOptions.RemoveEmptyEntries);
+            return parts.Length == 0 ? displayPath : parts[^1];
+        }
         if (!displayPath.StartsWith('/')) return displayPath; // a free text, e.g. a search result set's title
         var trimmed = displayPath.TrimEnd('/');
         if (trimmed.Length == 0) return displayPath.Length == 0 ? "" : "/";

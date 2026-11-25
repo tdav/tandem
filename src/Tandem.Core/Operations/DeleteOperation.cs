@@ -1,5 +1,6 @@
 using Tandem.Core.Platform;
 using Tandem.Core.Vfs;
+using Tandem.Core.Vfs.Local;
 
 namespace Tandem.Core.Operations;
 
@@ -66,7 +67,7 @@ public sealed class DeleteOperation(ProviderRegistry providers, IReadOnlyList<Vf
             await WaitWhilePausedAsync(ct).ConfigureAwait(false);
             BeginItem(source.Path);
             // One call per item; it is not interrupted, so an item is never left half in the trash.
-            await errors.RunAsync(source, () => _trash!.MoveToTrashAsync(source.Path, CancellationToken.None), ct)
+            await errors.RunAsync(source, () => _trash!.MoveToTrashAsync(source.ToOsPath(), CancellationToken.None), ct)
                 .ConfigureAwait(false);
             CompleteFile();
         }

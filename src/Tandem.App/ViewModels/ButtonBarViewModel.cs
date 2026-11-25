@@ -1,3 +1,4 @@
+using Tandem.Core.Vfs.Local;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -82,10 +83,10 @@ public sealed partial class ButtonBarViewModel : ObservableObject, IDisposable
         var local = ShellCommands.IsLocal(panel);
         var entry = panel.CursorRow?.Entry;
         var context = new ArgumentTemplate.Context(
-            local ? panel.CurrentPath.Path : _workspace.HomeDirectory,
-            ShellCommands.IsLocal(passive) ? passive.CurrentPath.Path : null,
-            local ? entry?.Path.Path : null,
-            local ? panel.GetOperationTargets().Select(e => e.Path.Path).ToArray() : [])
+            local ? panel.CurrentPath.ToOsPath() : _workspace.HomeDirectory,
+            ShellCommands.IsLocal(passive) ? passive.CurrentPath.ToOsPath() : null,
+            local ? entry?.Path.ToOsPath() : null,
+            local ? panel.GetOperationTargets().Select(e => e.Path.ToOsPath()).ToArray() : [])
         {
             CursorName = entry?.Name,
         };

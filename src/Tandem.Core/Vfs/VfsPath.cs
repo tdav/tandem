@@ -9,12 +9,12 @@ public readonly record struct VfsPath(string ProviderId, string Path)
 {
     public const string LocalProviderId = "local";
 
-    public string Path { get; init => field = Normalize(value); } = Normalize(Path);
+    /// <summary>For the local provider an absolute OS path of the running system is accepted too and converted
+    /// (<see cref="Local.LocalPath.FromOs"/>; on macOS the two forms are the same).</summary>
+    public string Path { get; init => field = Normalize(ProviderId, value); } = Normalize(ProviderId, Path);
 
-    /// <summary>A path of the local provider. Takes VFS form or an absolute OS path of the running system
-    /// (<see cref="Local.LocalPath.FromOs"/>; on macOS the two are the same).</summary>
-    public static VfsPath Local(string path) =>
-        new(LocalProviderId, Vfs.Local.LocalPath.FromOs(path, Vfs.Local.LocalPath.Current));
+    /// <summary>A path of the local provider, in VFS form or as an absolute OS path.</summary>
+    public static VfsPath Local(string path) => new(LocalProviderId, path);
 
     /// <summary>The last segment; "" for the root.</summary>
     public string Name => IsRoot ? "" : Path[(Path.LastIndexOf('/') + 1)..];
@@ -48,9 +48,11 @@ public readonly record struct VfsPath(string ProviderId, string Path)
          other.IsRoot ||
          Path.StartsWith(other.Path + "/", StringComparison.Ordinal));
 
-    private static string Normalize(string path)
+    private static string Normalize(string? providerId, string path)
     {
         ArgumentNullException.ThrowIfNull(path);
+        if (string.Equals(providerId, LocalProviderId, StringComparison.Ordinal))
+            path = Vfs.Local.LocalPath.FromOs(path, Vfs.Local.LocalPath.Current);
         if (!path.StartsWith('/'))
             throw new ArgumentException($"Path must be absolute (start with '/'): '{path}'.", nameof(path));
 
