@@ -112,7 +112,8 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusive
             }
             var next = current == "/" ? "/" + name : current + "/" + name;
             string? target;
-            if (Windows && current == "/") target = null; // a drive or the UNC segment
+            // A drive, the UNC segment, a server or a share: no links there (and the first two have no OS path).
+            if (Windows && LocalPath.IsVolumeRoot(next, LocalPathStyle.Windows)) target = null;
             else
             {
                 var os = LocalPath.ToOs(next, LocalPath.Current);
@@ -126,7 +127,15 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusive
             if (++hops > MaxLinkHops) throw new VfsException($"Too many levels of symbolic links at '{path.Path}'.");
             if (Path.IsPathRooted(target))
             {
-                target = LocalPath.FromOs(target, LocalPath.Current);
+                try
+                {
+                    target = LocalPath.FromOs(target, LocalPath.Current);
+                }
+                catch (ArgumentException e)
+                {
+                    // Windows: a root-relative "\\x", a drive-relative "C:x" or a volume GUID path.
+                    throw new VfsException($"The link '{LocalPath.Display(next, LocalPath.Current)}' leads to '{target}', which cannot be followed.", e);
+                }
                 current = "/";
             }
             var separators = Windows ? new[] { '/', '\\' } : ['/'];
@@ -160,7 +169,7 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusive
     {
         var info = new FileInfo(p);
         if (!Exists(info)) throw new VfsNotFoundException($"'{p}' does not exist.");
-        if (path.IsRoot || LocalPath.IsDriveRoot(path.Path))
+        if (LocalPath.IsVolumeRoot(path.Path, LocalPath.Current))
             throw new VfsAccessDeniedException("Cannot delete the root.");
         if (IsRealDirectory(info))
             Directory.Delete(p, recursive); // does not follow links inside the tree
@@ -247,6 +256,8 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusive
     /// <summary>The mount point of the longest mounted volume that contains the path (links are not resolved).</summary>
     public Task<string> GetVolumeKeyAsync(VfsPath path, CancellationToken ct) => Windows && path.IsRoot && IsOwn(path)
         ? Task.FromResult("/")
+        : Windows && ShareOf(path) is { } share
+        ? Task.FromResult(share) // each share is its own volume: a move between two is a copy
         : RunAsync(path, ct, _ =>
         DriveInfo.GetDrives()
             .Select(drive => VfsPath.Local(drive.RootDirectory.FullName))
@@ -279,6 +290,13 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusive
     }
 
     // ---- Internals -----------------------------------------------------------------------------------
+
+    /// <summary>Windows: "/UNC/srv/share" for a path on a share, else null.</summary>
+    private static string? ShareOf(VfsPath path)
+    {
+        var segments = path.Path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        return segments.Length >= 3 && segments[0] == LocalPath.UncSegment ? "/" + string.Join('/', segments[..3]) : null;
+    }
 
     private bool IsOwn(VfsPath path) => string.Equals(path.ProviderId, Id, StringComparison.Ordinal);
 

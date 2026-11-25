@@ -77,7 +77,9 @@ public static class RenamePlanner
 
     internal static bool IsValidName(string name) =>
         name.Length != 0 && name is not ("." or "..") && !name.Contains('/') && !name.Contains('\0')
-        && Encoding.UTF8.GetByteCount(name) <= 255;
+        && Encoding.UTF8.GetByteCount(name) <= 255
+        // On Windows "sub\\x" would move the file into another folder and "a:b" write a stream.
+        && (Vfs.Local.LocalPath.Current != Vfs.Local.LocalPathStyle.Windows || Vfs.Local.LocalPath.IsWindowsName(name));
 
     private static Func<string, string> Replacement(RenameRule rule)
     {

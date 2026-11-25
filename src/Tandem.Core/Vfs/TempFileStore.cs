@@ -40,7 +40,11 @@ public sealed class TempFileStore : IDisposable
             (OperatingSystem.IsWindows() && name.Contains('\\')))
             throw new ArgumentException($"'{name}' is not a single file name.", nameof(name));
         if (OperatingSystem.IsWindows())
+        {
             foreach (var bad in ":*?\"<>|") name = name.Replace(bad, '_');
+            name = name.TrimEnd('.', ' ');
+            if (!Local.LocalPath.IsWindowsName(name)) name = "_" + name; // CON, nul.txt, or nothing left
+        }
         var folder = Path.Combine(Directory, Guid.NewGuid().ToString("N"));
         System.IO.Directory.CreateDirectory(folder);
         return Path.Combine(folder, name);

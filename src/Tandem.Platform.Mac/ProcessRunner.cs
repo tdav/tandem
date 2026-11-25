@@ -46,6 +46,24 @@ public sealed class ProcessRunner : IProcessRunner
 
         public Task<int> ExitCode => _exit.Task;
 
+        /// <summary>UTF-8 on macOS; on Windows the console's OEM code page (CP866 for Russian), which cmd.exe and
+        /// most console programs write when their output goes to a pipe.</summary>
+        private static readonly Encoding OutputEncoding = ChooseOutputEncoding();
+
+        private static Encoding ChooseOutputEncoding()
+        {
+            if (!OperatingSystem.IsWindows()) return Encoding.UTF8;
+            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+            try
+            {
+                return Encoding.GetEncoding(System.Globalization.CultureInfo.CurrentCulture.TextInfo.OEMCodePage);
+            }
+            catch (Exception e) when (e is ArgumentException or NotSupportedException)
+            {
+                return Encoding.UTF8;
+            }
+        }
+
         public static RunningProcess Start(ProcessSpec spec)
         {
             var info = new ProcessStartInfo(spec.FileName)
@@ -54,10 +72,11 @@ public sealed class ProcessRunner : IProcessRunner
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
-                StandardOutputEncoding = Encoding.UTF8,
-                StandardErrorEncoding = Encoding.UTF8,
+                StandardOutputEncoding = OutputEncoding,
+                StandardErrorEncoding = OutputEncoding,
             };
-            foreach (var argument in spec.Arguments) info.ArgumentList.Add(argument);
+            if (spec.CommandLine is { } commandLine) info.Arguments = commandLine;
+            else foreach (var argument in spec.Arguments) info.ArgumentList.Add(argument);
             if (spec.WorkingDirectory is not null) info.WorkingDirectory = spec.WorkingDirectory;
 
             var process = new Process { StartInfo = info, EnableRaisingEvents = true };

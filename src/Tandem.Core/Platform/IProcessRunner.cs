@@ -1,7 +1,13 @@
 namespace Tandem.Core.Platform;
 
-/// <summary>A program to run: the executable and its arguments, passed as a list and never through a shell.</summary>
-public sealed record ProcessSpec(string FileName, IReadOnlyList<string> Arguments, string? WorkingDirectory = null);
+/// <summary>A program to run: the executable and its arguments, passed as a list and never through a shell.
+/// <see cref="CommandLine"/>, when set, is the whole argument string as it is, instead of <see cref="Arguments"/>:
+/// for cmd.exe, which reads its command line itself and does not understand the escaping of an argument
+/// list.</summary>
+public sealed record ProcessSpec(string FileName, IReadOnlyList<string> Arguments, string? WorkingDirectory = null)
+{
+    public string? CommandLine { get; init; }
+}
 
 /// <summary>A started process. Disposing it kills the process if it is still running.</summary>
 public interface IRunningProcess : IAsyncDisposable

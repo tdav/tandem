@@ -61,7 +61,7 @@ public static class OperationTexts
             ? Loc.Format("Operation_ItemName", sources[0].Name)
             : Loc.Count("Count_Items", sources.Count);
         return destination is { } to
-            ? Loc.Format("Operation_TitleTo", Loc.Enum(kind), items, to.Path)
+            ? Loc.Format("Operation_TitleTo", Loc.Enum(kind), items, Core.Vfs.Local.LocalPath.Display(to))
             : Loc.Format("Operation_Title", Loc.Enum(kind), items);
     }
 }

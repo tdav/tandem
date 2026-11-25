@@ -21,6 +21,14 @@ public sealed class ProcessRunnerTests
     }
 
     [Fact]
+    public async Task A_command_line_is_passed_as_the_whole_argument_string()
+    {
+        await using var process = _runner.Start(new ProcessSpec("/bin/echo", ["ignored"]) { CommandLine = "a \"b  c\"" });
+
+        Assert.Equal(["a b  c"], await ReadAll(process));
+    }
+
+    [Fact]
     public async Task Arguments_are_passed_verbatim_without_a_shell()
     {
         await using var process = _runner.Start(new ProcessSpec("/bin/echo", ["a b \"c\"", "$HOME", "*"]));

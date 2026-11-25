@@ -28,6 +28,23 @@ public enum RejectionReason
     /// <summary>Files of the asked format cannot be written (<see cref="OperationRejectedException.DestinationPath"/>
     /// is the file that was to be created).</summary>
     FormatNotWritable,
+
+    /// <summary><see cref="OperationRejectedException.SourcePath"/> is a whole volume (on Windows a drive or a share
+    /// in the drive list), which is never deleted or moved.</summary>
+    VolumeRoot,
+}
+
+/// <summary>The refusal of whole volumes as sources.</summary>
+internal static class VolumeRoots
+{
+    /// <summary>Throws <see cref="RejectionReason.VolumeRoot"/> for the first source that is a whole volume.</summary>
+    public static void Reject(IEnumerable<VfsPath> sources)
+    {
+        foreach (var source in sources)
+            if (Vfs.Local.LocalPath.IsVolumeRoot(source))
+                throw new OperationRejectedException(RejectionReason.VolumeRoot,
+                    $"'{source}' is a whole volume.", source);
+    }
 }
 
 /// <summary>The operation was refused before it touched anything (e.g. copying a folder into itself).

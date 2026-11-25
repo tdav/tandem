@@ -250,6 +250,21 @@ public class CommandLineTests : LanguageTestBase
     }
 
     [AvaloniaFact]
+    public async Task On_windows_cmd_gets_the_command_line_as_typed_quotes_and_all()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "cmd.exe on Windows");
+        await using var f = await StartAsync();
+        const string text = "dir \"C:\\Program Files\" & echo done";
+        var running = await StartCommandAsync(f, text);
+
+        var spec = Assert.Single(f.Runner.Started);
+        Assert.Equal("cmd.exe", spec.FileName);
+        Assert.Equal("/s /c \"" + text + "\"", spec.CommandLine);
+        f.Runner.Last.Exit(0);
+        await running;
+    }
+
+    [AvaloniaFact]
     public async Task Output_is_appended_as_it_arrives_and_ends_with_the_exit_code()
     {
         await using var f = await StartAsync();

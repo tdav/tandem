@@ -36,6 +36,27 @@ public sealed class DeleteOperationTests
 
     /// <summary>Records each call; with <paramref name="fs"/>, also removes the item from it (as the real trash
     /// takes it away).</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_whole_volume_is_never_deleted(bool toTrash)
+    {
+        // On Windows a drive selected in the drive list ("/C:"); on any system the root itself.
+        var volume = VfsPath.Local(OperatingSystem.IsWindows() ? "/C:" : "/");
+        var fs = new InMemoryFileSystem(VfsPath.LocalProviderId);
+        fs.AddFile("/x.txt", "x"u8.ToArray());
+        var providers = new ProviderRegistry();
+        providers.Register(fs);
+        var trash = new FakeTrash();
+        var op = new DeleteOperation(providers, [volume], toTrash, trash, _interaction);
+
+        var error = await Assert.ThrowsAsync<OperationRejectedException>(() => op.RunAsync());
+
+        Assert.Equal(RejectionReason.VolumeRoot, error.Reason);
+        Assert.Empty(trash.Calls);
+        Assert.True(fs.Exists("/x.txt"));
+    }
+
     private sealed class FakeTrash(InMemoryFileSystem? fs = null) : ITrash
     {
         private readonly Lock _lock = new();

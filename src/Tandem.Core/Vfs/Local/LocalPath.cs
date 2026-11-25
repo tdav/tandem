@@ -57,10 +57,13 @@ public static class LocalPath
         if (style == LocalPathStyle.Unix) return vfs;
 
         var segments = vfs.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        // A name holding '\\' or ':' (legal on a Unix server or in a Unix file name) would become a separator or an
+        // alternate stream on Windows: "..\\..\\x" would climb out of the folder. Such a path has no Windows form.
         if (segments.Length >= 1 && IsDriveSegment(segments[0]))
-            return segments.Length == 1 ? segments[0] + @"\" : string.Join('\\', segments);
+            return segments.Skip(1).Any(HoldsSeparator) ? null
+                : segments.Length == 1 ? segments[0] + @"\" : string.Join('\\', segments);
         if (segments.Length >= 3 && segments[0] == UncSegment)
-            return @"\\" + string.Join('\\', segments[1..]);
+            return segments.Skip(1).Any(HoldsSeparator) ? null : @"\\" + string.Join('\\', segments[1..]);
         return null;
     }
 
@@ -73,7 +76,11 @@ public static class LocalPath
     {
         if (!string.Equals(path.ProviderId, VfsPath.LocalProviderId, StringComparison.Ordinal))
             throw new ArgumentException($"Path '{path}' is not a local path.", nameof(path));
-        return TryToOs(path.Path, Current) ?? path.Path;
+        if (TryToOs(path.Path, Current) is { } os) return os;
+        var first = path.Path.Split('/', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        if (first is not null && (IsDriveSegment(first) || first == UncSegment))
+            throw new VfsException($"'{path.Path}' has no Windows path."); // a name with '\\' or ':' on a real drive
+        return path.Path;
     }
 
     /// <summary>The path as the user reads it: the OS form; a path without one (on Windows the drive list "/",
@@ -153,6 +160,26 @@ public static class LocalPath
         var dot = name.IndexOf('.');
         return !ReservedWindowsNames.Contains(dot < 0 ? name : name[..dot]);
     }
+
+    private static bool HoldsSeparator(string segment) => segment.Contains('\\') || segment.Contains(':');
+
+    /// <summary>True for a path that is a whole volume or more, never one item on it: the root "/" (on Windows the
+    /// drive list), on Windows also a drive (<c>/C:</c>) and a share or server (<c>/UNC/srv/share</c>). Such a path
+    /// is never deleted, moved or renamed.</summary>
+    public static bool IsVolumeRoot(string vfs, LocalPathStyle style)
+    {
+        ArgumentNullException.ThrowIfNull(vfs);
+        if (vfs == "/") return true;
+        if (style != LocalPathStyle.Windows) return false;
+        var segments = vfs.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        return (segments.Length == 1 && IsDriveSegment(segments[0])) ||
+               (segments.Length is >= 1 and <= 3 && segments[0] == UncSegment);
+    }
+
+    /// <summary>True for a local path that is a whole volume on the running system (see
+    /// <see cref="IsVolumeRoot(string, LocalPathStyle)"/>); false for any other provider's path.</summary>
+    public static bool IsVolumeRoot(VfsPath path) =>
+        path.ProviderId == VfsPath.LocalProviderId && IsVolumeRoot(path.Path, Current);
 
     /// <summary>True for a VFS path that is exactly a drive (<c>/C:</c>).</summary>
     public static bool IsDriveRoot(string vfs) =>

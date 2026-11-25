@@ -1550,6 +1550,9 @@
   <data name="Shell_RevealFailed_Windows" xml:space="preserve">
     <value>Не удалось показать «{0}» в Проводнике.</value>
   </data>
+  <data name="RejectionReason_VolumeRoot" xml:space="preserve">
+    <value>Целый диск нельзя удалить или переместить</value>
+  </data>
   <!-- stage3:tools-a begin (Rename_*, Checksum_*, FolderSize_*) -->
   <data name="FolderSize_Computing" xml:space="preserve"><value>…</value></data>
   <data name="FolderSize_AtLeast" xml:space="preserve"><value>≥ {0}</value></data>

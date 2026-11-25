@@ -178,3 +178,33 @@ public class LinkTargetTests
     public void JoinLinkTarget(string parent, string target, LocalPathStyle style, string expected) =>
         Assert.Equal(expected, LocalPath.JoinLinkTarget(parent, target, style));
 }
+
+public class LocalPathSafetyTests
+{
+    [Theory]
+    [InlineData("/", LocalPathStyle.Windows, true)]
+    [InlineData("/C:", LocalPathStyle.Windows, true)]
+    [InlineData("/UNC/srv", LocalPathStyle.Windows, true)]
+    [InlineData("/UNC/srv/share", LocalPathStyle.Windows, true)]
+    [InlineData("/UNC/srv/share/x", LocalPathStyle.Windows, false)]
+    [InlineData("/C:/x", LocalPathStyle.Windows, false)]
+    [InlineData("/", LocalPathStyle.Unix, true)]
+    [InlineData("/C:", LocalPathStyle.Unix, false)]
+    public void IsVolumeRoot(string vfs, LocalPathStyle style, bool expected) =>
+        Assert.Equal(expected, LocalPath.IsVolumeRoot(vfs, style));
+
+    [Theory]
+    [InlineData(@"/C:/Downloads/..\..\Startup\x.bat")]
+    [InlineData("/C:/Downloads/a:b")]
+    [InlineData(@"/UNC/srv/share/a\b")]
+    [InlineData(@"/UNC/s\rv/share/x")]
+    public void A_name_holding_a_separator_or_colon_has_no_windows_path(string vfs)
+    {
+        Assert.Null(LocalPath.TryToOs(vfs, LocalPathStyle.Windows));
+        Assert.Throws<VfsException>(() => LocalPath.ToOs(vfs, LocalPathStyle.Windows));
+    }
+
+    [Fact]
+    public void A_name_holding_a_backslash_is_fine_on_unix() =>
+        Assert.Equal(@"/a\b", LocalPath.ToOs(@"/a\b", LocalPathStyle.Unix));
+}

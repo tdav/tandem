@@ -1559,6 +1559,9 @@ Folder</value>
   <data name="Shell_RevealFailed_Windows" xml:space="preserve">
     <value>Could not show “{0}” in Explorer.</value>
   </data>
+  <data name="RejectionReason_VolumeRoot" xml:space="preserve">
+    <value>A whole drive cannot be deleted or moved</value>
+  </data>
   <!-- stage3:tools-a begin (Rename_*, Checksum_*, FolderSize_*) -->
   <data name="FolderSize_Computing" xml:space="preserve"><value>…</value></data>
   <data name="FolderSize_AtLeast" xml:space="preserve"><value>≥ {0}</value></data>

@@ -48,6 +48,7 @@ public sealed class DeleteOperation(ProviderRegistry providers, IReadOnlyList<Vf
     /// cancel or an error (<see cref="FileOperation.RunInBatchAsync"/>).</summary>
     protected override Task ExecuteAsync(CancellationToken ct)
     {
+        VolumeRoots.Reject(_sources); // a drive selected in the Windows drive list
         var errors = new ItemErrors(this, _interaction);
         return RunInBatchAsync(_providers, _sources,
             _ => _toTrash ? MoveToTrashAsync(errors, ct) : DeletePermanentlyAsync(errors, ct), afterCommit: null, ct);

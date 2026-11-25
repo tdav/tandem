@@ -262,7 +262,10 @@ public sealed partial class CommandLineViewModel : ObservableObject, IDisposable
         IRunningProcess process;
         try
         {
-            process = _runner.Start(new ProcessSpec(Shell, [ShellSwitch, text], folder.ToOsPath()));
+            // cmd.exe reads its own command line: the text goes as typed ("/s /c "…"" keeps its quotes intact).
+            process = _runner.Start(OperatingSystem.IsWindows()
+                ? new ProcessSpec(Shell, [ShellSwitch, text], folder.ToOsPath()) { CommandLine = "/s /c \"" + text + "\"" }
+                : new ProcessSpec(Shell, [ShellSwitch, text], folder.ToOsPath()));
         }
         catch (Exception e)
         {

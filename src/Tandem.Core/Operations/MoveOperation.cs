@@ -61,6 +61,7 @@ public sealed class MoveOperation(ProviderRegistry providers, IReadOnlyList<VfsP
     /// the commit or the move fails. Renames are not affected.</summary>
     protected override Task ExecuteAsync(CancellationToken ct)
     {
+        VolumeRoots.Reject(_sources); // a drive selected in the Windows drive list
         var planner = new CopyPlanner(_providers, this, new ItemErrors(this, _interaction), _options.VerifyContent);
         var deferred = new DeferredDeletions();
         return RunInBatchAsync(_providers, _sources.Append(_destinationDirectory),
