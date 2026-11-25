@@ -11,6 +11,9 @@ public readonly record struct TerminalColor(TerminalColorKind Kind, int Value);
 [Flags]
 public enum CellStyle { None = 0, Bold = 1, Dim = 2, Italic = 4, Underline = 8, Inverse = 16, Strikethrough = 32 }
 
+/// <summary>Cursor shape, as selected by DECSCUSR (<c>ESC [ n SP q</c>).</summary>
+public enum TerminalCursorShape { Bar, Block, Underline }
+
 public readonly record struct TerminalCell(string Text, TerminalColor Foreground, TerminalColor Background,
     CellStyle Style, int Width);
 
@@ -27,6 +30,21 @@ public sealed class TerminalEmulator : IDisposable
         ArgumentOutOfRangeException.ThrowIfNegative(scrollbackLines);
         _terminal = new XTerm.Terminal(new TerminalOptions { Cols = columns, Rows = rows, Scrollback = scrollbackLines });
         _terminal.DataReceived += (_, e) => Reply?.Invoke(Encoding.UTF8.GetBytes(e.Data));
+        // DECSCUSR is parsed here rather than through CursorStyleChanged: XTerm.NET maps 0 to a blinking block (xterm's
+        // default) while 0 should restore this terminal's own default, the blinking bar.
+        _terminal.RegisterCsiHandler(" q", parameters =>
+        {
+            (CursorShape, CursorBlink) = (parameters.Length > 0 ? parameters.GetParam(0, 0) : 0) switch
+            {
+                1 => (TerminalCursorShape.Block, true),
+                2 => (TerminalCursorShape.Block, false),
+                3 => (TerminalCursorShape.Underline, true),
+                4 => (TerminalCursorShape.Underline, false),
+                6 => (TerminalCursorShape.Bar, false),
+                _ => (TerminalCursorShape.Bar, true),
+            };
+            return true;
+        });
     }
 
     public int Columns => _terminal.Cols;
@@ -34,6 +52,9 @@ public sealed class TerminalEmulator : IDisposable
     public int ScrollbackCount => _terminal.Buffer.YBase;
     public (int Column, int Row) Cursor => (Math.Clamp(_terminal.Buffer.X, 0, Columns - 1), _terminal.Buffer.Y);
     public bool CursorVisible => _terminal.CursorVisible;
+    /// <summary>A blinking bar unless the remote side asks for another shape with DECSCUSR.</summary>
+    public TerminalCursorShape CursorShape { get; private set; } = TerminalCursorShape.Bar;
+    public bool CursorBlink { get; private set; } = true;
     public bool IsAlternateScreen => _terminal.IsAlternateBufferActive;
     public bool ApplicationCursorKeys => _terminal.ApplicationCursorKeys;
     public bool BracketedPaste => _terminal.BracketedPasteMode;

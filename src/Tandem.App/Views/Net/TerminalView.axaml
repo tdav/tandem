@@ -9,7 +9,6 @@
   <UserControl.Resources>
     <SolidColorBrush x:Key="Tandem.TerminalBackground" Color="#000000" />
     <SolidColorBrush x:Key="Tandem.TerminalForeground" Color="#E5EDF5" />
-    <SolidColorBrush x:Key="Tandem.TerminalCursor" Color="#8DE1F3" />
     <SolidColorBrush x:Key="Tandem.TerminalSelection" Color="#23496C" />
     <SolidColorBrush x:Key="Tandem.TerminalAnsi0" Color="#000000" />
     <SolidColorBrush x:Key="Tandem.TerminalAnsi1" Color="#F27681" />
