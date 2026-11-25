@@ -48,6 +48,33 @@ jobs:
             -p:IncludeNativeLibrariesForSelfExtract=true -o publish/Tandem
           Get-ChildItem publish/Tandem
 
+      - name: Smoke test the published exe
+        if: always()
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path publish/Tandem/Tandem.App.exe
+          $p = Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 20
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+          New-Item -ItemType Directory -Force smoke | Out-Null
+          $bmp.Save("smoke/screen.png")
+          $log = Join-Path $env:LOCALAPPDATA "Tandem\Logs\tandem.log"
+          if (Test-Path $log) { Copy-Item $log smoke/tandem.log; Get-Content $log }
+          if ($p.HasExited) { throw "Tandem exited with code $($p.ExitCode)" }
+          "Main window: '$($p.MainWindowTitle)'"
+          Stop-Process -Id $p.Id -Force
+          if ((Test-Path $log) -and (Select-String -Path $log -Pattern "start" -Quiet)) { throw "start error logged" }
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke
+          path: smoke
+          if-no-files-found: warn
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
