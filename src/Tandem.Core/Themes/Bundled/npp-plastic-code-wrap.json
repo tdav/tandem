@@ -1,0 +1,109 @@
+{
+  "name": "Plastic Code Wrap (Notepad++)",
+  "origin": {
+    "basedOn": "По мотивам темы Notepad++ «Plastic Code Wrap»",
+    "source": "https://github.com/notepad-plus-plus/notepad-plus-plus/blob/master/PowerEditor/installer/themes/Plastic%20Code%20Wrap.xml",
+    "author": "Copyright (c) 2008 Fabio Zendhi Nagao",
+    "license": "MIT (текст разрешения в файле темы)",
+    "note": "Цвет каждого токена взят из XML темы без изменений; поле usage называет стиль-источник. Шрифты и размеры — встроенной темы Stone."
+  },
+  "color": {
+    "tokens": [
+      {
+        "name": "surface",
+        "value": "#0b161d",
+        "usage": "Plastic Code Wrap.xml «Default Style bg»"
+      },
+      {
+        "name": "surface-raised",
+        "value": "#2e3436",
+        "usage": "Plastic Code Wrap.xml «Line number margin bg»"
+      },
+      {
+        "name": "bar",
+        "value": "#2e3436",
+        "usage": "Plastic Code Wrap.xml «Line number margin bg»"
+      },
+      {
+        "name": "bar-hover",
+        "value": "#11222d",
+        "usage": "Plastic Code Wrap.xml «Current line background colour bg»"
+      },
+      {
+        "name": "bar-pressed",
+        "value": "#162e3d",
+        "usage": "Plastic Code Wrap.xml «Selected text colour bg»"
+      },
+      {
+        "name": "field",
+        "value": "#0b161d",
+        "usage": "Plastic Code Wrap.xml «Default Style bg»"
+      },
+      {
+        "name": "line",
+        "value": "#888a85",
+        "usage": "Plastic Code Wrap.xml «Indent guideline style fg»"
+      },
+      {
+        "name": "edge",
+        "value": "#eeeeec",
+        "usage": "Plastic Code Wrap.xml «Line number margin fg»"
+      },
+      {
+        "name": "ink",
+        "value": "#f8f8f8",
+        "usage": "Plastic Code Wrap.xml «Default Style fg»"
+      },
+      {
+        "name": "ink-muted",
+        "value": "#eeeeec",
+        "usage": "Plastic Code Wrap.xml «Line number margin fg»"
+      },
+      {
+        "name": "ink-disabled",
+        "value": "#1e9ae0",
+        "usage": "Plastic Code Wrap.xml «C++ COMMENT fg»"
+      },
+      {
+        "name": "accent",
+        "value": "#f6f080",
+        "usage": "Plastic Code Wrap.xml «C++ INSTRUCTION WORD fg»"
+      },
+      {
+        "name": "on-accent",
+        "value": "#0b161d",
+        "usage": "Plastic Code Wrap.xml «Default Style bg»"
+      },
+      {
+        "name": "cursor",
+        "value": "#162e3d",
+        "usage": "Plastic Code Wrap.xml «Selected text colour bg»"
+      },
+      {
+        "name": "focus",
+        "value": "#fce94f",
+        "usage": "Plastic Code Wrap.xml «Brace highlight style fg»"
+      },
+      {
+        "name": "on-focus",
+        "value": "#0b161d",
+        "usage": "Plastic Code Wrap.xml «Default Style bg»"
+      },
+      {
+        "name": "folder",
+        "value": "#ffaa00",
+        "usage": "Plastic Code Wrap.xml «C++ TYPE WORD fg»"
+      },
+      {
+        "name": "file",
+        "value": "#1e9ae0",
+        "usage": "Plastic Code Wrap.xml «C++ COMMENT fg»"
+      },
+      {
+        "name": "syntax",
+        "value": "#55e439",
+        "usage": "Plastic Code Wrap.xml «C++ STRING fg»"
+      }
+    ]
+  }
+}

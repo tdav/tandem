@@ -1,0 +1,109 @@
+{
+  "name": "Mossy Lawn (Notepad++)",
+  "origin": {
+    "basedOn": "По мотивам темы Notepad++ «MossyLawn»",
+    "source": "https://github.com/notepad-plus-plus/notepad-plus-plus/blob/master/PowerEditor/installer/themes/MossyLawn.xml",
+    "author": "Paul Neubauer",
+    "license": "CC BY 3.0 Unported",
+    "note": "Цвет каждого токена взят из XML темы без изменений; поле usage называет стиль-источник. Шрифты и размеры — встроенной темы Stone."
+  },
+  "color": {
+    "tokens": [
+      {
+        "name": "surface",
+        "value": "#58693d",
+        "usage": "MossyLawn.xml «Default Style bg»"
+      },
+      {
+        "name": "surface-raised",
+        "value": "#717a39",
+        "usage": "MossyLawn.xml «Current line background colour bg»"
+      },
+      {
+        "name": "bar",
+        "value": "#717a39",
+        "usage": "MossyLawn.xml «Current line background colour bg»"
+      },
+      {
+        "name": "bar-hover",
+        "value": "#8b6733",
+        "usage": "MossyLawn.xml «Selected text colour bg»"
+      },
+      {
+        "name": "bar-pressed",
+        "value": "#7e8a28",
+        "usage": "MossyLawn.xml «Fold margin bg»"
+      },
+      {
+        "name": "field",
+        "value": "#58693d",
+        "usage": "MossyLawn.xml «Default Style bg»"
+      },
+      {
+        "name": "line",
+        "value": "#003709",
+        "usage": "MossyLawn.xml «Indent guideline style fg»"
+      },
+      {
+        "name": "edge",
+        "value": "#ffee88",
+        "usage": "MossyLawn.xml «C++ OPERATOR fg»"
+      },
+      {
+        "name": "ink",
+        "value": "#ffee88",
+        "usage": "MossyLawn.xml «C++ OPERATOR fg»"
+      },
+      {
+        "name": "ink-muted",
+        "value": "#f2c476",
+        "usage": "MossyLawn.xml «Default Style fg»"
+      },
+      {
+        "name": "ink-disabled",
+        "value": "#2a390e",
+        "usage": "MossyLawn.xml «C++ COMMENT fg»"
+      },
+      {
+        "name": "accent",
+        "value": "#ffdc87",
+        "usage": "MossyLawn.xml «C++ STRING fg»"
+      },
+      {
+        "name": "on-accent",
+        "value": "#58693d",
+        "usage": "MossyLawn.xml «Default Style bg»"
+      },
+      {
+        "name": "cursor",
+        "value": "#8b6733",
+        "usage": "MossyLawn.xml «Selected text colour bg»"
+      },
+      {
+        "name": "focus",
+        "value": "#ffdc87",
+        "usage": "MossyLawn.xml «C++ STRING fg»"
+      },
+      {
+        "name": "on-focus",
+        "value": "#58693d",
+        "usage": "MossyLawn.xml «Default Style bg»"
+      },
+      {
+        "name": "folder",
+        "value": "#efc53d",
+        "usage": "MossyLawn.xml «C++ TYPE WORD fg»"
+      },
+      {
+        "name": "file",
+        "value": "#ffee88",
+        "usage": "MossyLawn.xml «C++ OPERATOR fg»"
+      },
+      {
+        "name": "syntax",
+        "value": "#ffee88",
+        "usage": "MossyLawn.xml «C++ OPERATOR fg»"
+      }
+    ]
+  }
+}

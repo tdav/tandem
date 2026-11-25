@@ -51,6 +51,13 @@ public partial class MainWindow : Window
         if (Input.PlatformKeys.IsWindows)
         {
             var menuBar = new NativeMenuBar();
+            // The menu bar draws the native menu itself and does not raise its Opening: a submenu filled on opening
+            // (the theme files) is told from here. Each item's data context is its native item.
+            menuBar.AddHandler(MenuItem.SubmenuOpenedEvent, (_, e) =>
+            {
+                if (e.Source is MenuItem { DataContext: NativeMenuItem { Menu: { } submenu } })
+                    MainMenu.Opening(submenu);
+            });
             DockPanel.SetDock(menuBar, Dock.Top);
             RootDock.Children.Insert(0, menuBar);
         }

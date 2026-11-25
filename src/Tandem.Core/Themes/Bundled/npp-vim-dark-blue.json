@@ -1,0 +1,109 @@
+{
+  "name": "vim Dark Blue (Notepad++)",
+  "origin": {
+    "basedOn": "По мотивам темы Notepad++ «vim Dark Blue»",
+    "source": "https://github.com/notepad-plus-plus/notepad-plus-plus/blob/master/PowerEditor/installer/themes/vim%20Dark%20Blue.xml",
+    "author": "в файле темы не указан",
+    "license": "в файле темы не указана",
+    "note": "Цвет каждого токена взят из XML темы без изменений; поле usage называет стиль-источник. Шрифты и размеры — встроенной темы Stone."
+  },
+  "color": {
+    "tokens": [
+      {
+        "name": "surface",
+        "value": "#000040",
+        "usage": "vim Dark Blue.xml «Default Style bg»"
+      },
+      {
+        "name": "surface-raised",
+        "value": "#000040",
+        "usage": "vim Dark Blue.xml «Line number margin bg»"
+      },
+      {
+        "name": "bar",
+        "value": "#000040",
+        "usage": "vim Dark Blue.xml «Line number margin bg»"
+      },
+      {
+        "name": "bar-hover",
+        "value": "#2050d0",
+        "usage": "vim Dark Blue.xml «Selected text colour bg»"
+      },
+      {
+        "name": "bar-pressed",
+        "value": "#000040",
+        "usage": "vim Dark Blue.xml «Fold margin bg»"
+      },
+      {
+        "name": "field",
+        "value": "#000040",
+        "usage": "vim Dark Blue.xml «Default Style bg»"
+      },
+      {
+        "name": "line",
+        "value": "#808080",
+        "usage": "vim Dark Blue.xml «Indent guideline style fg»"
+      },
+      {
+        "name": "edge",
+        "value": "#ffffff",
+        "usage": "vim Dark Blue.xml «Line number margin fg»"
+      },
+      {
+        "name": "ink",
+        "value": "#ffffbf",
+        "usage": "vim Dark Blue.xml «Default Style fg»"
+      },
+      {
+        "name": "ink-muted",
+        "value": "#ffffff",
+        "usage": "vim Dark Blue.xml «Line number margin fg»"
+      },
+      {
+        "name": "ink-disabled",
+        "value": "#80a0ff",
+        "usage": "vim Dark Blue.xml «C++ COMMENT fg»"
+      },
+      {
+        "name": "accent",
+        "value": "#ffff00",
+        "usage": "vim Dark Blue.xml «C++ INSTRUCTION WORD fg»"
+      },
+      {
+        "name": "on-accent",
+        "value": "#000040",
+        "usage": "vim Dark Blue.xml «Default Style bg»"
+      },
+      {
+        "name": "cursor",
+        "value": "#2050d0",
+        "usage": "vim Dark Blue.xml «Selected text colour bg»"
+      },
+      {
+        "name": "focus",
+        "value": "#80ff80",
+        "usage": "vim Dark Blue.xml «Brace highlight style fg»"
+      },
+      {
+        "name": "on-focus",
+        "value": "#000040",
+        "usage": "vim Dark Blue.xml «Default Style bg»"
+      },
+      {
+        "name": "folder",
+        "value": "#00ff00",
+        "usage": "vim Dark Blue.xml «C++ TYPE WORD fg»"
+      },
+      {
+        "name": "file",
+        "value": "#80a0ff",
+        "usage": "vim Dark Blue.xml «C++ COMMENT fg»"
+      },
+      {
+        "name": "syntax",
+        "value": "#ffffff",
+        "usage": "vim Dark Blue.xml «C++ NUMBER fg»"
+      }
+    ]
+  }
+}

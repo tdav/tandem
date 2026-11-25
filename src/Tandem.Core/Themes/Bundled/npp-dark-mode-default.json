@@ -1,0 +1,109 @@
+{
+  "name": "Dark Mode Default (Notepad++)",
+  "origin": {
+    "basedOn": "По мотивам темы Notepad++ «DarkModeDefault»",
+    "source": "https://github.com/notepad-plus-plus/notepad-plus-plus/blob/master/PowerEditor/installer/themes/DarkModeDefault.xml",
+    "author": "в файле темы не указан (основана на теме Zenburn, zenburn.xml)",
+    "license": "GPL2",
+    "note": "Цвет каждого токена взят из XML темы без изменений; поле usage называет стиль-источник. Шрифты и размеры — встроенной темы Stone."
+  },
+  "color": {
+    "tokens": [
+      {
+        "name": "surface",
+        "value": "#3f3f3f",
+        "usage": "DarkModeDefault.xml «Default Style bg»"
+      },
+      {
+        "name": "surface-raised",
+        "value": "#0c0c0c",
+        "usage": "DarkModeDefault.xml «Line number margin bg»"
+      },
+      {
+        "name": "bar",
+        "value": "#0c0c0c",
+        "usage": "DarkModeDefault.xml «Line number margin bg»"
+      },
+      {
+        "name": "bar-hover",
+        "value": "#101010",
+        "usage": "DarkModeDefault.xml «Current line background colour bg»"
+      },
+      {
+        "name": "bar-pressed",
+        "value": "#585858",
+        "usage": "DarkModeDefault.xml «Selected text colour bg»"
+      },
+      {
+        "name": "field",
+        "value": "#3f3f3f",
+        "usage": "DarkModeDefault.xml «Default Style bg»"
+      },
+      {
+        "name": "line",
+        "value": "#4f5f5f",
+        "usage": "DarkModeDefault.xml «Indent guideline style fg»"
+      },
+      {
+        "name": "edge",
+        "value": "#8a8a8a",
+        "usage": "DarkModeDefault.xml «Line number margin fg»"
+      },
+      {
+        "name": "ink",
+        "value": "#dcdccc",
+        "usage": "DarkModeDefault.xml «Default Style fg»"
+      },
+      {
+        "name": "ink-muted",
+        "value": "#9f9d6d",
+        "usage": "DarkModeDefault.xml «C++ OPERATOR fg»"
+      },
+      {
+        "name": "ink-disabled",
+        "value": "#7f9f7f",
+        "usage": "DarkModeDefault.xml «C++ COMMENT fg»"
+      },
+      {
+        "name": "accent",
+        "value": "#dfc47d",
+        "usage": "DarkModeDefault.xml «C++ INSTRUCTION WORD fg»"
+      },
+      {
+        "name": "on-accent",
+        "value": "#3f3f3f",
+        "usage": "DarkModeDefault.xml «Default Style bg»"
+      },
+      {
+        "name": "cursor",
+        "value": "#585858",
+        "usage": "DarkModeDefault.xml «Selected text colour bg»"
+      },
+      {
+        "name": "focus",
+        "value": "#f0f9f9",
+        "usage": "DarkModeDefault.xml «Brace highlight style fg»"
+      },
+      {
+        "name": "on-focus",
+        "value": "#3f3f3f",
+        "usage": "DarkModeDefault.xml «Default Style bg»"
+      },
+      {
+        "name": "folder",
+        "value": "#cedf99",
+        "usage": "DarkModeDefault.xml «C++ TYPE WORD fg»"
+      },
+      {
+        "name": "file",
+        "value": "#7f9f7f",
+        "usage": "DarkModeDefault.xml «C++ COMMENT fg»"
+      },
+      {
+        "name": "syntax",
+        "value": "#8cd0d3",
+        "usage": "DarkModeDefault.xml «C++ NUMBER fg»"
+      }
+    ]
+  }
+}

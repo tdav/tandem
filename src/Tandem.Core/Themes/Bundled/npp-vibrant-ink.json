@@ -1,0 +1,109 @@
+{
+  "name": "Vibrant Ink (Notepad++)",
+  "origin": {
+    "basedOn": "По мотивам темы Notepad++ «Vibrant Ink»",
+    "source": "https://github.com/notepad-plus-plus/notepad-plus-plus/blob/master/PowerEditor/installer/themes/Vibrant%20Ink.xml",
+    "author": "tyler, по теме TextMate VibrantInk Джастина Палмера (Justin Palmer)",
+    "license": "GNU Free License (так в файле темы, версия не указана)",
+    "note": "Цвет каждого токена взят из XML темы без изменений; поле usage называет стиль-источник. Шрифты и размеры — встроенной темы Stone."
+  },
+  "color": {
+    "tokens": [
+      {
+        "name": "surface",
+        "value": "#000000",
+        "usage": "Vibrant Ink.xml «Default Style bg»"
+      },
+      {
+        "name": "surface-raised",
+        "value": "#333333",
+        "usage": "Vibrant Ink.xml «Line number margin bg»"
+      },
+      {
+        "name": "bar",
+        "value": "#333333",
+        "usage": "Vibrant Ink.xml «Line number margin bg»"
+      },
+      {
+        "name": "bar-hover",
+        "value": "#111111",
+        "usage": "Vibrant Ink.xml «Fold margin bg»"
+      },
+      {
+        "name": "bar-pressed",
+        "value": "#6699cc",
+        "usage": "Vibrant Ink.xml «Selected text colour bg»"
+      },
+      {
+        "name": "field",
+        "value": "#000000",
+        "usage": "Vibrant Ink.xml «Default Style bg»"
+      },
+      {
+        "name": "line",
+        "value": "#c0c0c0",
+        "usage": "Vibrant Ink.xml «Indent guideline style fg»"
+      },
+      {
+        "name": "edge",
+        "value": "#e4e4e4",
+        "usage": "Vibrant Ink.xml «Line number margin fg»"
+      },
+      {
+        "name": "ink",
+        "value": "#ffffff",
+        "usage": "Vibrant Ink.xml «Default Style fg»"
+      },
+      {
+        "name": "ink-muted",
+        "value": "#e4e4e4",
+        "usage": "Vibrant Ink.xml «Line number margin fg»"
+      },
+      {
+        "name": "ink-disabled",
+        "value": "#c0c0c0",
+        "usage": "Vibrant Ink.xml «Indent guideline style fg»"
+      },
+      {
+        "name": "accent",
+        "value": "#ff6600",
+        "usage": "Vibrant Ink.xml «C++ INSTRUCTION WORD fg»"
+      },
+      {
+        "name": "on-accent",
+        "value": "#000000",
+        "usage": "Vibrant Ink.xml «Default Style bg»"
+      },
+      {
+        "name": "cursor",
+        "value": "#333333",
+        "usage": "Vibrant Ink.xml «Current line background colour bg»"
+      },
+      {
+        "name": "focus",
+        "value": "#99cc99",
+        "usage": "Vibrant Ink.xml «Brace highlight style fg»"
+      },
+      {
+        "name": "on-focus",
+        "value": "#000000",
+        "usage": "Vibrant Ink.xml «Default Style bg»"
+      },
+      {
+        "name": "folder",
+        "value": "#66ff00",
+        "usage": "Vibrant Ink.xml «C++ TYPE WORD fg»"
+      },
+      {
+        "name": "file",
+        "value": "#9933cc",
+        "usage": "Vibrant Ink.xml «C++ COMMENT fg»"
+      },
+      {
+        "name": "syntax",
+        "value": "#ff8000",
+        "usage": "Vibrant Ink.xml «C++ NUMBER fg»"
+      }
+    ]
+  }
+}

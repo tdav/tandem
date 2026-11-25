@@ -75,11 +75,14 @@ public sealed class BundledThemesTests : IDisposable
     }
 
     [Fact]
-    public void FileNames_AreTheSixNotepadPlusPlusThemes()
+    public void FileNames_AreTheNotepadPlusPlusThemes()
     {
         Assert.Equal(
-            ["npp-bespin.json", "npp-monokai.json", "npp-navajo.json", "npp-obsidian.json", "npp-solarized.json",
-             "npp-twilight.json"],
+            ["npp-bespin.json", "npp-black-board.json", "npp-choco.json",
+             "npp-dark-mode-default.json", "npp-deep-black.json", "npp-hot-fudge-sundae.json", "npp-mono-industrial.json",
+             "npp-monokai.json", "npp-mossy-lawn.json", "npp-navajo.json", "npp-obsidian.json",
+             "npp-plastic-code-wrap.json", "npp-ruby-blue.json", "npp-solarized.json", "npp-twilight.json",
+             "npp-vibrant-ink.json", "npp-vim-dark-blue.json", "npp-zenburn.json"],
             BundledThemes.FileNames.Order(StringComparer.Ordinal));
     }
 

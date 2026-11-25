@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using Avalonia.Controls;
 using Avalonia.Input;
 using CommunityToolkit.Mvvm.Input;
@@ -186,6 +187,8 @@ public static class MainMenu
         ];
         var themeMenu = new NativeMenu();
         foreach (var (_, item) in themes) themeMenu.Items.Add(item);
+        themeMenu.Items.Add(new NativeMenuItemSeparator());
+        AddThemeFiles(main, themeMenu);
 
         void Update()
         {
@@ -233,6 +236,67 @@ public static class MainMenu
         ];
     }
 
+    /// <summary>The submenus to fill again each time they open, with what fills them (see <see cref="Opening"/>).
+    /// </summary>
+    private static readonly ConditionalWeakTable<NativeMenu, Action> Refills = new();
+
+    /// <summary>Tells <paramref name="menu"/> it is opening, so a submenu read from disk (the theme files) is filled
+    /// anew. macOS raises <see cref="NativeMenu.Opening"/> itself; the Windows menu bar does not, and its window calls
+    /// this from <see cref="MenuItem.SubmenuOpenedEvent"/>.</summary>
+    public static void Opening(NativeMenu menu)
+    {
+        ArgumentNullException.ThrowIfNull(menu);
+        if (Refills.TryGetValue(menu, out var refill)) refill();
+    }
+
+    /// <summary>Appends to <paramref name="menu"/> the themes of <see cref="ThemeMenuModel"/>: the built-in one and the
+    /// files of the themes folder, the chosen one checked, a broken file disabled with its error as the tool tip. They
+    /// are read again whenever the menu opens, so a file dropped into the folder shows without a restart; choosing one
+    /// saves it, and the main view model applies it.</summary>
+    private static void AddThemeFiles(MainViewModel main, NativeMenu menu)
+    {
+        var model = new ThemeMenuModel(main.Settings);
+        var first = menu.Items.Count;
+        var items = new List<(string Id, NativeMenuItem Item)>();
+
+        void Fill()
+        {
+            while (menu.Items.Count > first) menu.Items.RemoveAt(menu.Items.Count - 1);
+            items.Clear();
+            foreach (var entry in model.Entries())
+            {
+                var id = entry.Id;
+                var enabled = entry.IsEnabled;
+                // A check box, not a radio: the Windows menu would group it with the light and dark radios above.
+                // The item takes its enabled state from the command's CanExecute.
+                var item = new NativeMenuItem(entry.Label)
+                {
+                    ToggleType = MenuItemToggleType.CheckBox,
+                    IsChecked = entry.IsSelected,
+                    ToolTip = entry.Error,
+                    Command = new RelayCommand(() =>
+                    {
+                        model.Choose(id);
+                        Check();
+                    }, () => enabled),
+                };
+                items.Add((id, item));
+                menu.Items.Add(item);
+            }
+        }
+
+        // The menu's own toggling of a clicked item is put right, and a choice made in the settings window shown.
+        void Check()
+        {
+            foreach (var (id, item) in items) item.IsChecked = item.IsEnabled && model.IsChosen(id);
+        }
+
+        Fill();
+        Refills.AddOrUpdate(menu, Fill);
+        menu.Opening += (_, _) => Fill();
+        main.Settings.Changed += (_, _) => Check();
+    }
+
     /// <summary>The sort commands of the active panel: its column checked, and "Reversed" checked while it sorts
     /// the other way round.</summary>
     private static IEnumerable<NativeMenuItemBase> SortItems(MainViewModel main)
@@ -268,7 +332,7 @@ public static class MainMenu
                 if (e.PropertyName is nameof(SideViewModel.Panel) or nameof(SideViewModel.NameSortMark)) Update();
             };
 
-        return [..columns.Select(c => c.Item), new NativeMenuItemSeparator(), reverse];
+        return [.. columns.Select(c => c.Item), new NativeMenuItemSeparator(), reverse];
     }
 
     private static NativeMenuItem Toggle(string labelKey, Action toggle) => new(Loc.Get(labelKey))

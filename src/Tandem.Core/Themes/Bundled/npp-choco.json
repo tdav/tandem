@@ -1,0 +1,109 @@
+{
+  "name": "Choco (Notepad++)",
+  "origin": {
+    "basedOn": "По мотивам темы Notepad++ «Choco»",
+    "source": "https://github.com/notepad-plus-plus/notepad-plus-plus/blob/master/PowerEditor/installer/themes/Choco.xml",
+    "author": "Copyright (c) 2008 Fabio Zendhi Nagao",
+    "license": "MIT (текст разрешения в файле темы)",
+    "note": "Цвет каждого токена взят из XML темы без изменений; поле usage называет стиль-источник. Шрифты и размеры — встроенной темы Stone."
+  },
+  "color": {
+    "tokens": [
+      {
+        "name": "surface",
+        "value": "#1a0f0b",
+        "usage": "Choco.xml «Default Style bg»"
+      },
+      {
+        "name": "surface-raised",
+        "value": "#2e3436",
+        "usage": "Choco.xml «Line number margin bg»"
+      },
+      {
+        "name": "bar",
+        "value": "#2e3436",
+        "usage": "Choco.xml «Line number margin bg»"
+      },
+      {
+        "name": "bar-hover",
+        "value": "#281711",
+        "usage": "Choco.xml «Current line background colour bg»"
+      },
+      {
+        "name": "bar-pressed",
+        "value": "#372017",
+        "usage": "Choco.xml «Selected text colour bg»"
+      },
+      {
+        "name": "field",
+        "value": "#1a0f0b",
+        "usage": "Choco.xml «Default Style bg»"
+      },
+      {
+        "name": "line",
+        "value": "#888a85",
+        "usage": "Choco.xml «Indent guideline style fg»"
+      },
+      {
+        "name": "edge",
+        "value": "#eeeeec",
+        "usage": "Choco.xml «Line number margin fg»"
+      },
+      {
+        "name": "ink",
+        "value": "#c3be98",
+        "usage": "Choco.xml «Default Style fg»"
+      },
+      {
+        "name": "ink-muted",
+        "value": "#eeeeec",
+        "usage": "Choco.xml «Line number margin fg»"
+      },
+      {
+        "name": "ink-disabled",
+        "value": "#679d47",
+        "usage": "Choco.xml «C++ COMMENT fg»"
+      },
+      {
+        "name": "accent",
+        "value": "#f1e694",
+        "usage": "Choco.xml «C++ INSTRUCTION WORD fg»"
+      },
+      {
+        "name": "on-accent",
+        "value": "#1a0f0b",
+        "usage": "Choco.xml «Default Style bg»"
+      },
+      {
+        "name": "cursor",
+        "value": "#372017",
+        "usage": "Choco.xml «Selected text colour bg»"
+      },
+      {
+        "name": "focus",
+        "value": "#fce94f",
+        "usage": "Choco.xml «Brace highlight style fg»"
+      },
+      {
+        "name": "on-focus",
+        "value": "#1a0f0b",
+        "usage": "Choco.xml «Default Style bg»"
+      },
+      {
+        "name": "folder",
+        "value": "#b3935c",
+        "usage": "Choco.xml «C++ TYPE WORD fg»"
+      },
+      {
+        "name": "file",
+        "value": "#679d47",
+        "usage": "Choco.xml «C++ COMMENT fg»"
+      },
+      {
+        "name": "syntax",
+        "value": "#7ca563",
+        "usage": "Choco.xml «C++ STRING fg»"
+      }
+    ]
+  }
+}

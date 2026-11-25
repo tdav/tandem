@@ -1,0 +1,109 @@
+{
+  "name": "Mono Industrial (Notepad++)",
+  "origin": {
+    "basedOn": "По мотивам темы Notepad++ «Mono Industrial»",
+    "source": "https://github.com/notepad-plus-plus/notepad-plus-plus/blob/master/PowerEditor/installer/themes/Mono%20Industrial.xml",
+    "author": "Copyright (c) 2008 Fabio Zendhi Nagao",
+    "license": "MIT (текст разрешения в файле темы)",
+    "note": "Цвет каждого токена взят из XML темы без изменений; поле usage называет стиль-источник. Шрифты и размеры — встроенной темы Stone."
+  },
+  "color": {
+    "tokens": [
+      {
+        "name": "surface",
+        "value": "#222c28",
+        "usage": "Mono Industrial.xml «Default Style bg»"
+      },
+      {
+        "name": "surface-raised",
+        "value": "#2e3436",
+        "usage": "Mono Industrial.xml «Line number margin bg»"
+      },
+      {
+        "name": "bar",
+        "value": "#2e3436",
+        "usage": "Mono Industrial.xml «Line number margin bg»"
+      },
+      {
+        "name": "bar-hover",
+        "value": "#2c3833",
+        "usage": "Mono Industrial.xml «Current line background colour bg»"
+      },
+      {
+        "name": "bar-pressed",
+        "value": "#2e3436",
+        "usage": "Mono Industrial.xml «Fold margin bg»"
+      },
+      {
+        "name": "field",
+        "value": "#222c28",
+        "usage": "Mono Industrial.xml «Default Style bg»"
+      },
+      {
+        "name": "line",
+        "value": "#888a85",
+        "usage": "Mono Industrial.xml «Indent guideline style fg»"
+      },
+      {
+        "name": "edge",
+        "value": "#eeeeec",
+        "usage": "Mono Industrial.xml «Line number margin fg»"
+      },
+      {
+        "name": "ink",
+        "value": "#ffffff",
+        "usage": "Mono Industrial.xml «Default Style fg»"
+      },
+      {
+        "name": "ink-muted",
+        "value": "#eeeeec",
+        "usage": "Mono Industrial.xml «Line number margin fg»"
+      },
+      {
+        "name": "ink-disabled",
+        "value": "#888a85",
+        "usage": "Mono Industrial.xml «Indent guideline style fg»"
+      },
+      {
+        "name": "accent",
+        "value": "#c23b00",
+        "usage": "Mono Industrial.xml «C++ INSTRUCTION WORD fg»"
+      },
+      {
+        "name": "on-accent",
+        "value": "#ffffff",
+        "usage": "Mono Industrial.xml «Default Style fg»"
+      },
+      {
+        "name": "cursor",
+        "value": "#2c3833",
+        "usage": "Mono Industrial.xml «Current line background colour bg»"
+      },
+      {
+        "name": "focus",
+        "value": "#fce94f",
+        "usage": "Mono Industrial.xml «Brace highlight style fg»"
+      },
+      {
+        "name": "on-focus",
+        "value": "#222c28",
+        "usage": "Mono Industrial.xml «Default Style bg»"
+      },
+      {
+        "name": "folder",
+        "value": "#a39e64",
+        "usage": "Mono Industrial.xml «C++ TYPE WORD fg»"
+      },
+      {
+        "name": "file",
+        "value": "#eeeeec",
+        "usage": "Mono Industrial.xml «Line number margin fg»"
+      },
+      {
+        "name": "syntax",
+        "value": "#e98800",
+        "usage": "Mono Industrial.xml «C++ NUMBER fg»"
+      }
+    ]
+  }
+}

@@ -1,0 +1,109 @@
+{
+  "name": "Black board (Notepad++)",
+  "origin": {
+    "basedOn": "По мотивам темы Notepad++ «Black board»",
+    "source": "https://github.com/notepad-plus-plus/notepad-plus-plus/blob/master/PowerEditor/installer/themes/Black%20board.xml",
+    "author": "Copyright (c) 2008 Fabio Zendhi Nagao",
+    "license": "MIT (текст разрешения в файле темы)",
+    "note": "Цвет каждого токена взят из XML темы без изменений; поле usage называет стиль-источник. Шрифты и размеры — встроенной темы Stone."
+  },
+  "color": {
+    "tokens": [
+      {
+        "name": "surface",
+        "value": "#0c1021",
+        "usage": "Black board.xml «Default Style bg»"
+      },
+      {
+        "name": "surface-raised",
+        "value": "#2e3436",
+        "usage": "Black board.xml «Line number margin bg»"
+      },
+      {
+        "name": "bar",
+        "value": "#2e3436",
+        "usage": "Black board.xml «Line number margin bg»"
+      },
+      {
+        "name": "bar-hover",
+        "value": "#121830",
+        "usage": "Black board.xml «Current line background colour bg»"
+      },
+      {
+        "name": "bar-pressed",
+        "value": "#253b76",
+        "usage": "Black board.xml «Selected text colour bg»"
+      },
+      {
+        "name": "field",
+        "value": "#0c1021",
+        "usage": "Black board.xml «Default Style bg»"
+      },
+      {
+        "name": "line",
+        "value": "#888a85",
+        "usage": "Black board.xml «Indent guideline style fg»"
+      },
+      {
+        "name": "edge",
+        "value": "#eeeeec",
+        "usage": "Black board.xml «Line number margin fg»"
+      },
+      {
+        "name": "ink",
+        "value": "#f8f8f8",
+        "usage": "Black board.xml «Default Style fg»"
+      },
+      {
+        "name": "ink-muted",
+        "value": "#eeeeec",
+        "usage": "Black board.xml «Line number margin fg»"
+      },
+      {
+        "name": "ink-disabled",
+        "value": "#aeaeae",
+        "usage": "Black board.xml «C++ COMMENT fg»"
+      },
+      {
+        "name": "accent",
+        "value": "#fbde2d",
+        "usage": "Black board.xml «C++ INSTRUCTION WORD fg»"
+      },
+      {
+        "name": "on-accent",
+        "value": "#0c1021",
+        "usage": "Black board.xml «Default Style bg»"
+      },
+      {
+        "name": "cursor",
+        "value": "#253b76",
+        "usage": "Black board.xml «Selected text colour bg»"
+      },
+      {
+        "name": "focus",
+        "value": "#fce94f",
+        "usage": "Black board.xml «Brace highlight style fg»"
+      },
+      {
+        "name": "on-focus",
+        "value": "#0c1021",
+        "usage": "Black board.xml «Default Style bg»"
+      },
+      {
+        "name": "folder",
+        "value": "#d8fa3c",
+        "usage": "Black board.xml «C++ NUMBER fg»"
+      },
+      {
+        "name": "file",
+        "value": "#aeaeae",
+        "usage": "Black board.xml «C++ COMMENT fg»"
+      },
+      {
+        "name": "syntax",
+        "value": "#d8fa3c",
+        "usage": "Black board.xml «C++ NUMBER fg»"
+      }
+    ]
+  }
+}

@@ -1300,7 +1300,8 @@
     <value>Аргументы</value>
   </data>
   <data name="Settings_ButtonsHint" xml:space="preserve">
-    <value>В аргументах: %p — папка активной панели, %t — папка другой панели, %f — элемент под курсором, %n — его имя, %s — выбранные элементы, %% — знак процента.</value>
+    <value>В аргументах: %p — папка активной панели, %t — папка другой панели, %f — элемент под курсором,
+%n — его имя, %s — выбранные элементы, %% — знак процента.</value>
   </data>
   <data name="Settings_Terminal" xml:space="preserve">
     <value>Терминал</value>

@@ -119,7 +119,7 @@
 
 ## Поставляемые темы (по мотивам Notepad++)
 
-С приложением идут шесть тем по мотивам тем Notepad++. Их файлы встроены в сборку `Tandem.Core`
+С приложением идут восемнадцать тем по мотивам тем Notepad++. Их файлы встроены в сборку `Tandem.Core`
 (`src/Tandem.Core/Themes/Bundled/*.json`). При каждом запуске приложение копирует в папку `Themes` те из них,
 **которых там ещё нет**. Файл с таким же именем не перезаписывается, поэтому изменения пользователя сохраняются.
 Из этого следуют два правила:
@@ -137,9 +137,25 @@
 | `npp-bespin.json` | Bespin (Notepad++) | `Bespin.xml` | тёмная | © 2009 Oren Farhi, Orizen Designs | MIT |
 | `npp-solarized.json` | Solarized (Notepad++) | `Solarized-light.xml` + `Solarized.xml` | светлая и тёмная | Paul Neubauer, по Solarized Ethan Schoonover | CC BY 3.0 |
 | `npp-navajo.json` | Navajo (Notepad++) | `Navajo.xml` | светлая | Paul Neubauer, по navajo.vim R. Edward Ralston | CC BY 3.0 |
+| `npp-black-board.json` | Black board (Notepad++) | `Black board.xml` | тёмная | © 2008 Fabio Zendhi Nagao | MIT |
+| `npp-choco.json` | Choco (Notepad++) | `Choco.xml` | тёмная | © 2008 Fabio Zendhi Nagao | MIT |
+| `npp-dark-mode-default.json` | Dark Mode Default (Notepad++) | `DarkModeDefault.xml` | тёмная | не указан (основана на Zenburn) | GPL2 |
+| `npp-deep-black.json` | Deep Black (Notepad++) | `Deep Black.xml` | тёмная | Mariusz Kasperkiewicz, по VibrantInk (tyler) | «GNU Free License» |
+| `npp-hot-fudge-sundae.json` | Hot Fudge Sundae (Notepad++) | `HotFudgeSundae.xml` | тёмная | Paul Neubauer | CC BY 3.0 |
+| `npp-mono-industrial.json` | Mono Industrial (Notepad++) | `Mono Industrial.xml` | тёмная | © 2008 Fabio Zendhi Nagao | MIT |
+| `npp-mossy-lawn.json` | Mossy Lawn (Notepad++) | `MossyLawn.xml` | тёмная | Paul Neubauer | CC BY 3.0 |
+| `npp-plastic-code-wrap.json` | Plastic Code Wrap (Notepad++) | `Plastic Code Wrap.xml` | тёмная | © 2008 Fabio Zendhi Nagao | MIT |
+| `npp-ruby-blue.json` | Ruby Blue (Notepad++) | `Ruby Blue.xml` | тёмная | tomsolo, по Ruby Blue John W. Long | «GNU Free License» |
+| `npp-vibrant-ink.json` | Vibrant Ink (Notepad++) | `Vibrant Ink.xml` | тёмная | tyler, по VibrantInk Justin Palmer | «GNU Free License» |
+| `npp-zenburn.json` | Zenburn (Notepad++) | `Zenburn.xml` | тёмная | Jani Kesänen, по Zenburn Jani Nurminen | GPL2 |
+| `npp-vim-dark-blue.json` | vim Dark Blue (Notepad++) | `vim Dark Blue.xml` | тёмная | не указан | не указана |
 
 Исходные файлы лежат в репозитории notepad-plus-plus, в папке `PowerEditor/installer/themes`. Тексты лицензий MIT
-приведены в заголовках этих XML.
+приведены в заголовках этих XML. «GNU Free License» — дословная формулировка заголовка XML, версия в нём не названа.
+
+Из тёмных тем Notepad++ не взята `DansLeRuSH-Dark.xml`: в её заголовке указана лицензия CC BY-NC-SA 3.0
+(некоммерческое использование, та же лицензия для производных), а это не подходит для темы, встроенной в
+приложение. `Hello Kitty.xml` и `khaki.xml` — светлые.
 
 **Светлый и тёмный вариант.** Тема Notepad++ рассчитана на один фон. Поэтому каждая поставляемая тема задаёт
 **все** цветовые токены одним значением для обоих вариантов. Так тема выглядит одинаково при любом выборе
@@ -173,17 +189,34 @@ Notepad++, из которого он взят, например `Monokai.xml «
 | `file` | C++ COMMENT → Line number margin, текст → Indent guideline → C++ OPERATOR |
 | `syntax` | C++ NUMBER → STRING → OPERATOR → TYPE WORD |
 
+Стили «C++ …» берутся из лексера `cpp`. Если в нём меньше трёх разных цветов (в Ruby Blue весь C++ белый),
+генератор берёт самый цветной лексер с теми же стилями (INSTRUCTION WORD, TYPE WORD, NUMBER, STRING, COMMENT).
+Для Ruby Blue это `javascript.js`, и поле `usage` называет именно его.
+
 Отдельных токенов для ошибок и отмеченных файлов в движке тем нет. Поэтому стили Notepad++ «Bad brace colour»
 и «Find Mark Style» не используются.
 
-**Контраст.** У тёмных тем и Navajo все основные пары проходят: текст 4.5:1, рамки и значки 3:1. Палитра
-Solarized сама по себе мягкая, и в ней есть провалы:
+**Контраст.** Порог для текста 4.5:1, для рамок и значков 3:1. У Obsidian, Monokai, Twilight, Bespin, Navajo,
+Black board, Deep Black, Hot Fudge Sundae, Mono Industrial, Plastic Code Wrap, Ruby Blue, Vibrant Ink и
+vim Dark Blue все основные пары проходят. В остальных палитрах есть провалы:
 
 | Пара | Solarized light | Solarized dark |
 |---|---|---|
 | `ink-muted` / `bar` | 4.39 | 4.11 |
 | `on-accent` / `accent` | 4.29 | — |
 | `syntax` / `surface-raised` | 4.39 | — |
+
+| Тема | Пара | Контраст |
+|---|---|---|
+| Choco | `syntax` / `surface-raised` | 4.47 |
+| Dark Mode Default, Zenburn | `ink-muted` / `surface` | 3.77 |
+| Mossy Lawn | `ink` / `surface-raised`, `ink` / `bar` | 3.92 |
+| Mossy Lawn | `ink` / `cursor`, `ink` / `bar-hover` | 4.37 |
+| Mossy Lawn | `ink-muted` / `surface` | 3.69 |
+| Mossy Lawn | `ink-muted` / `bar` | 2.85 |
+| Mossy Lawn | `syntax` / `surface-raised` | 3.92 |
+
+Фон Mossy Lawn — светло-оливковый `#58693d`, и ни один из кандидатов в `ink` не даёт 4.5:1 на её поле номеров строк.
 
 В светлом Solarized всего два фона (`#fdf6e3` и `#eee8d5`). Поэтому полосы, строка курсора и кнопка под указателем
 там одного цвета, а `folder` совпадает с `accent`.

@@ -1330,7 +1330,8 @@ Folder</value>
     <value>Arguments</value>
   </data>
   <data name="Settings_ButtonsHint" xml:space="preserve">
-    <value>In the arguments: %p is the active panel’s folder, %t the other panel’s folder, %f the item under the cursor, %n its name, %s the selected items, %% a percent sign.</value>
+    <value>In the arguments: %p is the active panel’s folder, %t the other panel’s folder, %f the item under the cursor,
+%n its name, %s the selected items, %% a percent sign.</value>
   </data>
   <data name="Settings_ExternalEditor" xml:space="preserve">
     <value>External editor for F4</value>

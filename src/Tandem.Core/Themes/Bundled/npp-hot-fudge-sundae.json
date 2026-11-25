@@ -1,0 +1,109 @@
+{
+  "name": "Hot Fudge Sundae (Notepad++)",
+  "origin": {
+    "basedOn": "По мотивам темы Notepad++ «HotFudgeSundae»",
+    "source": "https://github.com/notepad-plus-plus/notepad-plus-plus/blob/master/PowerEditor/installer/themes/HotFudgeSundae.xml",
+    "author": "Paul Neubauer (2012–2015)",
+    "license": "CC BY 3.0 Unported",
+    "note": "Цвет каждого токена взят из XML темы без изменений; поле usage называет стиль-источник. Шрифты и размеры — встроенной темы Stone."
+  },
+  "color": {
+    "tokens": [
+      {
+        "name": "surface",
+        "value": "#2b0f01",
+        "usage": "HotFudgeSundae.xml «Default Style bg»"
+      },
+      {
+        "name": "surface-raised",
+        "value": "#43250b",
+        "usage": "HotFudgeSundae.xml «Line number margin bg»"
+      },
+      {
+        "name": "bar",
+        "value": "#43250b",
+        "usage": "HotFudgeSundae.xml «Line number margin bg»"
+      },
+      {
+        "name": "bar-hover",
+        "value": "#432c13",
+        "usage": "HotFudgeSundae.xml «Current line background colour bg»"
+      },
+      {
+        "name": "bar-pressed",
+        "value": "#43250b",
+        "usage": "HotFudgeSundae.xml «Fold margin bg»"
+      },
+      {
+        "name": "field",
+        "value": "#2b0f01",
+        "usage": "HotFudgeSundae.xml «Default Style bg»"
+      },
+      {
+        "name": "line",
+        "value": "#8b642b",
+        "usage": "HotFudgeSundae.xml «Indent guideline style fg»"
+      },
+      {
+        "name": "edge",
+        "value": "#8b642b",
+        "usage": "HotFudgeSundae.xml «Line number margin fg»"
+      },
+      {
+        "name": "ink",
+        "value": "#b7975d",
+        "usage": "HotFudgeSundae.xml «Default Style fg»"
+      },
+      {
+        "name": "ink-muted",
+        "value": "#d6c479",
+        "usage": "HotFudgeSundae.xml «C++ OPERATOR fg»"
+      },
+      {
+        "name": "ink-disabled",
+        "value": "#208008",
+        "usage": "HotFudgeSundae.xml «C++ COMMENT fg»"
+      },
+      {
+        "name": "accent",
+        "value": "#4ad231",
+        "usage": "HotFudgeSundae.xml «C++ INSTRUCTION WORD fg»"
+      },
+      {
+        "name": "on-accent",
+        "value": "#2b0f01",
+        "usage": "HotFudgeSundae.xml «Default Style bg»"
+      },
+      {
+        "name": "cursor",
+        "value": "#432c13",
+        "usage": "HotFudgeSundae.xml «Current line background colour bg»"
+      },
+      {
+        "name": "focus",
+        "value": "#faf1c6",
+        "usage": "HotFudgeSundae.xml «Caret colour fg»"
+      },
+      {
+        "name": "on-focus",
+        "value": "#2b0f01",
+        "usage": "HotFudgeSundae.xml «Default Style bg»"
+      },
+      {
+        "name": "folder",
+        "value": "#cfba28",
+        "usage": "HotFudgeSundae.xml «C++ TYPE WORD fg»"
+      },
+      {
+        "name": "file",
+        "value": "#208008",
+        "usage": "HotFudgeSundae.xml «C++ COMMENT fg»"
+      },
+      {
+        "name": "syntax",
+        "value": "#afa7d6",
+        "usage": "HotFudgeSundae.xml «C++ NUMBER fg»"
+      }
+    ]
+  }
+}

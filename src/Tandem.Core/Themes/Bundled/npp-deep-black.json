@@ -1,0 +1,109 @@
+{
+  "name": "Deep Black (Notepad++)",
+  "origin": {
+    "basedOn": "По мотивам темы Notepad++ «Deep Black»",
+    "source": "https://github.com/notepad-plus-plus/notepad-plus-plus/blob/master/PowerEditor/installer/themes/Deep%20Black.xml",
+    "author": "Mariusz Kasperkiewicz (2009), по теме Port VibrantInk (tyler)",
+    "license": "«GNU Free License» (так в файле темы; разрешено изменять и перевыпускать)",
+    "note": "Цвет каждого токена взят из XML темы без изменений; поле usage называет стиль-источник. Шрифты и размеры — встроенной темы Stone."
+  },
+  "color": {
+    "tokens": [
+      {
+        "name": "surface",
+        "value": "#000000",
+        "usage": "Deep Black.xml «Default Style bg»"
+      },
+      {
+        "name": "surface-raised",
+        "value": "#333333",
+        "usage": "Deep Black.xml «Line number margin bg»"
+      },
+      {
+        "name": "bar",
+        "value": "#333333",
+        "usage": "Deep Black.xml «Line number margin bg»"
+      },
+      {
+        "name": "bar-hover",
+        "value": "#1a1a1a",
+        "usage": "Deep Black.xml «Fold margin bg»"
+      },
+      {
+        "name": "bar-pressed",
+        "value": "#6699cc",
+        "usage": "Deep Black.xml «Selected text colour bg»"
+      },
+      {
+        "name": "field",
+        "value": "#000000",
+        "usage": "Deep Black.xml «Default Style bg»"
+      },
+      {
+        "name": "line",
+        "value": "#c0c0c0",
+        "usage": "Deep Black.xml «Indent guideline style fg»"
+      },
+      {
+        "name": "edge",
+        "value": "#c0c0c0",
+        "usage": "Deep Black.xml «Line number margin fg»"
+      },
+      {
+        "name": "ink",
+        "value": "#ffffff",
+        "usage": "Deep Black.xml «Default Style fg»"
+      },
+      {
+        "name": "ink-muted",
+        "value": "#c0c0c0",
+        "usage": "Deep Black.xml «Line number margin fg»"
+      },
+      {
+        "name": "ink-disabled",
+        "value": "#00ff00",
+        "usage": "Deep Black.xml «C++ COMMENT fg»"
+      },
+      {
+        "name": "accent",
+        "value": "#ff6600",
+        "usage": "Deep Black.xml «C++ INSTRUCTION WORD fg»"
+      },
+      {
+        "name": "on-accent",
+        "value": "#000000",
+        "usage": "Deep Black.xml «Default Style bg»"
+      },
+      {
+        "name": "cursor",
+        "value": "#333333",
+        "usage": "Deep Black.xml «Current line background colour bg»"
+      },
+      {
+        "name": "focus",
+        "value": "#00ff00",
+        "usage": "Deep Black.xml «Brace highlight style fg»"
+      },
+      {
+        "name": "on-focus",
+        "value": "#000000",
+        "usage": "Deep Black.xml «Default Style bg»"
+      },
+      {
+        "name": "folder",
+        "value": "#00ffff",
+        "usage": "Deep Black.xml «C++ TYPE WORD fg»"
+      },
+      {
+        "name": "file",
+        "value": "#00ff00",
+        "usage": "Deep Black.xml «C++ COMMENT fg»"
+      },
+      {
+        "name": "syntax",
+        "value": "#ff8000",
+        "usage": "Deep Black.xml «C++ NUMBER fg»"
+      }
+    ]
+  }
+}

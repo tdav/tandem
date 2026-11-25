@@ -1,0 +1,109 @@
+{
+  "name": "Ruby Blue (Notepad++)",
+  "origin": {
+    "basedOn": "По мотивам темы Notepad++ «Ruby Blue»",
+    "source": "https://github.com/notepad-plus-plus/notepad-plus-plus/blob/master/PowerEditor/installer/themes/Ruby%20Blue.xml",
+    "author": "tomsolo (aka tonoslo), по теме TextMate Ruby Blue Джона У. Лонга (John W. Long)",
+    "license": "GNU Free License (так в файле темы, версия не указана)",
+    "note": "Цвет каждого токена взят из XML темы без изменений; поле usage называет стиль-источник. Шрифты и размеры — встроенной темы Stone."
+  },
+  "color": {
+    "tokens": [
+      {
+        "name": "surface",
+        "value": "#112435",
+        "usage": "Ruby Blue.xml «Default Style bg»"
+      },
+      {
+        "name": "surface-raised",
+        "value": "#1f4661",
+        "usage": "Ruby Blue.xml «Line number margin bg»"
+      },
+      {
+        "name": "bar",
+        "value": "#1f4661",
+        "usage": "Ruby Blue.xml «Line number margin bg»"
+      },
+      {
+        "name": "bar-hover",
+        "value": "#273a4b",
+        "usage": "Ruby Blue.xml «Current line background colour bg»"
+      },
+      {
+        "name": "bar-pressed",
+        "value": "#0000ff",
+        "usage": "Ruby Blue.xml «Selected text colour bg»"
+      },
+      {
+        "name": "field",
+        "value": "#112435",
+        "usage": "Ruby Blue.xml «Default Style bg»"
+      },
+      {
+        "name": "line",
+        "value": "#0080ff",
+        "usage": "Ruby Blue.xml «Indent guideline style fg»"
+      },
+      {
+        "name": "edge",
+        "value": "#ffffff",
+        "usage": "Ruby Blue.xml «Line number margin fg»"
+      },
+      {
+        "name": "ink",
+        "value": "#ffffff",
+        "usage": "Ruby Blue.xml «Default Style fg»"
+      },
+      {
+        "name": "ink-muted",
+        "value": "#7bd827",
+        "usage": "Ruby Blue.xml «javascript.js OPERATOR fg»"
+      },
+      {
+        "name": "ink-disabled",
+        "value": "#3a8bda",
+        "usage": "Ruby Blue.xml «javascript.js COMMENT fg»"
+      },
+      {
+        "name": "accent",
+        "value": "#ffff80",
+        "usage": "Ruby Blue.xml «javascript.js INSTRUCTION WORD fg»"
+      },
+      {
+        "name": "on-accent",
+        "value": "#112435",
+        "usage": "Ruby Blue.xml «Default Style bg»"
+      },
+      {
+        "name": "cursor",
+        "value": "#0000ff",
+        "usage": "Ruby Blue.xml «Selected text colour bg»"
+      },
+      {
+        "name": "focus",
+        "value": "#ffffff",
+        "usage": "Ruby Blue.xml «Brace highlight style fg»"
+      },
+      {
+        "name": "on-focus",
+        "value": "#112435",
+        "usage": "Ruby Blue.xml «Default Style bg»"
+      },
+      {
+        "name": "folder",
+        "value": "#ff00ff",
+        "usage": "Ruby Blue.xml «javascript.js NUMBER fg»"
+      },
+      {
+        "name": "file",
+        "value": "#3a8bda",
+        "usage": "Ruby Blue.xml «javascript.js COMMENT fg»"
+      },
+      {
+        "name": "syntax",
+        "value": "#7bd827",
+        "usage": "Ruby Blue.xml «javascript.js OPERATOR fg»"
+      }
+    ]
+  }
+}

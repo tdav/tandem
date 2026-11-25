@@ -7,7 +7,7 @@
         x:Class="Tandem.App.Views.Settings.SettingsWindow"
         x:DataType="vm:SettingsViewModel"
         Title="{loc:Tr Key=Settings_Title}"
-        Width="760" Height="580" MinWidth="560" MinHeight="420"
+        Width="900" Height="580" MinWidth="720" MinHeight="420"
         CanMinimize="False" ShowInTaskbar="False">
     <Window.Resources>
         <DataTemplate x:Key="ColumnTemplate" x:DataType="vm:ColumnRow">
@@ -27,7 +27,10 @@
         </DataTemplate>
     </Window.Resources>
 
-    <!-- Five tabs over a working copy of the settings; OK and Apply hand it to the settings service, Cancel drops it. -->
+    <!-- Five tabs over a working copy of the settings; OK and Apply hand it to the settings service, Cancel drops it.
+         900 wide: the Russian tab headers stay on one row and every label and hint fits on one line (the longest,
+         Settings_TerminalHint, is about 785 px); Settings_ButtonsHint is two lines by its own line break. -->
+
     <DockPanel Margin="16">
         <DockPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="8">
@@ -103,7 +106,8 @@
             <TabItem Header="{loc:Tr Key=Settings_Tab_View}">
                 <ScrollViewer>
                     <StackPanel Spacing="10" Margin="0,8,0,0">
-                        <Grid ColumnDefinitions="160,220,Auto" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="8">
+                        <Grid ColumnDefinitions="Auto,260,Auto" RowDefinitions="Auto,Auto,Auto,Auto" RowSpacing="8"
+                              ColumnSpacing="16">
                             <TextBlock Text="{loc:Tr Key=Menu_Theme}" VerticalAlignment="Center" />
                             <ComboBox x:Name="ThemeChoice" Grid.Column="1" HorizontalAlignment="Stretch"
                                       ItemsSource="{x:Static vm:SettingsViewModel.ThemeOptions}"
@@ -131,7 +135,7 @@
                                     </DataTemplate>
                                 </ComboBox.ItemTemplate>
                             </ComboBox>
-                            <Button x:Name="OpenThemesFolder" Grid.Row="1" Grid.Column="2" Margin="8,0,0,0"
+                            <Button x:Name="OpenThemesFolder" Grid.Row="1" Grid.Column="2"
                                     Content="{loc:Tr Key=Settings_OpenThemesFolder}" Click="OnOpenThemesFolder" />
                             <TextBlock Grid.Row="2" Text="{loc:Tr Key=Settings_FontSize}" VerticalAlignment="Center" />
                             <NumericUpDown x:Name="FontSizeField" Grid.Row="2" Grid.Column="1" Increment="1"
