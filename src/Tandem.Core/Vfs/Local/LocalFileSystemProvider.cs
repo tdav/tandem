@@ -35,7 +35,8 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusive
 
     private readonly IFileAccessBroker _broker = broker ?? throw new ArgumentNullException(nameof(broker));
     private readonly IExclusiveRename? _exclusiveRename = exclusiveRename;
-    private readonly IEntryIdentity _identity = identity ?? new UnixEntryIdentity();
+    private readonly IEntryIdentity _identity =
+        identity ?? (OperatingSystem.IsWindows() ? new WindowsEntryIdentity() : new UnixEntryIdentity());
 
     public string Id => VfsPath.LocalProviderId;
 
