@@ -101,6 +101,12 @@
         <!-- The built-in text editor's own look (AvaloniaEdit's Fluent theme). -->
         <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
 
+        <!-- The app icon in the title bar and the taskbar of every window (the main one, dialogs, viewer, editor…).
+             Generated from build/icon/tandem.svg by build/icon/make-icons.py. -->
+        <Style Selector=":is(Window)">
+            <Setter Property="Icon" Value="avares://Tandem.App/Assets/Tandem.ico" />
+        </Style>
+
         <!-- Flat buttons of the bars (volumes, tabs, headers, F-keys, sidebar): they never take the focus, so the
              keyboard stays with the file list. -->
         <Style Selector="Button.flat">

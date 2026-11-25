@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tandem — варианты иконки</title>
+<style>
+  :root { color-scheme: light; font-family: system-ui, "Segoe UI", sans-serif; }
+  body { margin: 0; padding: 24px 16px 48px; background: #F1F5F9; color: #0F172A; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  p.lead { margin: 0 0 24px; color: #475569; }
+  .card { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; margin-bottom: 20px; overflow: hidden; }
+  .head { display: flex; gap: 12px; align-items: baseline; padding: 14px 18px; border-bottom: 1px solid #E2E8F0; }
+  .num { font-size: 26px; font-weight: 700; color: #2563EB; min-width: 1.4em; }
+  .idea { font-size: 15px; }
+  .rows { display: grid; grid-template-columns: 1fr 1fr; }
+  .bg { display: flex; align-items: flex-end; gap: 24px; padding: 20px; flex-wrap: wrap; }
+  .bg.light { background: #FFFFFF; }
+  .bg.dark { background: #1E1E1E; color: #CBD5E1; }
+  figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  figcaption { font-size: 11px; opacity: .6; }
+  img { display: block; }
+  @media (max-width: 900px) { .rows { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<h1>Tandem — пять вариантов иконки приложения</h1>
+<p class="lead">Каждый вариант — в 256, 64, 32 и 16 px, слева на светлом фоне, справа на тёмном. Выберите номер.</p>
+<div id="list"></div>
+<script>
+  const ideas = [
+    "Плитка, разрезанная на две панели (синяя | бирюзовая), белые стрелки ⇄ меняют файлы через шов.",
+    "Две папки, синяя и янтарная, внахлёст — пара мест, между которыми работает Tandem.",
+    "Буква T: перекладина — заголовок окна, ножка разделена на две панели со списками файлов.",
+    "Дань текстовым коммандерам: синий экран, две панели в рамках, курсор и полоса F-клавиш.",
+    "Абстрактная «пара»: два скруглённых квадрата внахлёст, общая середина подсвечена."
+  ];
+  const sizes = [256, 64, 32, 16];
+  const list = document.getElementById("list");
+  ideas.forEach((idea, i) => {
+    const n = i + 1;
+    const figs = sizes.map(s =>
+      `<figure><img src="icon-${n}.svg" width="${s}" height="${s}" alt="Вариант ${n}, ${s} px"><figcaption>${s}</figcaption></figure>`
+    ).join("");
+    list.insertAdjacentHTML("beforeend",
+      `<section class="card"><div class="head"><span class="num">${n}</span><span class="idea">${idea}</span></div>
+       <div class="rows"><div class="bg light">${figs}</div><div class="bg dark">${figs}</div></div></section>`);
+  });
+</script>
+</body>
+</html>

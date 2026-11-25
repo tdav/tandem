@@ -4,6 +4,8 @@
     <AssemblyName>Tandem.App</AssemblyName>
     <RootNamespace>Tandem.App</RootNamespace>
     <NeutralLanguage>en</NeutralLanguage>
+    <!-- The exe's icon in Explorer (Windows). Generated from build/icon/tandem.svg by build/icon/make-icons.py. -->
+    <ApplicationIcon>Assets\Tandem.ico</ApplicationIcon>
   </PropertyGroup>
 
   <!-- Windows: `dotnet publish -r win-x64` compiles natively (Native AOT) by default: one Tandem.App.exe plus the
@@ -30,6 +32,7 @@
 
   <ItemGroup>
     <AvaloniaResource Include="Assets/FileIcons/*.svg" />
+    <AvaloniaResource Include="Assets/Tandem.ico" />
   </ItemGroup>
 
   <ItemGroup>

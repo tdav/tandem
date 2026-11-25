@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="t">
+  <title id="t">Tandem — classic two-panel console screen</title>
+  <!-- Concept 4: homage to text-mode commanders: blue screen, two framed panels, a cursor bar, a function-key strip. -->
+  <rect x="16" y="16" width="224" height="224" rx="40" fill="#1E2A8C"/>
+  <g fill="none" stroke="#67E8F9" stroke-width="7">
+    <rect x="37" y="40" width="85" height="152" rx="6"/>
+    <rect x="134" y="40" width="85" height="152" rx="6"/>
+  </g>
+  <rect x="45" y="98" width="69" height="20" rx="3" fill="#67E8F9"/>
+  <g fill="#BFDBFE">
+    <rect x="49" y="60" width="50" height="8" rx="2"/>
+    <rect x="49" y="78" width="36" height="8" rx="2"/>
+    <rect x="49" y="130" width="44" height="8" rx="2"/>
+    <rect x="49" y="148" width="30" height="8" rx="2"/>
+    <rect x="49" y="166" width="40" height="8" rx="2"/>
+    <rect x="146" y="60" width="42" height="8" rx="2"/>
+    <rect x="146" y="78" width="54" height="8" rx="2"/>
+    <rect x="146" y="96" width="34" height="8" rx="2"/>
+    <rect x="146" y="114" width="48" height="8" rx="2"/>
+    <rect x="146" y="132" width="28" height="8" rx="2"/>
+  </g>
+  <g fill="#67E8F9">
+    <rect x="37" y="204" width="26" height="14" rx="3"/>
+    <rect x="68" y="204" width="26" height="14" rx="3"/>
+    <rect x="99" y="204" width="26" height="14" rx="3"/>
+    <rect x="130" y="204" width="26" height="14" rx="3"/>
+    <rect x="161" y="204" width="26" height="14" rx="3"/>
+    <rect x="192" y="204" width="27" height="14" rx="3"/>
+  </g>
+</svg>
