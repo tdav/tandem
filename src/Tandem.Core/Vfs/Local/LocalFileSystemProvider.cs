@@ -274,7 +274,7 @@ public sealed class LocalFileSystemProvider(IFileAccessBroker broker, IExclusive
     {
         if (!string.Equals(path.ProviderId, Id, StringComparison.Ordinal))
             throw new ArgumentException($"Path '{path}' does not belong to provider '{Id}'.", nameof(path));
-        return path.ToOsPath();
+        return LocalPath.ToOs(path.Path, LocalPath.Current); // strict: "/" and made-up paths are no place on disk
     }
 
     private Task<T> RunAsync<T>(VfsPath path, CancellationToken ct, Func<string, T> body) => Task.Run(() =>

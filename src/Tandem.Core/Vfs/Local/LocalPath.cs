@@ -47,7 +47,11 @@ public static class LocalPath
     /// <c>C:</c> means the current directory of drive C).</summary>
     /// <exception cref="VfsException">On Windows: the root <c>/</c>, an incomplete share (<c>/UNC/server</c>) or a
     /// first segment that is not a drive. None of them is a place on disk.</exception>
-    public static string ToOs(string vfs, LocalPathStyle style)
+    public static string ToOs(string vfs, LocalPathStyle style) =>
+        TryToOs(vfs, style) ?? throw new VfsException($"'{vfs}' has no Windows path.");
+
+    /// <summary>As <see cref="ToOs"/>, but null where it throws.</summary>
+    public static string? TryToOs(string vfs, LocalPathStyle style)
     {
         ArgumentNullException.ThrowIfNull(vfs);
         if (style == LocalPathStyle.Unix) return vfs;
@@ -57,23 +61,24 @@ public static class LocalPath
             return segments.Length == 1 ? segments[0] + @"\" : string.Join('\\', segments);
         if (segments.Length >= 3 && segments[0] == UncSegment)
             return @"\\" + string.Join('\\', segments[1..]);
-        throw new VfsException($"'{vfs}' has no Windows path.");
+        return null;
     }
 
-    /// <summary>The OS path of a local <paramref name="path"/> on the running system.</summary>
+    /// <summary>The OS path of a local <paramref name="path"/> on the running system, for the system's services
+    /// (trash, shell, copy, processes). A path with no Windows form — the drive list "/", or the made-up paths of a
+    /// test double standing in for the disk — is passed on as it is; the disk itself (the local provider) refuses
+    /// such paths.</summary>
     /// <exception cref="ArgumentException">The path belongs to another provider.</exception>
-    /// <exception cref="VfsException">See <see cref="ToOs(string, LocalPathStyle)"/>.</exception>
     public static string ToOsPath(this VfsPath path)
     {
         if (!string.Equals(path.ProviderId, VfsPath.LocalProviderId, StringComparison.Ordinal))
             throw new ArgumentException($"Path '{path}' is not a local path.", nameof(path));
-        return ToOs(path.Path, Current);
+        return TryToOs(path.Path, Current) ?? path.Path;
     }
 
-    /// <summary>The path as the user reads it: the OS form; on Windows the drive list <c>/</c> stays "/" (it has no
-    /// OS form, and "/" typed back leads to it).</summary>
-    public static string Display(string vfs, LocalPathStyle style) =>
-        style == LocalPathStyle.Windows && vfs == "/" ? "/" : ToOs(vfs, style);
+    /// <summary>The path as the user reads it: the OS form; a path without one (on Windows the drive list "/",
+    /// which typed back leads to it) as it is.</summary>
+    public static string Display(string vfs, LocalPathStyle style) => TryToOs(vfs, style) ?? vfs;
 
     /// <summary>A local path as the user reads it on the running system
     /// (<see cref="Display(string, LocalPathStyle)"/>); any other provider's path as it is. For hosted providers
