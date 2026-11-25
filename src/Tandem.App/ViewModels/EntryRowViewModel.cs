@@ -61,6 +61,10 @@ public sealed partial class EntryRowViewModel : ObservableObject
     /// <summary>A directory, a link to a directory, or "..": opening the row changes the folder.</summary>
     public bool IsDirectoryLike => IsParentLink || Entry!.IsDirectoryLike;
 
+    /// <summary>The provider reports the entry hidden (a dot-name, the macOS UF_HIDDEN flag, the Windows Hidden
+    /// attribute); the row shows its icon in the hidden colour. Never true for "..".</summary>
+    public bool IsHidden => !IsParentLink && Entry!.IsHidden;
+
     /// <summary>The full name, extension included; a link shows its own name.</summary>
     public string Name => _name ??= Entry!.Name;
 
