@@ -25,6 +25,19 @@ the app is compiled ahead of time to machine code, so you do not need to install
    Or: right-click `Tandem.app` → Open → Open; on macOS 15 and newer — System Settings →
    Privacy & Security → Open Anyway.
 
+### Windows x64 (preview)
+
+Windows 10/11 x64: `Tandem-<version>-win-x64.zip` in the
+[releases](https://github.com/tdav/tandem/releases) (marked pre-release). It is self-contained: .NET does not need to be
+installed. Unpack it anywhere and run `Tandem.App.exe`. The exe is not signed, so SmartScreen may warn once:
+"More info" → "Run anyway".
+
+On Windows the shortcuts use Ctrl where macOS uses ⌘, in the style of classic two-pane managers (Ctrl+R reread,
+Ctrl+U swap panels, Ctrl+D favourites, Ctrl+F connect, Ctrl+F3…F7 sort, Delete / Shift+Delete). The root `/` of the
+local disk lists the drives. Settings live in `%APPDATA%\Tandem`, logs in `%LOCALAPPDATA%\Tandem\Logs`. Not
+available on Windows: Finder tags, Quick Look (the built-in quick view, Ctrl+Q, works), the file owner, "Open with"
+lists. Saved passwords go to the Windows Credential Manager.
+
 ## Screenshots
 
 | Find files (Alt+F7) | Viewer, hex mode (F3) | Settings: keys (Cmd+,) |
