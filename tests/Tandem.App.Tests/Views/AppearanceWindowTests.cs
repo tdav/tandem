@@ -237,6 +237,59 @@ public class AppearanceWindowTests : LanguageTestBase, IDisposable
     }
 
     [AvaloniaFact]
+    public async Task Hidden_entries_show_the_hidden_icon_brush_in_both_themes()
+    {
+        var fs = TestApp.DefaultFileSystem();
+        fs.AddDirectory(TestApp.Home + "/.config");
+        fs.AddFile(TestApp.Home + "/.env", "x");
+        var settings = AppSettings.Default with { FileColors = [new FileColorRule("*", "Gray")] };
+        await using var app = await TestApp.StartAsync(fs, settings: settings);
+        app.Main.Workspace.ShowHidden = true;
+        app.Pump();
+
+        Image Picture(string name) => Assert.Single(RowOf(app, PanelSide.Left, name).GetVisualDescendants().OfType<Image>());
+        Avalonia.Controls.Shapes.Path Body(string name) => RowOf(app, PanelSide.Left, name).GetVisualDescendants()
+            .OfType<Avalonia.Controls.Shapes.Path>().Single(p => p.Name == "HiddenIconBody");
+
+        ISolidColorBrush? previous = null;
+        foreach (var theme in new[] { ThemeChoice.Light, ThemeChoice.Dark })
+        {
+            app.Main.SetTheme(theme);
+            app.Pump();
+            var hidden = Resource(app, "Tandem.HiddenIcon");
+            foreach (var name in new[] { ".config", ".env" })
+            {
+                Assert.False(Picture(name).IsEffectivelyVisible);
+                var body = Body(name);
+                Assert.True(body.IsEffectivelyVisible);
+                Assert.Same(hidden, body.Fill);
+                Assert.Same(Resource(app, "Tandem.HiddenIconBorder"), body.Stroke);
+                Assert.Equal(new Size(16, 16), body.Bounds.Size);
+            }
+            // Folders and files keep different shapes when hidden.
+            Assert.NotSame(Body(".config").Data, Body(".env").Data);
+            foreach (var name in new[] { "docs", "notes.txt" })
+            {
+                Assert.True(Picture(name).IsEffectivelyVisible);
+                Assert.False(Body(name).IsEffectivelyVisible);
+            }
+            // A mask rule colours the name; the hidden colour is the icon's only.
+            Assert.Same(Resource(app, FileColors.ResourceKey("Gray")), Cell(RowOf(app, PanelSide.Left, ".env"), "RowName").Foreground);
+            Assert.NotSame(hidden, Cell(RowOf(app, PanelSide.Left, ".config"), "RowName").Foreground);
+
+            var color = Assert.IsAssignableFrom<ISolidColorBrush>(hidden);
+            if (previous is not null) Assert.NotEqual(previous.Color, color.Color);
+            previous = color;
+        }
+
+        // A marked hidden row: the name takes the marked colour, the icon keeps the hidden one.
+        app.Left.Rows.Single(r => r.Name == ".env").IsSelected = true;
+        app.Pump();
+        Assert.Same(Resource(app, "Tandem.MarkedForeground"), Cell(RowOf(app, PanelSide.Left, ".env"), "RowName").Foreground);
+        Assert.Same(Resource(app, "Tandem.HiddenIcon"), Body(".env").Fill);
+    }
+
+    [AvaloniaFact]
     public async Task Changing_rules_recolours_rows_without_reading_the_folder_again()
     {
         var other = new InMemoryFileSystem("observed");

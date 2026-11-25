@@ -10,6 +10,12 @@
         <svg:SvgImage x:Key="FileRowIcon" Source="avares://Tandem.App/Assets/FileIcons/file.svg" />
         <svg:SvgImage x:Key="FolderRowIcon" Source="avares://Tandem.App/Assets/FileIcons/folder.svg" />
         <svg:SvgImage x:Key="ParentRowIcon" Source="avares://Tandem.App/Assets/FileIcons/parent.svg" />
+        <!-- Hidden entries draw the same shapes as folder.svg and file.svg, filled with the theme's hidden brushes. -->
+        <StreamGeometry x:Key="HiddenFolderBody">M1.5 12.5v-9a1 1 0 0 1 1-1h3.25l1.5 2h6.25a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1Z</StreamGeometry>
+        <StreamGeometry x:Key="HiddenFolderDetail">M2 7h12v5.5a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5Z</StreamGeometry>
+        <StreamGeometry x:Key="HiddenFileBody">M4.5 1.5h5l3 3v9a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1Z</StreamGeometry>
+        <StreamGeometry x:Key="HiddenFileDetail">M9.5 1.5v3h3Z</StreamGeometry>
+        <StreamGeometry x:Key="HiddenFileLines">M5.5 8.5h5m-5 2.5h4</StreamGeometry>
     </UserControl.Resources>
     <UserControl.Styles>
         <Style Selector="Image.entryIcon">
@@ -20,6 +26,39 @@
         </Style>
         <Style Selector="Image.entryIcon.parent">
             <Setter Property="Source" Value="{StaticResource ParentRowIcon}" />
+        </Style>
+        <!-- Hidden entries: the icon in the hidden colour, a file's shape or a folder's. Only the icon: a colour rule
+             and the marked style colour the name (TextBlocks), so the three never compete. -->
+        <Style Selector="Panel.hiddenIcon Path">
+            <Setter Property="Width" Value="16" />
+            <Setter Property="Height" Value="16" />
+            <Setter Property="StrokeThickness" Value="1" />
+            <Setter Property="StrokeJoin" Value="Round" />
+            <Setter Property="StrokeLineCap" Value="Round" />
+        </Style>
+        <Style Selector="Panel.hiddenIcon Path#HiddenIconBody">
+            <Setter Property="Data" Value="{StaticResource HiddenFileBody}" />
+            <Setter Property="Fill" Value="{DynamicResource Tandem.HiddenIcon}" />
+            <Setter Property="Stroke" Value="{DynamicResource Tandem.HiddenIconBorder}" />
+        </Style>
+        <Style Selector="Panel.hiddenIcon Path#HiddenIconDetail">
+            <Setter Property="Data" Value="{StaticResource HiddenFileDetail}" />
+            <Setter Property="Fill" Value="{DynamicResource Tandem.HiddenIconAccent}" />
+            <Setter Property="Stroke" Value="{DynamicResource Tandem.HiddenIconBorder}" />
+        </Style>
+        <Style Selector="Panel.hiddenIcon Path#HiddenIconLines">
+            <Setter Property="Data" Value="{StaticResource HiddenFileLines}" />
+            <Setter Property="Stroke" Value="{DynamicResource Tandem.HiddenIconBorder}" />
+        </Style>
+        <Style Selector="Panel.hiddenIcon.folder Path#HiddenIconBody">
+            <Setter Property="Data" Value="{StaticResource HiddenFolderBody}" />
+        </Style>
+        <Style Selector="Panel.hiddenIcon.folder Path#HiddenIconDetail">
+            <Setter Property="Data" Value="{StaticResource HiddenFolderDetail}" />
+            <Setter Property="StrokeThickness" Value="0" />
+        </Style>
+        <Style Selector="Panel.hiddenIcon.folder Path#HiddenIconLines">
+            <Setter Property="IsVisible" Value="False" />
         </Style>
         <!-- Fixed row height (from the settings, the same for every row): the virtualizing panel never measures rows
              one by one. -->
@@ -125,7 +164,14 @@
                     <DockPanel x:Name="RowNameCell">
                         <Image DockPanel.Dock="Left" Classes="entryIcon" Classes.folder="{Binding IsDirectoryLike}"
                                Classes.parent="{Binding IsParentLink}" Width="16" Height="16" Margin="0,0,6,0"
-                               VerticalAlignment="Center" IsHitTestVisible="False" />
+                               VerticalAlignment="Center" IsHitTestVisible="False" IsVisible="{Binding !IsHidden}" />
+                        <Panel x:Name="HiddenIcon" DockPanel.Dock="Left" Classes="hiddenIcon"
+                               Classes.folder="{Binding IsDirectoryLike}" Width="16" Height="16" Margin="0,0,6,0"
+                               VerticalAlignment="Center" IsHitTestVisible="False" IsVisible="{Binding IsHidden}">
+                            <Path x:Name="HiddenIconBody" />
+                            <Path x:Name="HiddenIconDetail" />
+                            <Path x:Name="HiddenIconLines" />
+                        </Panel>
                         <Panel>
                             <!-- The name is measured first, leaving the remaining room for the result location. -->
                             <DockPanel IsVisible="{Binding !IsRenaming}">
