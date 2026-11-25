@@ -230,6 +230,7 @@ public class CopyPathTests : LanguageTestBase
     [AvaloniaFact]
     public async Task Cmd_Alt_C_copies_the_path()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests covers Windows.");
         await using var app = await StartAsync();
         Cursor(app.Left, "README.md");
 
@@ -241,6 +242,7 @@ public class CopyPathTests : LanguageTestBase
     [AvaloniaFact]
     public async Task Row_menu_lists_copy_path_after_reveal_with_its_chord_and_runs_it()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests covers Windows.");
         await using var app = await StartAsync();
         Cursor(app.Left, "notes.txt");
 
