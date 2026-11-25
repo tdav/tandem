@@ -168,6 +168,7 @@ public sealed class ZipEditingLocalTests : IDisposable
     [Fact]
     public async Task Copying_a_name_the_zip_writer_would_change_is_an_item_error_and_the_others_land()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Names with ':' cannot exist on a Windows disk.");
         var archive = await OpenAsync();
         var source = _dir.Combine("names");
         Directory.CreateDirectory(source);
