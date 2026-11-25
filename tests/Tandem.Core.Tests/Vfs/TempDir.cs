@@ -1,10 +1,9 @@
-using System.Runtime.Versioning;
 using Tandem.Core.Vfs;
 
 namespace Tandem.Core.Tests.Vfs;
 
-/// <summary>A fresh directory under the system temp path, deleted (after restoring permissions) on dispose.</summary>
-[SupportedOSPlatform("macos")]
+/// <summary>A fresh directory under the system temp path, deleted (after restoring permissions, on Windows after
+/// clearing read-only attributes) on dispose.</summary>
 public sealed class TempDir : IDisposable
 {
     private const UnixFileMode OwnerAll = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
@@ -31,6 +30,14 @@ public sealed class TempDir : IDisposable
     /// <summary>Gives the owner full access to every directory in the tree so it can be deleted.</summary>
     private static void RestorePermissions(string directory)
     {
+        if (OperatingSystem.IsWindows())
+        {
+            var all = new EnumerationOptions { AttributesToSkip = 0, RecurseSubdirectories = true, IgnoreInaccessible = true };
+            foreach (var entry in new DirectoryInfo(directory).EnumerateFileSystemInfos("*", all))
+                if (entry.Attributes.HasFlag(FileAttributes.ReadOnly))
+                    entry.Attributes &= ~FileAttributes.ReadOnly;
+            return;
+        }
         File.SetUnixFileMode(directory, File.GetUnixFileMode(directory) | OwnerAll);
         var options = new EnumerationOptions { AttributesToSkip = FileAttributes.ReparsePoint, IgnoreInaccessible = false };
         foreach (var child in Directory.EnumerateDirectories(directory, "*", options))
