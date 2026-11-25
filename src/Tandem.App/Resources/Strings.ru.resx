@@ -426,6 +426,9 @@
   <data name="Menu_shell_openWith" xml:space="preserve">
     <value>Открыть в программе…</value>
   </data>
+  <data name="Menu_file_copyPath" xml:space="preserve">
+    <value>Копировать путь</value>
+  </data>
 
   <!-- Main menu: View menu and favourites/history menus -->
   <data name="Menu_Sidebar" xml:space="preserve">
@@ -769,6 +772,27 @@
   </data>
   <data name="Context_Reveal" xml:space="preserve">
     <value>Показать в Finder</value>
+  </data>
+  <data name="Context_CopyPath" xml:space="preserve">
+    <value>Копировать путь</value>
+  </data>
+  <data name="CopyPath_Copied" xml:space="preserve">
+    <value>Путь скопирован</value>
+  </data>
+  <data name="CopyPath_CopiedCount_One" xml:space="preserve">
+    <value>Скопирован {0} путь</value>
+  </data>
+  <data name="CopyPath_CopiedCount_Few" xml:space="preserve">
+    <value>Скопировано {0} пути</value>
+  </data>
+  <data name="CopyPath_CopiedCount_Many" xml:space="preserve">
+    <value>Скопировано {0} путей</value>
+  </data>
+  <data name="CopyPath_ControlCharacters" xml:space="preserve">
+    <value>Имя содержит управляющие символы, путь не скопирован</value>
+  </data>
+  <data name="CopyPath_Failed" xml:space="preserve">
+    <value>Не удалось скопировать путь</value>
   </data>
   <data name="Context_QuickLook" xml:space="preserve">
     <value>Быстрый просмотр</value>

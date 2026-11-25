@@ -53,6 +53,7 @@ public class KeyMapTests
     [InlineData("Cmd+Shift+K", "net.disconnect")]
     [InlineData("Ctrl+Shift+F", "net.disconnect")]
     [InlineData("Cmd+Alt+K", "net.console")]
+    [InlineData("Cmd+Alt+C", "file.copyPath")]
     public void Default_binding(string chord, string id) => Assert.Equal(id, KeyMap.Default.Find(KeyChord.Parse(chord)));
 
     [Fact]
@@ -64,6 +65,7 @@ public class KeyMapTests
             "file.move=F6", "file.move=Cmd+6", "file.mkdir=F7", "file.mkdir=Cmd+7", "file.delete=F8",
             "file.delete=Cmd+Back", "file.deletePermanent=Shift+F8", "file.deletePermanent=Cmd+Alt+Back",
             "file.rename=Shift+F6", "file.rename=F2", "file.rename=Cmd+Shift+R", "file.quickLook=Cmd+Y", "file.properties=Cmd+I",
+            "file.copyPath=Cmd+Alt+C",
             "panel.switch=Tab", "panel.refresh=Cmd+R", "panel.swap=Cmd+U", "panel.mirror=Cmd+Shift+U",
             "nav.up=Back", "nav.up=Cmd+Up", "nav.enter=Cmd+Down", "nav.back=Cmd+OemOpenBrackets",
             "nav.forward=Cmd+OemCloseBrackets",

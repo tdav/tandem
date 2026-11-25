@@ -53,6 +53,9 @@ internal sealed class TestApp : IAsyncDisposable
     /// <summary>Quarantine marks kept in memory, by path; never touches real files.</summary>
     public FakeQuarantine Quarantine { get; } = new();
 
+    /// <summary>Records the text put on the clipboard; never touches the system clipboard.</summary>
+    public RecordingClipboard Clipboard { get; } = new();
+
     public FakeVolumeService Volumes { get; }
     public string StateDirectory { get; }
     public MainViewModel Main { get; private set; } = null!;
@@ -100,7 +103,7 @@ internal sealed class TestApp : IAsyncDisposable
         IQuickLook? quickLook = null, IFileMetadataService? metadata = null,
         IReadOnlyList<IFileSystemProvider>? extraProviders = null, IProcessRunner? processes = null,
         IReadOnlyList<IFileMounter>? mounters = null, IWindowService? windows = null,
-        IQuarantine? quarantine = null, IToolWindows? toolWindows = null)
+        IQuarantine? quarantine = null, IToolWindows? toolWindows = null, ITextClipboard? clipboard = null)
     {
         dialogs ??= new ScriptedDialogs();
         var providers = new ProviderRegistry();
@@ -115,7 +118,8 @@ internal sealed class TestApp : IAsyncDisposable
             trash ?? platform,
             new InMemoryNativeCopy(fs), processes ?? platform, new OperationQueue(), new UnrestrictedAccessBroker(),
             new ErrorLog(logFile), dialogs, new TempFileStore(tempDirectory),
-            windows ?? new WindowService(dialogs, providers), toolWindows ?? new ToolWindows(), quarantine);
+            windows ?? new WindowService(dialogs, providers), toolWindows ?? new ToolWindows(), quarantine,
+            Clipboard: clipboard ?? new RecordingClipboard());
     }
 
     /// <param name="progressWindowDelay">How long before the progress window appears; never, when null.</param>
@@ -140,7 +144,7 @@ internal sealed class TestApp : IAsyncDisposable
         var app = new TestApp(fs, new FakeVolumeService(), stateDirectory);
         var services = Services(fs, app.Volumes, app.LogFile, Path.Combine(stateDirectory, "tmp"), app.Dialogs, app.Trash,
             trashCapable, removedCapabilities, app.Shell, app.QuickLook, withMetadata ? app.Metadata : null,
-            extraProviders, processes, mounters, quarantine: app.Quarantine,
+            extraProviders, processes, mounters, quarantine: app.Quarantine, clipboard: app.Clipboard,
             toolWindows: scriptedToolWindows ? new ScriptedToolWindows() : new ToolWindows());
         if (configureServices is not null) services = configureServices(services, stateDirectory);
         app.Main = await Composition.StartAsync(services, stateDirectory, Home,
@@ -364,6 +368,21 @@ internal sealed class CapabilityProvider(IFileSystemProvider inner, ProviderCapa
     public Task<bool> IsSameEntryAsync(VfsPath a, VfsPath b, CancellationToken ct) => inner.IsSameEntryAsync(a, b, ct);
     public Task<string> GetVolumeKeyAsync(VfsPath path, CancellationToken ct) => inner.GetVolumeKeyAsync(path, ct);
     public IDisposable? Watch(VfsPath directory, Action changed) => inner.Watch(directory, changed);
+}
+
+/// <summary>Keeps the texts put on the clipboard, in order, instead of the system clipboard.</summary>
+internal sealed class RecordingClipboard : ITextClipboard
+{
+    public List<string> Texts { get; } = [];
+
+    /// <summary>When false, nothing is taken and every call reports failure.</summary>
+    public bool Available { get; set; } = true;
+
+    public Task<bool> SetTextAsync(string text)
+    {
+        if (Available) Texts.Add(text);
+        return Task.FromResult(Available);
+    }
 }
 
 /// <summary>Records every shell call instead of launching anything. A failure set in <see cref="Failure"/> is thrown

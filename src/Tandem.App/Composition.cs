@@ -31,7 +31,8 @@ namespace Tandem.App;
 /// it is created (at start) and when the services are disposed (at exit). <see cref="Windows"/> shows the editor,
 /// viewer, search and settings windows; <see cref="ToolWindows"/> the windows of the tools and of the network part.
 /// Without <see cref="Quarantine"/> nothing taken out of an archive gets the
-/// archive's quarantine mark (<see cref="QuarantineCarrier"/>).</summary>
+/// archive's quarantine mark (<see cref="QuarantineCarrier"/>). Without <see cref="Clipboard"/> nothing can be put
+/// on the clipboard (Copy Path is off).</summary>
 public sealed record AppServices(
     ProviderRegistry Providers,
     IVolumeService Volumes,
@@ -52,7 +53,8 @@ public sealed record AppServices(
     NetConnections? Net = null,
     INetDialogs? NetDialogs = null,
     ISecretStore? Secrets = null,
-    SshConsoles? Consoles = null) : IDisposable
+    SshConsoles? Consoles = null,
+    ITextClipboard? Clipboard = null) : IDisposable
 {
     /// <summary>Disposes the services that hold resources (the volume watch) and empties <see cref="Temp"/>.</summary>
     public void Dispose()
@@ -116,7 +118,7 @@ public static class Composition
         return new AppServices(providers, volumes, shell, quickLook, metadata, trash, nativeCopy, processes,
             new OperationQueue(), broker, log, dialogs, new TempFileStore(AppDirectories.Temp(homeDirectory)),
             new WindowService(dialogs, providers), new ToolWindows(), quarantine, net, netDialogs, secrets,
-            new SshConsoles(net, new SshShellTransportFactory()));
+            new SshConsoles(net, new SshShellTransportFactory()), new WindowTextClipboard());
     }
 
     public static IReadOnlyDictionary<NetProtocol, IRemoteSessionFactory> CreateSessionFactories()

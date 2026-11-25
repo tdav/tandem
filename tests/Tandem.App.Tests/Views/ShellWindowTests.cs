@@ -125,7 +125,7 @@ public class ShellWindowTests : LanguageTestBase
         Assert.NotNull(menu);
         Assert.Equal(
         [
-            "Open", "Open With", OperatingSystem.IsWindows() ? "Show in Explorer" : "Show in Finder", "Quick Look", "Copy…", "Move…", "Rename", "Delete", "Pack…",
+            "Open", "Open With", OperatingSystem.IsWindows() ? "Show in Explorer" : "Show in Finder", "Copy Path", "Quick Look", "Copy…", "Move…", "Rename", "Delete", "Pack…",
             "Unpack…", "Properties",
         ], Headers(menu));
         var copy = menu.Items.OfType<MenuItem>().Single(i => i.Tag as string == CommandIds.FileCopy);

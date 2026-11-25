@@ -18,6 +18,7 @@ public static class CommandIds
     public const string FileRename = "file.rename";
     public const string FileQuickLook = "file.quickLook";
     public const string FileProperties = "file.properties";
+    public const string FileCopyPath = "file.copyPath";
 
     public const string PanelSwitch = "panel.switch";
     public const string PanelRefresh = "panel.refresh";

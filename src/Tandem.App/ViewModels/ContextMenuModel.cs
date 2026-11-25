@@ -59,7 +59,7 @@ public sealed class ContextMenuItem
 /// space below the rows (acting on the folder).</summary>
 public static class ContextMenuModel
 {
-    /// <summary>Open, (Show Package Contents, for an application bundle,) Open With ▸, Reveal in Finder, Quick Look,
+    /// <summary>Open, (Show Package Contents, for an application bundle,) Open With ▸, Reveal in Finder, Copy Path, Quick Look,
     /// Copy, Move, Rename, Delete, Pack, Unpack, Properties. A file of a provider that is not the local disk opens through a
     /// temporary copy, so Open is always available.</summary>
     public static IReadOnlyList<ContextMenuItem> ForRow(MainViewModel main)
@@ -82,6 +82,7 @@ public static class ContextMenuModel
                 ChordOf(main, CommandIds.ShellOpenWith), main.Commands.CanExecute(CommandIds.ShellOpenWith), null,
                 async () => await OpenWithItemsAsync(main) ?? NoApps()),
             Command(main, CommandIds.ShellReveal, "Context_Reveal"),
+            Command(main, CommandIds.FileCopyPath, "Context_CopyPath"),
             Command(main, CommandIds.FileQuickLook, "Context_QuickLook"),
             Command(main, CommandIds.FileCopy, "Context_Copy"),
             Command(main, CommandIds.FileMove, "Context_Move"),
