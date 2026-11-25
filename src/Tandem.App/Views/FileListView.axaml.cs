@@ -2,6 +2,7 @@ using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Controls.Templates;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
@@ -22,7 +23,10 @@ namespace Tandem.App.Views;
 /// the row is marked) to the other panel or to Finder, offering copy and move; files dragged onto the list from
 /// Finder or the other panel go, through the copy/move dialog, into the folder row under the pointer or the panel's
 /// folder; the dialog asks whether to copy or move. The target is highlighted while the drag is over it.
-/// Look: the side's list layout (font, row height, columns) and the window's colour rules for file rows.</summary>
+/// Look: the side's list layout (font, row height, columns) and the window's colour rules for file rows.
+/// The side's list mode: the full view is the list as written in the XAML (one row per entry, the layout's columns);
+/// the brief view puts <c>BriefPanel</c> and <c>BriefRowTemplate</c> in its place (names in columns, scrolling
+/// sideways; the wheel scrolls by columns) and tells the side how many rows a column holds.</summary>
 public partial class FileListView : UserControl
 {
     private const string DropTargetClass = "dropTarget";
@@ -34,10 +38,16 @@ public partial class FileListView : UserControl
     private IDataTransfer? _draggedData;
     private IReadOnlyList<string>? _draggedPaths;
     private SideViewModel? _side;
+    private readonly ITemplate<Panel?> _fullPanel;
+    private readonly IDataTemplate? _fullTemplate;
+    private BriefColumnsPanel? _briefPanel;
 
     public FileListView()
     {
         InitializeComponent();
+        _fullPanel = Rows.ItemsPanel;
+        _fullTemplate = Rows.ItemTemplate;
+        Rows.AddHandler(PointerWheelChangedEvent, OnPointerWheelChanged, RoutingStrategies.Tunnel);
         DragStarter = StartSystemDragAsync;
         Rows.AddHandler(PointerPressedEvent, OnPointerPressed, RoutingStrategies.Tunnel);
         Rows.AddHandler(PointerMovedEvent, OnPointerMoved, RoutingStrategies.Tunnel, handledEventsToo: true);
@@ -67,7 +77,17 @@ public partial class FileListView : UserControl
         };
         Rows.SizeChanged += (_, _) => RaisePageSize();
         // Rows matching a colour rule: set when a container takes a row, and on every shown row when the rules change.
-        Rows.ContainerPrepared += (_, e) => PaintRow(e.Container);
+        Rows.ContainerPrepared += (_, e) =>
+        {
+            PaintRow(e.Container);
+            // The cursor's row made after the cursor moved (the list brings a far row into view after telling of the
+            // move): the focus goes to it from the row it was on.
+            if (e.Index == Rows.SelectedIndex && Rows.IsKeyboardFocusWithin && !e.Container.IsKeyboardFocusWithin)
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (OwnsFocus()) FocusCursorRow();
+                }, DispatcherPriority.Loaded);
+        };
     }
 
     protected override void OnDataContextChanged(EventArgs e)
@@ -84,12 +104,68 @@ public partial class FileListView : UserControl
             _side.PropertyChanged += OnSidePropertyChanged;
             _side.Layout.PropertyChanged += OnLayoutPropertyChanged;
         }
+        ApplyListMode();
         PaintRows();
     }
 
     private void OnSidePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(SideViewModel.FileColors)) PaintRows();
+        else if (e.PropertyName == nameof(SideViewModel.IsBrief)) ApplyListMode();
+    }
+
+    /// <summary>The list as the side's mode wants it. Changing the panel makes new rows: the cursor's row is brought
+    /// into view, and gets the focus back when the list had it.</summary>
+    private void ApplyListMode()
+    {
+        var brief = _side?.IsBrief == true;
+        var template = brief ? (IDataTemplate)Resources["BriefRowTemplate"]! : _fullTemplate;
+        var panel = brief ? (ITemplate<Panel?>)Resources["BriefPanel"]! : _fullPanel;
+        if (ReferenceEquals(Rows.ItemsPanel, panel)) return;
+        var hadFocus = OwnsFocus();
+        Rows.ItemTemplate = template;
+        Rows.ItemsPanel = panel;
+        ScrollViewer.SetHorizontalScrollBarVisibility(Rows, brief ? ScrollBarVisibility.Auto : ScrollBarVisibility.Disabled);
+        ScrollViewer.SetVerticalScrollBarVisibility(Rows, brief ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto);
+        if (!brief && _briefPanel is not null)
+        {
+            _briefPanel.GeometryChanged -= OnBriefGeometryChanged;
+            _briefPanel = null;
+        }
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (Rows.SelectedIndex >= 0) Rows.ScrollIntoView(Rows.SelectedIndex);
+            if (hadFocus || OwnsFocus()) FocusCursorRow();
+        }, DispatcherPriority.Loaded);
+    }
+
+    /// <summary>The brief view's panel was made: the side follows its rows per column and columns shown.</summary>
+    internal void OnBriefPanelAttached(BriefColumnsPanel panel)
+    {
+        if (ReferenceEquals(_briefPanel, panel)) return;
+        if (_briefPanel is not null) _briefPanel.GeometryChanged -= OnBriefGeometryChanged;
+        _briefPanel = panel;
+        panel.GeometryChanged += OnBriefGeometryChanged;
+        OnBriefGeometryChanged(panel, EventArgs.Empty);
+    }
+
+    private void OnBriefGeometryChanged(object? sender, EventArgs e)
+    {
+        if (sender is BriefColumnsPanel panel && ReferenceEquals(panel, _briefPanel))
+            _side?.ReportBriefLayout(panel.RowsPerColumn, panel.VisibleColumns);
+    }
+
+    /// <summary>In the brief view a mouse wheel scrolls sideways, a column per notch; a sideways scroll (a
+    /// trackpad's) goes to the list as it is.</summary>
+    private void OnPointerWheelChanged(object? sender, PointerWheelEventArgs e)
+    {
+        if (_briefPanel is not { ColumnWidth: > 0 } panel || _side?.IsBrief != true) return;
+        if (Math.Abs(e.Delta.Y) <= Math.Abs(e.Delta.X)) return;
+        if (Rows.FindDescendantOfType<ScrollViewer>() is not { } scroller) return;
+        var maxX = Math.Max(0, scroller.Extent.Width - scroller.Viewport.Width);
+        var x = Math.Clamp(scroller.Offset.X - e.Delta.Y * panel.ColumnWidth, 0, maxX);
+        scroller.Offset = new Vector(x, scroller.Offset.Y);
+        e.Handled = true;
     }
 
     private void OnLayoutPropertyChanged(object? sender, PropertyChangedEventArgs e)

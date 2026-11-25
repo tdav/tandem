@@ -16,6 +16,43 @@
         <StreamGeometry x:Key="HiddenFileBody">M4.5 1.5h5l3 3v9a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1Z</StreamGeometry>
         <StreamGeometry x:Key="HiddenFileDetail">M9.5 1.5v3h3Z</StreamGeometry>
         <StreamGeometry x:Key="HiddenFileLines">M5.5 8.5h5m-5 2.5h4</StreamGeometry>
+        <!-- The brief view's items panel; FileListView puts it, BriefRowTemplate and sideways scrolling in place of
+             the list's own while the side shows the brief view. -->
+        <ItemsPanelTemplate x:Key="BriefPanel">
+            <v:BriefColumnsPanel
+                ItemHeight="{Binding $parent[v:FileListView].((vm:SideViewModel)DataContext).Layout.RowHeight}" />
+        </ItemsPanelTemplate>
+        <!-- The brief view's row: the name cell as the full view's (icon, name, rename editor), the name without its
+             extension, and the extension at the right edge. A result of another folder does not show where it lies. -->
+        <DataTemplate x:Key="BriefRowTemplate" x:DataType="vm:EntryRowViewModel">
+            <Grid Classes.marked="{Binding IsSelected}" Classes.folder="{Binding IsDirectoryLike}" ColumnDefinitions="*,Auto">
+                <DockPanel x:Name="RowNameCell">
+                    <Image DockPanel.Dock="Left" Classes="entryIcon" Classes.folder="{Binding IsDirectoryLike}"
+                           Classes.parent="{Binding IsParentLink}" Width="16" Height="16" Margin="0,0,6,0"
+                           VerticalAlignment="Center" IsHitTestVisible="False" IsVisible="{Binding !IsHidden}" />
+                    <Panel x:Name="HiddenIcon" DockPanel.Dock="Left" Classes="hiddenIcon"
+                           Classes.folder="{Binding IsDirectoryLike}" Width="16" Height="16" Margin="0,0,6,0"
+                           VerticalAlignment="Center" IsHitTestVisible="False" IsVisible="{Binding IsHidden}">
+                        <Path x:Name="HiddenIconBody" />
+                        <Path x:Name="HiddenIconDetail" />
+                        <Path x:Name="HiddenIconLines" />
+                    </Panel>
+                    <Panel>
+                        <TextBlock x:Name="RowName" Classes="name" Text="{Binding NameWithoutExtension}"
+                                   TextTrimming="CharacterEllipsis" IsVisible="{Binding !IsRenaming}" />
+                        <ContentControl Content="{Binding Rename}" IsVisible="{Binding IsRenaming}">
+                            <ContentControl.ContentTemplate>
+                                <DataTemplate x:DataType="vm:InlineRenameViewModel">
+                                    <v:InlineRenameEditor />
+                                </DataTemplate>
+                            </ContentControl.ContentTemplate>
+                        </ContentControl>
+                    </Panel>
+                </DockPanel>
+                <TextBlock x:Name="RowExtension" Grid.Column="1" Text="{Binding Extension}" Margin="6,0,2,0"
+                           IsVisible="{Binding !IsRenaming}" />
+            </Grid>
+        </DataTemplate>
     </UserControl.Resources>
     <UserControl.Styles>
         <Style Selector="Image.entryIcon">

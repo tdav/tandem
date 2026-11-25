@@ -34,7 +34,8 @@ three DLLs beside it). The exe is not signed, so SmartScreen may warn once:
 "More info" → "Run anyway".
 
 On Windows the shortcuts use Ctrl where macOS uses ⌘, in the style of classic two-pane managers (Ctrl+R reread,
-Ctrl+U swap panels, Ctrl+D favourites, Ctrl+F connect, Ctrl+F3…F7 sort, Delete / Shift+Delete). The root `/` of the
+Ctrl+U swap panels, Ctrl+D favourites, Ctrl+F connect, Ctrl+F3…F7 sort, Ctrl+F1 / Ctrl+F2 brief / full view,
+Delete / Shift+Delete). The root `/` of the
 local disk lists the drives. Settings live in `%APPDATA%\Tandem`, logs in `%LOCALAPPDATA%\Tandem\Logs`. Not
 available on Windows: Finder tags, Quick Look (the built-in quick view, Ctrl+Q, works), the file owner, "Open with"
 lists. Saved passwords go to the Windows Credential Manager.
@@ -78,7 +79,10 @@ Stage 2 features:
   archives inside archives, passwords; zip editing (copy in, delete, rename, new folder, F4); packing into zip, tar
   and tar.gz (Alt+F5) and unpacking (Alt+F9);
 - settings (Cmd+,): key rebinding, themes (light, dark, system), colours by file type, columns
-  separately for each panel, font and row height, a button bar with user commands.
+  separately for each panel, font and row height, a button bar with user commands;
+- brief view of a panel (View → Brief, Ctrl+Cmd+B; Ctrl+F1 on Windows): names only, in columns filled top to bottom,
+  scrolling sideways; ← and → move by a column. View → Full (Ctrl+Cmd+D; Ctrl+F2 on Windows) brings the detailed
+  view back. Each panel keeps its own view across restarts.
 
 Reading RAR and 7z archives with an encrypted file list is not covered by automated tests: the project has no such
 test archives, so it can only be checked on your own files. Other limitations are listed at the end of

@@ -78,6 +78,9 @@ public sealed partial class SideViewModel : ObservableObject
     /// <summary>Whether the quick-view panel shows in place of this side's file list.</summary>
     public bool ShowsQuickView => _main.QuickView.IsOpen && _main.QuickView.Side == Side;
 
+    /// <summary>The column headers show with the full view's list; the brief view has no columns to head.</summary>
+    public bool ShowsColumnHeaders => !ShowsQuickView && !IsBrief;
+
     /// <summary>The quick-view panel's viewer while this side shows it; null otherwise, so only the side that shows
     /// the panel lays out its pages.</summary>
     public ViewerViewModel? QuickViewer => ShowsQuickView ? _main.QuickView.Viewer : null;
@@ -439,6 +442,7 @@ public sealed partial class SideViewModel : ObservableObject
     internal void OnQuickViewChanged()
     {
         OnPropertyChanged(nameof(ShowsQuickView));
+        OnPropertyChanged(nameof(ShowsColumnHeaders));
         OnPropertyChanged(nameof(QuickViewer));
     }
 
@@ -450,6 +454,7 @@ public sealed partial class SideViewModel : ObservableObject
         _listMode = ListMode;
         OnPropertyChanged(nameof(ListMode));
         OnPropertyChanged(nameof(IsBrief));
+        OnPropertyChanged(nameof(ShowsColumnHeaders));
     }
 
     /// <summary>Takes this side's part of the settings: the layout of its list and the colour rules.</summary>

@@ -70,6 +70,10 @@ public sealed partial class EntryRowViewModel : ObservableObject
 
     public string Extension => _extension ??= Entry!.Extension;
 
+    /// <summary>The name less "." and <see cref="Extension"/>, for the brief view, which shows the extension apart;
+    /// the whole name when there is no extension (folders, "..", ".profile").</summary>
+    public string NameWithoutExtension => Extension.Length == 0 ? Name : Name[..^(Extension.Length + 1)];
+
     /// <summary>"" for an entry of the folder shown; for one that lies elsewhere (<see cref="IsForeign"/>, e.g. a
     /// search result), its folder as the user reads it.</summary>
     public string LocationText => _locationText ??= _displayPathOf is { } displayPathOf
