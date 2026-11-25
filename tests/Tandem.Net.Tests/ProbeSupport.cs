@@ -28,7 +28,8 @@ internal static class ProbeSupport
     private static bool IsRefused(int port)
     {
         using var probe = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        // Windows retries a refused loopback connect for about two seconds before it reports the refusal.
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(OperatingSystem.IsWindows() ? 6 : 2));
         try
         {
             probe.ConnectAsync(IPAddress.Loopback, port, timeout.Token).AsTask().GetAwaiter().GetResult();

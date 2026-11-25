@@ -96,6 +96,7 @@ public sealed class LocalProviderTests : IDisposable
     [Fact]
     public async Task Dotfile_is_hidden()
     {
+        Assert.SkipUnless(OperatingSystem.IsMacOS(), "On Windows only the Hidden attribute hides a file.");
         File.WriteAllText(_temp.Combine(".secret"), "x");
         File.WriteAllText(_temp.Combine("plain"), "x");
 

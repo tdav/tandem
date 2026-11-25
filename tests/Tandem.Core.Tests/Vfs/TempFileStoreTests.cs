@@ -191,6 +191,7 @@ public sealed class TempFileStoreTests : IDisposable
     [Fact]
     public void Default_directory_is_in_the_apps_caches()
     {
+        Assert.SkipUnless(OperatingSystem.IsMacOS(), "macOS folders; Windows uses AppDirectories.Temp.");
         Assert.Equal("/Users/u/Library/Caches/Tandem/tmp", TempFileStore.DefaultDirectory("/Users/u"));
     }
 
