@@ -5,3 +5,5 @@ dist/
 .DS_Store
 *.user
 .superpowers/
+/.vs/Tandem.slnx
+/.vs/ProjectEvaluation
