@@ -18,7 +18,9 @@ using Tandem.Net.Ftp;
 using Tandem.Net.Remote;
 using Tandem.Net.Sftp;
 using Tandem.Net.Ssh;
+using Tandem.Core.Platform.Portable;
 using Tandem.Platform.Mac;
+using Tandem.Platform.Windows;
 
 namespace Tandem.App;
 
@@ -63,28 +65,57 @@ public sealed record AppServices(
 /// <summary>The composition root: builds the services and view models and starts them in the right order.</summary>
 public static class Composition
 {
-    /// <summary>The real services: the local disk with unrestricted access, the macOS implementations, and the
-    /// temporary files in <see cref="TempFileStore.DefaultDirectory"/> of <paramref name="homeDirectory"/> (emptied
-    /// now).</summary>
-    [SupportedOSPlatform("macos")]
+    /// <summary>The real services of the running system: <see cref="CreateMacServices"/> or
+    /// <see cref="CreateWindowsServices"/>.</summary>
+    /// <exception cref="PlatformNotSupportedException">Neither macOS nor Windows.</exception>
     public static AppServices CreatePlatformServices(ErrorLog log, string homeDirectory)
     {
+        if (OperatingSystem.IsMacOS()) return CreateMacServices(log, homeDirectory);
+        if (OperatingSystem.IsWindows()) return CreateWindowsServices(log, homeDirectory);
+        throw new PlatformNotSupportedException("Tandem runs on macOS and Windows.");
+    }
+
+    /// <summary>The real services on macOS: the local disk with unrestricted access, the macOS implementations, and
+    /// the temporary files in <see cref="AppDirectories.Temp"/> of <paramref name="homeDirectory"/> (emptied
+    /// now).</summary>
+    [SupportedOSPlatform("macos")]
+    public static AppServices CreateMacServices(ErrorLog log, string homeDirectory)
+    {
         var broker = new UnrestrictedAccessBroker();
-        var providers = new ProviderRegistry();
-        providers.Register(new LocalFileSystemProvider(broker, new MacExclusiveRename()));
         var processes = new ProcessRunner();
+        return Create(log, homeDirectory, broker, new LocalFileSystemProvider(broker, new MacExclusiveRename()),
+            new MacVolumeService(), new MacShellIntegration(processes), new MacQuickLook(processes),
+            new MacFileMetadataService(broker), new MacTrash(broker), new MacNativeCopy(broker), processes,
+            new MacQuarantine(broker), new MacKeychainSecretStore());
+    }
+
+    /// <summary>The real services on Windows: as on macOS, with the Windows implementations (Recycle Bin, Explorer,
+    /// Credential Manager, the Zone.Identifier mark) and the portable copy; no tags or owner, no Quick Look.</summary>
+    [SupportedOSPlatform("windows")]
+    public static AppServices CreateWindowsServices(ErrorLog log, string homeDirectory)
+    {
+        var broker = new UnrestrictedAccessBroker();
+        return Create(log, homeDirectory, broker, new LocalFileSystemProvider(broker, new WinExclusiveRename()),
+            new WinVolumeService(), new WinShellIntegration(), new WinQuickLook(), metadata: null, new WinTrash(),
+            new PortableNativeCopy(), new ProcessRunner(), new WinQuarantine(), new WinCredentialSecretStore());
+    }
+
+    private static AppServices Create(ErrorLog log, string homeDirectory, IFileAccessBroker broker,
+        LocalFileSystemProvider local, IVolumeService volumes, IShellIntegration shell, IQuickLook quickLook,
+        IFileMetadataService? metadata, ITrash trash, INativeCopy nativeCopy, IProcessRunner processes,
+        IQuarantine quarantine, ISecretStore secrets)
+    {
+        var providers = new ProviderRegistry();
+        providers.Register(local);
         var dialogs = new DialogService();
         var netDialogs = new NetDialogs(() => dialogs.Owner);
-        var secrets = new MacKeychainSecretStore();
         var stateDirectory = AppDirectories.State(homeDirectory);
         var net = new NetConnections(providers, new ConnectionStore(stateDirectory), new TrustStore(stateDirectory),
             secrets, new DialogNetPrompts(netDialogs), CreateSessionFactories(), CreateKeyReader(providers, homeDirectory),
             new CredentialVault(stateDirectory));
-        return new AppServices(providers, new MacVolumeService(), new MacShellIntegration(processes),
-            new MacQuickLook(processes), new MacFileMetadataService(broker), new MacTrash(broker),
-            new MacNativeCopy(broker), processes, new OperationQueue(), broker, log, dialogs,
-            new TempFileStore(AppDirectories.Temp(homeDirectory)), new WindowService(dialogs, providers),
-            new ToolWindows(), new MacQuarantine(broker), net, netDialogs, secrets,
+        return new AppServices(providers, volumes, shell, quickLook, metadata, trash, nativeCopy, processes,
+            new OperationQueue(), broker, log, dialogs, new TempFileStore(AppDirectories.Temp(homeDirectory)),
+            new WindowService(dialogs, providers), new ToolWindows(), quarantine, net, netDialogs, secrets,
             new SshConsoles(net, new SshShellTransportFactory()));
     }
 

@@ -27,6 +27,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Tandem.Core\Tandem.Core.csproj" />
     <ProjectReference Include="..\Tandem.Platform.Mac\Tandem.Platform.Mac.csproj" />
+    <ProjectReference Include="..\Tandem.Platform.Windows\Tandem.Platform.Windows.csproj" />
     <ProjectReference Include="..\Tandem.Archives\Tandem.Archives.csproj" />
     <ProjectReference Include="..\Tandem.Net\Tandem.Net.csproj" />
   </ItemGroup>

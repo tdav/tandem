@@ -34,6 +34,7 @@ public sealed class VaultCompositionTests
     [Fact]
     public async Task Platform_connections_unlock_the_documented_portable_format()
     {
+        Assert.SkipUnless(OperatingSystem.IsMacOS(), "macOS folders and Keychain");
         var home = Directory.CreateTempSubdirectory("tandem-vault-format-");
         try
         {
