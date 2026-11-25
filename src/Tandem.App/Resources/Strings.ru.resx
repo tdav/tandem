@@ -1541,6 +1541,15 @@
   </data>
   <data name="Menu_net_console_show" xml:space="preserve"><value>Показать SSH-консоль</value></data>
 
+  <data name="Menu_shell_reveal_Windows" xml:space="preserve">
+    <value>Показать в Проводнике</value>
+  </data>
+  <data name="Context_Reveal_Windows" xml:space="preserve">
+    <value>Показать в Проводнике</value>
+  </data>
+  <data name="Shell_RevealFailed_Windows" xml:space="preserve">
+    <value>Не удалось показать «{0}» в Проводнике.</value>
+  </data>
   <!-- stage3:tools-a begin (Rename_*, Checksum_*, FolderSize_*) -->
   <data name="FolderSize_Computing" xml:space="preserve"><value>…</value></data>
   <data name="FolderSize_AtLeast" xml:space="preserve"><value>≥ {0}</value></data>

@@ -1550,6 +1550,15 @@ Folder</value>
   </data>
   <data name="Menu_net_console_show" xml:space="preserve"><value>Show SSH Console</value></data>
 
+  <data name="Menu_shell_reveal_Windows" xml:space="preserve">
+    <value>Show in Explorer</value>
+  </data>
+  <data name="Context_Reveal_Windows" xml:space="preserve">
+    <value>Show in Explorer</value>
+  </data>
+  <data name="Shell_RevealFailed_Windows" xml:space="preserve">
+    <value>Could not show “{0}” in Explorer.</value>
+  </data>
   <!-- stage3:tools-a begin (Rename_*, Checksum_*, FolderSize_*) -->
   <data name="FolderSize_Computing" xml:space="preserve"><value>…</value></data>
   <data name="FolderSize_AtLeast" xml:space="preserve"><value>≥ {0}</value></data>

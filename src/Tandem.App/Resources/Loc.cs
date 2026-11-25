@@ -31,13 +31,16 @@ public static class Loc
     public static void SetLanguage(string? code) => _culture = Resolve(code);
 
     /// <summary>The text for <paramref name="key"/> in the current language; the key itself when there is none.</summary>
-    public static string Get(string key) => Strings.GetString(key, _culture) ?? key;
+    /// <remarks>On Windows a "{key}_Windows" text, where there is one, wins (Explorer instead of Finder).</remarks>
+    public static string Get(string key) =>
+        (OperatingSystem.IsWindows() ? Strings.GetString(key + "_Windows", _culture) : null)
+        ?? Strings.GetString(key, _culture) ?? key;
 
     /// <summary>The text for <paramref name="key"/> with its placeholders filled in from <paramref name="args"/>.</summary>
     public static string Format(string key, params object[] args)
     {
         var culture = _culture;
-        return string.Format(culture, Strings.GetString(key, culture) ?? key, args);
+        return string.Format(culture, Get(key), args);
     }
 
     /// <summary>The text for an enum member, stored under the key <c>&lt;EnumName&gt;_&lt;Member&gt;</c>.</summary>
