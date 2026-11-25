@@ -9,6 +9,7 @@
     <Project Path="src/Tandem.Core/Tandem.Core.csproj" />
     <Project Path="src/Tandem.Net/Tandem.Net.csproj" />
     <Project Path="src/Tandem.Platform.Mac/Tandem.Platform.Mac.csproj" />
+    <Project Path="src/Tandem.Platform.Windows/Tandem.Platform.Windows.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Tandem.App.Tests/Tandem.App.Tests.csproj" />
@@ -16,5 +17,6 @@
     <Project Path="tests/Tandem.Core.Tests/Tandem.Core.Tests.csproj" />
     <Project Path="tests/Tandem.Net.Tests/Tandem.Net.Tests.csproj" />
     <Project Path="tests/Tandem.Platform.Mac.Tests/Tandem.Platform.Mac.Tests.csproj" />
+    <Project Path="tests/Tandem.Platform.Windows.Tests/Tandem.Platform.Windows.Tests.csproj" />
   </Folder>
 </Solution>
