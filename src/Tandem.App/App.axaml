@@ -1,8 +1,12 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="Tandem.App.App"
+             Name="Tandem"
              RequestedThemeVariant="Default">
-    <!-- "Default" follows the system's light or dark appearance. -->
+    <!-- Name: the title of the macOS application menu (bold, leftmost in the menu bar) and of its system items
+         ("Hide Tandem", "Quit Tandem"); Avalonia also gives it to the process, so an unbundled `dotnet run` shows it
+         too. Without it the menu reads "Avalonia Application".
+         "Default" follows the system's light or dark appearance. -->
 
     <Application.Resources>
         <ResourceDictionary>
