@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="t">
+  <title id="t">Tandem — a pair of folders</title>
+  <!-- Concept 2: two folders, blue and amber, overlapping — the pair of places Tandem works between. -->
+  <path d="M20 54A14 14 0 0 1 34 40H78L96 58H166A14 14 0 0 1 180 72V146A14 14 0 0 1 166 160H34A14 14 0 0 1 20 146Z" fill="#1D4ED8"/>
+  <rect x="20" y="76" width="160" height="84" rx="14" fill="#3B82F6"/>
+  <path d="M76 110A14 14 0 0 1 90 96H134L152 114H222A14 14 0 0 1 236 128V202A14 14 0 0 1 222 216H90A14 14 0 0 1 76 202Z" fill="#D97706" stroke="#FFFFFF" stroke-width="8" paint-order="stroke"/>
+  <rect x="76" y="132" width="160" height="84" rx="14" fill="#FBBF24"/>
+</svg>
