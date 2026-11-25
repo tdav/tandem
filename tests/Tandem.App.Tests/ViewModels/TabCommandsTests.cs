@@ -133,6 +133,7 @@ public class TabCommandsTests : LanguageTestBase
     [AvaloniaFact]
     public async Task Pin_state_survives_save_and_load()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests and WindowsStartTests cover Windows.");
         await using var app = await StartWithFourTabsAsync();
         LeftTabs(app).Activate(LeftTabs(app).Tabs[2]);
         await app.Main.HandleKeyAsync(KeyChord.Parse("Ctrl+Cmd+P"));
@@ -148,6 +149,7 @@ public class TabCommandsTests : LanguageTestBase
     [AvaloniaFact]
     public async Task Tab_menu_lists_items_and_swaps_pin_label()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests and WindowsStartTests cover Windows.");
         await using var app = await StartWithFourTabsAsync();
         var tab = LeftTabs(app).Tabs[1];
 
@@ -188,6 +190,7 @@ public class TabCommandsTests : LanguageTestBase
     [AvaloniaFact]
     public async Task Main_menu_pin_item_follows_the_active_tab()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests and WindowsStartTests cover Windows.");
         await using var app = await StartWithFourTabsAsync();
         var items = MainMenuItems(MainMenu.Build(app.Main)).ToList();
         var pin = items.Single(i => i.CommandParameter as string == CommandIds.TabTogglePin);

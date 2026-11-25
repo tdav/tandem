@@ -216,6 +216,7 @@ public class HostedPanelTests : LanguageTestBase
     [AvaloniaFact]
     public async Task Nav_enter_goes_inside_app_bundle()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS application bundles.");
         var (app, _) = await StartAsync();
         await using var __ = app;
         await app.Left.NavigateToAsync(VfsPath.Local(TestApp.Home + "/Apps"));

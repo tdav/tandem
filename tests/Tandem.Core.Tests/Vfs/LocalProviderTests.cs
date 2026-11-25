@@ -181,7 +181,7 @@ public sealed class LocalProviderTests : IDisposable
         var broker = new CountingBroker();
         var fs = new LocalFileSystemProvider(broker);
         var file = _temp.Root.Combine("f.txt");
-        File.WriteAllText(file.Path, "x");
+        File.WriteAllText(file.ToOsPath(), "x");
 
         await ListAsync(fs, _temp.Root);
         Assert.Equal(1, broker.Count);
@@ -189,11 +189,11 @@ public sealed class LocalProviderTests : IDisposable
 
         (await fs.OpenReadAsync(file, Ct)).Dispose();
         Assert.Equal(2, broker.Count);
-        Assert.Equal(file.Path, broker.LastPath);
+        Assert.Equal(file.ToOsPath(), broker.LastPath);
 
         await fs.DeleteAsync(file, recursive: false, Ct);
         Assert.Equal(3, broker.Count);
-        Assert.False(File.Exists(file.Path));
+        Assert.False(File.Exists(file.ToOsPath()));
         Assert.Equal(0, broker.Open);
     }
 
@@ -214,14 +214,14 @@ public sealed class LocalProviderTests : IDisposable
     {
         var fs = new LocalFileSystemProvider(new DenyingBroker());
         var file = _temp.Root.Combine("f.txt");
-        File.WriteAllText(file.Path, "x");
+        File.WriteAllText(file.ToOsPath(), "x");
 
         await Assert.ThrowsAsync<VfsAccessDeniedException>(() => ListAsync(fs, _temp.Root));
         await Assert.ThrowsAsync<VfsAccessDeniedException>(() => fs.GetEntryAsync(file, Ct));
         await Assert.ThrowsAsync<VfsAccessDeniedException>(() => fs.OpenReadAsync(file, Ct));
         await Assert.ThrowsAsync<VfsAccessDeniedException>(() => fs.DeleteAsync(file, recursive: false, Ct));
         Assert.Throws<VfsAccessDeniedException>(() => fs.Watch(_temp.Root, () => { }));
-        Assert.True(File.Exists(file.Path));
+        Assert.True(File.Exists(file.ToOsPath()));
     }
 
     [Fact]

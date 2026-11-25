@@ -253,6 +253,7 @@ public class MainWindowTests : LanguageTestBase
     [AvaloniaFact]
     public async Task Ctrl_Cmd_3_sorts_by_size()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests and WindowsStartTests cover Windows.");
         await using var app = await TestApp.StartAsync();
 
         // Only the physical key says "3" (as with a layout whose digit row types other characters).
@@ -456,6 +457,7 @@ public class MainWindowTests : LanguageTestBase
     [AvaloniaFact]
     public async Task Main_menu_shows_the_new_shortcut()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests and WindowsStartTests cover Windows.");
         await using var app = await TestApp.StartAsync();
         NativeMenuItem Item(string id) =>
             AllItems(NativeMenu.GetMenu(app.Window)!).Single(i => i.CommandParameter as string == id);
@@ -484,6 +486,7 @@ public class MainWindowTests : LanguageTestBase
     [AvaloniaFact]
     public async Task New_shortcuts_update_the_same_menu_without_building_another()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests and WindowsStartTests cover Windows.");
         await using var app = await TestApp.StartAsync();
         var menu = NativeMenu.GetMenu(app.Window)!;
         var items = AllItems(menu).ToList();
@@ -517,6 +520,7 @@ public class MainWindowTests : LanguageTestBase
     [AvaloniaFact]
     public async Task Menu_lists_later_commands_disabled_and_shows_shortcuts()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests and WindowsStartTests cover Windows.");
         await using var app = await TestApp.StartAsync();
         var menu = NativeMenu.GetMenu(app.Window);
         Assert.NotNull(menu);
@@ -547,6 +551,7 @@ public class MainWindowTests : LanguageTestBase
     [AvaloniaFact]
     public async Task Tools_and_network_menus_list_every_new_command_in_order()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests and WindowsStartTests cover Windows.");
         await using var app = await TestApp.StartAsync();
         var menus = NativeMenu.GetMenu(app.Window)!.Items.OfType<NativeMenuItem>().ToList();
 

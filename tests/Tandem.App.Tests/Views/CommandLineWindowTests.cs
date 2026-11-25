@@ -51,6 +51,7 @@ public class CommandLineWindowTests : LanguageTestBase
     [AvaloniaFact]
     public async Task Enter_runs_the_typed_command_and_opens_the_output_pane()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "zsh arguments.");
         await using var f = await StartAsync();
         var splitter = f.App.Find<GridSplitter>("OutputSplitter");
         Assert.False(f.Pane.IsVisible);
@@ -98,6 +99,7 @@ public class CommandLineWindowTests : LanguageTestBase
     [AvaloniaFact]
     public async Task Panel_keys_do_not_fire_while_the_field_has_the_focus()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "zsh arguments.");
         await using var f = await StartAsync();
         var cursor = f.App.Left.CursorIndex;
         FocusField(f);

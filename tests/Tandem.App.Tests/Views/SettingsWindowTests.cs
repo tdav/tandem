@@ -149,6 +149,7 @@ public class SettingsWindowTests : LanguageTestBase, IDisposable
     [AvaloniaFact]
     public async Task Recorder_turns_a_key_press_into_a_chord()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests and WindowsStartTests cover Windows.");
         await using var app = await TestApp.StartAsync();
         var window = await OpenAsync(app);
         var mkdir = Row(window, CommandIds.FileMkdir);
@@ -190,6 +191,7 @@ public class SettingsWindowTests : LanguageTestBase, IDisposable
     [AvaloniaFact]
     public async Task Recording_starts_on_click_or_Return_not_on_focus()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests and WindowsStartTests cover Windows.");
         await using var app = await TestApp.StartAsync();
         var window = await OpenAsync(app);
         var mkdir = Row(window, CommandIds.FileMkdir);
@@ -240,6 +242,7 @@ public class SettingsWindowTests : LanguageTestBase, IDisposable
     [AvaloniaFact]
     public async Task Edited_row_keeps_its_selection_under_a_filter()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests and WindowsStartTests cover Windows.");
         await using var app = await TestApp.StartAsync();
         var window = await OpenAsync(app);
         Named<TextBox>(window, "ShortcutFilter").Text = "F7";
@@ -261,6 +264,7 @@ public class SettingsWindowTests : LanguageTestBase, IDisposable
     [AvaloniaFact]
     public async Task Ok_applies_theme_and_new_shortcut_immediately()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests and WindowsStartTests cover Windows.");
         await using var app = await TestApp.StartAsync();
         var window = await OpenAsync(app);
         window.Settings.Theme = ThemeChoice.Dark;
@@ -324,6 +328,7 @@ public class SettingsWindowTests : LanguageTestBase, IDisposable
     [AvaloniaFact]
     public async Task Fields_of_the_tabs_edit_the_model()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests and WindowsStartTests cover Windows.");
         await using var app = await TestApp.StartAsync(settings: AppSettings.Default with
         {
             FileColors = [new FileColorRule("*.md", "Green")],

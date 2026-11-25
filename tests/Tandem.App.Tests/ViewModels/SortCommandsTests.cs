@@ -58,6 +58,7 @@ public class SortCommandsTests : LanguageTestBase
     [AvaloniaFact]
     public async Task Sort_by_permissions_orders_rows_by_mode()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests and WindowsStartTests cover Windows.");
         var fs = SizedFileSystem();
         await fs.SetModeAsync(Tandem.Core.Vfs.VfsPath.Local(TestApp.Home + "/a.txt"),
             UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute, CancellationToken.None);
@@ -138,6 +139,7 @@ public class SortCommandsTests : LanguageTestBase
     [AvaloniaFact]
     public async Task Keyboard_sort_survives_save_and_load()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests and WindowsStartTests cover Windows.");
         await using var app = await TestApp.StartAsync(show: false);
         await app.Main.HandleKeyAsync(KeyChord.Parse("Ctrl+Cmd+3"));
         await app.Main.HandleKeyAsync(KeyChord.Parse("Ctrl+Cmd+R"));
@@ -153,6 +155,7 @@ public class SortCommandsTests : LanguageTestBase
     [AvaloniaFact]
     public async Task Sort_menu_checks_current_column_and_direction()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests and WindowsStartTests cover Windows.");
         await using var app = await TestApp.StartAsync(show: false);
         var menu = MainMenu.Build(app.Main);
         var items = AllItems(menu).ToList();

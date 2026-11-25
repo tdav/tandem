@@ -188,6 +188,7 @@ public class ShellCommandsTests : LanguageTestBase
     [AvaloniaFact]
     public async Task F4_uses_external_editor_for_local_file_when_configured()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix paths of the test home.");
         var processes = new FakeProcessRunner();
         await using var app = await TestApp.StartAsync(show: false, processes: processes,
             settings: Tandem.Core.Settings.AppSettings.Default with { ExternalEditor = "/Applications/My Editor.app" });
@@ -212,6 +213,7 @@ public class ShellCommandsTests : LanguageTestBase
     [AvaloniaFact]
     public async Task F4_with_a_plain_external_program_passes_the_file_as_its_argument()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "Unix paths of the test home.");
         var processes = new FakeProcessRunner();
         await using var app = await TestApp.StartAsync(show: false, processes: processes,
             settings: Tandem.Core.Settings.AppSettings.Default with { ExternalEditor = "~/bin/ed it" });
@@ -618,6 +620,7 @@ public class ShellCommandsTests : LanguageTestBase
     [AvaloniaFact]
     public async Task Row_menu_has_the_items_with_shortcuts_and_availability()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests and WindowsStartTests cover Windows.");
         await using var app = await StartAsync();
 
         var menu = app.Main.Left.ContextMenuForRow(IndexOf(app.Left, "notes.txt"));

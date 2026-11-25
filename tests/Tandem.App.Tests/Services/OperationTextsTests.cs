@@ -23,6 +23,7 @@ public class OperationTextsTests : LanguageTestBase
     [InlineData(5 /* EIO */, "IO")]
     public void Native_copy_errors_get_their_own_words(int errno, string kind)
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS errno texts (Platform.Mac).");
         var error = SystemErrors.FromErrno(errno);
 
         Assert.Equal(Loc.Format("OperationError_" + kind, Item.Path), OperationTexts.ForError(Item, error));
@@ -32,6 +33,7 @@ public class OperationTextsTests : LanguageTestBase
     [Fact]
     public void Disk_full_and_access_denied_read_as_such_in_both_languages()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS errno texts (Platform.Mac).");
         Assert.Equal("There is not enough space on the disk for /dst/a.txt.",
             OperationTexts.ForError(Item, SystemErrors.FromErrno(SystemErrors.ENOSPC)));
         Assert.Equal("Access to /dst/a.txt was denied.",

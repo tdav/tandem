@@ -30,7 +30,7 @@ public sealed class TempFileStoreTests : IDisposable
             new SyncProgress(reported.Add), Ct);
 
         Assert.Equal("report.pdf", Path.GetFileName(path));
-        Assert.StartsWith(store.Directory + "/", path, StringComparison.Ordinal);
+        Assert.StartsWith(store.Directory + Path.DirectorySeparatorChar, path, StringComparison.Ordinal);
         Assert.Equal(content, await File.ReadAllBytesAsync(path, Ct));
         Assert.NotEmpty(reported);
         Assert.Equal(content.Length, reported[^1]);

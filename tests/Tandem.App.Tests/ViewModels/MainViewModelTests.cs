@@ -46,6 +46,7 @@ public class MainViewModelTests : LanguageTestBase
     [AvaloniaFact]
     public async Task Changed_binding_works_without_restart()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests and WindowsStartTests cover Windows.");
         await using var app = await TestApp.StartAsync(show: false);
         var panel = app.Main.Workspace.ActivePanel;
         panel.CursorIndex = panel.Rows.ToList().FindIndex(r => r.Name == "notes.txt");
@@ -75,6 +76,7 @@ public class MainViewModelTests : LanguageTestBase
     [AvaloniaFact]
     public async Task Start_reads_the_key_bindings_from_the_settings_file()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests and WindowsStartTests cover Windows.");
         await using var app = await TestApp.StartAsync(show: false, settings: AppSettings.Default with
         {
             KeyBindings = [new KeyBindingOverride(CommandIds.ViewQuickView, ["Cmd+Alt+Q"])],
@@ -106,6 +108,7 @@ public class MainViewModelTests : LanguageTestBase
     [AvaloniaFact]
     public async Task Unusable_chords_from_the_settings_file_leave_the_default()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests and WindowsStartTests cover Windows.");
         await using var app = await TestApp.StartAsync(show: false, settings: AppSettings.Default with
         {
             KeyBindings = [new KeyBindingOverride(CommandIds.FileCopy, ["K", "Cmd+Q"])],
@@ -118,6 +121,7 @@ public class MainViewModelTests : LanguageTestBase
     [AvaloniaFact]
     public async Task F_key_bar_shows_the_current_chord_of_each_command()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests and WindowsStartTests cover Windows.");
         await using var app = await TestApp.StartAsync(show: false);
         Assert.Equal(["F3", "F4", "F5", "F6", "F7", "F8"], app.Main.FKeys.Select(k => k.Key));
         var changes = 0;
@@ -155,6 +159,7 @@ public class MainViewModelTests : LanguageTestBase
     [AvaloniaFact]
     public async Task A_failing_command_is_reported_not_thrown()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests and WindowsStartTests cover Windows.");
         await using var app = await TestApp.StartAsync(show: false);
         var failure = new InvalidOperationException("boom");
         app.Main.Commands.Register(CommandIds.PanelRefresh, () => throw failure);
@@ -300,6 +305,7 @@ public class MainViewModelTests : LanguageTestBase
     [AvaloniaFact]
     public async Task Tab_and_view_commands_act_on_the_workspace()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests and WindowsStartTests cover Windows.");
         await using var app = await TestApp.StartAsync(show: false);
 
         await app.Main.HandleKeyAsync(KeyChord.Parse("Cmd+T"));

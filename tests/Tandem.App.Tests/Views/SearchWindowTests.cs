@@ -62,6 +62,7 @@ public class SearchWindowTests : LanguageTestBase
     [AvaloniaFact]
     public async Task Cmd_F_opens_search_for_the_active_folder()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests and WindowsStartTests cover Windows. (Ctrl+F connects on Windows)");
         await using var app = await TestApp.StartAsync(FileSystem());
 
         app.Press(Key.F, RawInputModifiers.Meta, PhysicalKey.F);
@@ -162,6 +163,7 @@ public class SearchWindowTests : LanguageTestBase
     [AvaloniaFact]
     public async Task Enter_in_a_field_starts_and_Enter_on_a_result_goes_to_it()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests and WindowsStartTests cover Windows. (Ctrl+F connects on Windows)");
         await using var app = await TestApp.StartAsync(FileSystem());
         app.Press(Key.F, RawInputModifiers.Meta, PhysicalKey.F);
         var window = SearchWindowOf(app)!;
@@ -201,6 +203,7 @@ public class SearchWindowTests : LanguageTestBase
     [AvaloniaFact]
     public async Task Many_results_are_added_in_batches_and_the_list_shows_them()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests and WindowsStartTests cover Windows. (Ctrl+F connects on Windows)");
         var fs = FileSystem();
         for (var i = 0; i < 2000; i++) fs.AddFile($"/home/many/f{i:D4}.log");
         await using var app = await TestApp.StartAsync(fs);
@@ -224,6 +227,7 @@ public class SearchWindowTests : LanguageTestBase
     [AvaloniaFact]
     public async Task Quitting_stops_a_running_search_and_closes_its_window_without_asking()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests and WindowsStartTests cover Windows. (Ctrl+F connects on Windows)");
         var fs = FileSystem();
         using var gate = HoldAt(fs, "/home/src");
         await using var app = await TestApp.StartAsync(fs);
@@ -261,6 +265,7 @@ public class SearchWindowTests : LanguageTestBase
     [AvaloniaFact]
     public async Task Close_all_closes_the_search_window_and_stops_its_search()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests and WindowsStartTests cover Windows. (Ctrl+F connects on Windows)");
         var fs = FileSystem();
         using var gate = HoldAt(fs, "/home/src");
         await using var app = await TestApp.StartAsync(fs);

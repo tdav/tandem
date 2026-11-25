@@ -43,6 +43,7 @@ public class TabStripWindowTests : LanguageTestBase
     [AvaloniaFact]
     public async Task Right_click_on_tab_activates_it_before_showing_menu()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests and WindowsStartTests cover Windows.");
         await using var app = await StartWithTwoTabsAsync();
         var right = app.Main.Workspace.Right;
         var clicked = right.Tabs[1];
@@ -75,6 +76,7 @@ public class TabStripWindowTests : LanguageTestBase
     [AvaloniaFact]
     public async Task Ctrl_Cmd_P_pins_the_active_tab_and_its_close_button_disappears()
     {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "macOS chords (Cmd); KeyMapWindowsTests and WindowsStartTests cover Windows.");
         await using var app = await StartWithTwoTabsAsync();
         var item = TabItem(app, PanelSide.Left, 0);
         var close = Named<Button>(item, "CloseTabButton");
