@@ -164,6 +164,11 @@ public static class MainMenu
         hidden.ToggleType = MenuItemToggleType.CheckBox;
         var quickView = CommandItem(main, CommandIds.ViewQuickView);
         quickView.ToggleType = MenuItemToggleType.CheckBox;
+        // The active panel's list mode.
+        var brief = CommandItem(main, CommandIds.ViewBrief);
+        brief.ToggleType = MenuItemToggleType.Radio;
+        var full = CommandItem(main, CommandIds.ViewFull);
+        full.ToggleType = MenuItemToggleType.Radio;
 
         (string? Code, NativeMenuItem Item)[] languages =
         [
@@ -192,6 +197,8 @@ public static class MainMenu
             fkeyBar.IsChecked = view.FKeyBar;
             hidden.IsChecked = workspace.ShowHidden;
             quickView.IsChecked = main.QuickView.IsOpen;
+            brief.IsChecked = main.ActiveSide.IsBrief;
+            full.IsChecked = !main.ActiveSide.IsBrief;
             foreach (var (code, item) in languages) item.IsChecked = workspace.Language == code;
             foreach (var (theme, item) in themes) item.IsChecked = main.Theme == theme;
         }
@@ -200,7 +207,7 @@ public static class MainMenu
         workspace.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(WorkspaceViewModel.View) or nameof(WorkspaceViewModel.ShowHidden)
-                or nameof(WorkspaceViewModel.Language)) Update();
+                or nameof(WorkspaceViewModel.Language) or nameof(WorkspaceViewModel.ActiveSide)) Update();
         };
         main.QuickView.PropertyChanged += (_, e) =>
         {
@@ -214,6 +221,7 @@ public static class MainMenu
         return
         [
             sidebar, buttonBar, volumeBars, commandLine, fkeyBar, new NativeMenuItemSeparator(), hidden,
+            new NativeMenuItemSeparator(), brief, full,
             new NativeMenuItemSeparator(), quickView,
             new NativeMenuItemSeparator(),
             Submenu("Menu_Sort", SortItems(main)),

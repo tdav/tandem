@@ -41,10 +41,10 @@
                     <SolidColorBrush x:Key="Tandem.FileColor.Blue" Color="#FF1565C0" />
                     <SolidColorBrush x:Key="Tandem.FileColor.Purple" Color="#FF6A1B9A" />
                     <SolidColorBrush x:Key="Tandem.FileColor.Gray" Color="#FF6B6B73" />
-                    <!-- Icons of hidden entries (dot-names, UF_HIDDEN, the Windows Hidden attribute). -->
-                    <SolidColorBrush x:Key="Tandem.HiddenIcon" Color="#FFB4BCC6" />
-                    <SolidColorBrush x:Key="Tandem.HiddenIconAccent" Color="#FFDDE2E8" />
-                    <SolidColorBrush x:Key="Tandem.HiddenIconBorder" Color="#FF6E7883" />
+                    <!-- Icons of hidden entries (dot-names, UF_HIDDEN, the Windows Hidden attribute), in lilac. -->
+                    <SolidColorBrush x:Key="Tandem.HiddenIcon" Color="#FF9C88D8" />
+                    <SolidColorBrush x:Key="Tandem.HiddenIconAccent" Color="#FFCFC4F0" />
+                    <SolidColorBrush x:Key="Tandem.HiddenIconBorder" Color="#FF5B47A0" />
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <SolidColorBrush x:Key="Tandem.BarBackground" Color="#FF232326" />
@@ -79,9 +79,9 @@
                     <SolidColorBrush x:Key="Tandem.FileColor.Blue" Color="#FF64B5F6" />
                     <SolidColorBrush x:Key="Tandem.FileColor.Purple" Color="#FFCE93D8" />
                     <SolidColorBrush x:Key="Tandem.FileColor.Gray" Color="#FFA1A1AA" />
-                    <SolidColorBrush x:Key="Tandem.HiddenIcon" Color="#FF5F6975" />
-                    <SolidColorBrush x:Key="Tandem.HiddenIconAccent" Color="#FF85909C" />
-                    <SolidColorBrush x:Key="Tandem.HiddenIconBorder" Color="#FFA9B3BE" />
+                    <SolidColorBrush x:Key="Tandem.HiddenIcon" Color="#FF6E5BB0" />
+                    <SolidColorBrush x:Key="Tandem.HiddenIconAccent" Color="#FF9583D0" />
+                    <SolidColorBrush x:Key="Tandem.HiddenIconBorder" Color="#FFC9BDF2" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
 

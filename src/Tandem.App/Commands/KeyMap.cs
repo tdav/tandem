@@ -62,6 +62,10 @@ public sealed class KeyMap
             (CommandIds.FavoritesShow, "Cmd+D"),
             (CommandIds.ViewToggleHidden, "Cmd+Shift+OemPeriod"),
             (CommandIds.ViewQuickView, "Ctrl+Q"),
+            // The brief and the full (detailed) view: B for brief, D for detailed. Not Ctrl+F1/Ctrl+F2 as in Windows
+            // two-pane managers (the Windows map has those): macOS keeps them for keyboard access.
+            (CommandIds.ViewBrief, "Ctrl+Cmd+B"),
+            (CommandIds.ViewFull, "Ctrl+Cmd+D"),
             // Finder's "Sort By" chords. Not Ctrl+F3…F8: macOS keeps Ctrl with an F-key for keyboard focus moves.
             (CommandIds.SortByName, "Ctrl+Cmd+1"),
             (CommandIds.SortByExtension, "Ctrl+Cmd+2"),
@@ -96,8 +100,9 @@ public sealed class KeyMap
     /// The Windows bindings made from the macOS ones, in their order: Cmd becomes Ctrl. A chord the macOS map already
     /// gives with Ctrl wins over a translated one, and a translation that would take a chord twice is dropped
     /// (Cmd+M and Ctrl+M both multi-rename; Cmd+F for search loses to Ctrl+F, connect, as in classic two-pane
-    /// managers). The Ctrl+Cmd chords (sorting, pinning) take the chords Windows two-pane managers use: Ctrl+F3…F7 to
-    /// sort, Ctrl+Alt+R to reverse, Ctrl+Alt+P to pin. Delete and Shift+Delete are added for deleting.
+    /// managers). The Ctrl+Cmd chords (sorting, pinning, the list view) take the chords Windows two-pane managers use:
+    /// Ctrl+F3…F7 to sort, Ctrl+Alt+R to reverse, Ctrl+Alt+P to pin, Ctrl+F1 for the brief view and Ctrl+F2 for the
+    /// full one. Delete and Shift+Delete are added for deleting.
     /// </summary>
     public static KeyMap ForWindows(KeyMap mac)
     {
@@ -111,6 +116,8 @@ public sealed class KeyMap
             [CommandIds.SortByMode] = "Ctrl+F7",
             [CommandIds.SortReverse] = "Ctrl+Alt+R",
             [CommandIds.TabTogglePin] = "Ctrl+Alt+P",
+            [CommandIds.ViewBrief] = "Ctrl+F1",
+            [CommandIds.ViewFull] = "Ctrl+F2",
         };
         var extra = new (string CommandId, string Chord)[]
         {

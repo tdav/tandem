@@ -1083,6 +1083,12 @@ Details were written to {1}.</value>
   <data name="Menu_view_quickView" xml:space="preserve">
     <value>Quick View Panel</value>
   </data>
+  <data name="Menu_view_brief" xml:space="preserve">
+    <value>Brief</value>
+  </data>
+  <data name="Menu_view_full" xml:space="preserve">
+    <value>Full</value>
+  </data>
   <data name="QuickView_Folder" xml:space="preserve">
     <value>{0}
 Folder</value>

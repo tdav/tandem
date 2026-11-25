@@ -26,6 +26,7 @@ public sealed partial class SideViewModel : ObservableObject
 
     private readonly MainViewModel _main;
     private PanelViewModel? _panel;
+    private ListMode _listMode;
 
     internal SideViewModel(MainViewModel main, PanelSide side, PanelTabsViewModel tabs)
     {
@@ -77,11 +78,47 @@ public sealed partial class SideViewModel : ObservableObject
     /// <summary>Whether the quick-view panel shows in place of this side's file list.</summary>
     public bool ShowsQuickView => _main.QuickView.IsOpen && _main.QuickView.Side == Side;
 
+    /// <summary>The column headers show with the full view's list; the brief view has no columns to head.</summary>
+    public bool ShowsColumnHeaders => !ShowsQuickView && !IsBrief;
+
     /// <summary>The quick-view panel's viewer while this side shows it; null otherwise, so only the side that shows
     /// the panel lays out its pages.</summary>
     public ViewerViewModel? QuickViewer => ShowsQuickView ? _main.QuickView.Viewer : null;
 
     public bool ShowVolumeBar => _main.Workspace.View.VolumeBars;
+
+    /// <summary>How this side lists its folder (Ctrl+F1 brief, Ctrl+F2 full), kept in the workspace's view state.
+    /// Every tab of the side shows the same way.</summary>
+    public ListMode ListMode
+    {
+        get
+        {
+            var view = _main.Workspace.View;
+            return Side == PanelSide.Left ? view.LeftList : view.RightList;
+        }
+        set
+        {
+            var view = _main.Workspace.View;
+            _main.Workspace.View = Side == PanelSide.Left ? view with { LeftList = value } : view with { RightList = value };
+        }
+    }
+
+    /// <summary>The brief view: names only, in columns filled top to bottom.</summary>
+    public bool IsBrief => ListMode == ListMode.Brief;
+
+    /// <summary>The rows of one column of the brief view, as the list last laid them out: Left and Right move the
+    /// cursor by this many rows. 1 until the list has been shown.</summary>
+    public int BriefRows { get; private set; } = 1;
+
+    /// <summary>The rows of the brief view's columns shown at once, for PageUp and PageDown.</summary>
+    public int BriefPageSize { get; private set; } = 1;
+
+    /// <summary>The list tells how the brief view is laid out: the rows of a column and the columns shown whole.</summary>
+    public void ReportBriefLayout(int rowsPerColumn, int visibleColumns)
+    {
+        BriefRows = Math.Max(1, rowsPerColumn);
+        BriefPageSize = BriefRows * Math.Max(1, visibleColumns);
+    }
 
     /// <summary>The file list's font, row height and columns: the settings' font and row height, and this side's own
     /// columns (<see cref="AppSettings.LeftColumns"/> or <c>RightColumns</c>).</summary>
@@ -405,6 +442,7 @@ public sealed partial class SideViewModel : ObservableObject
     internal void OnQuickViewChanged()
     {
         OnPropertyChanged(nameof(ShowsQuickView));
+        OnPropertyChanged(nameof(ShowsColumnHeaders));
         OnPropertyChanged(nameof(QuickViewer));
     }
 
@@ -412,6 +450,11 @@ public sealed partial class SideViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(ShowVolumeBar));
         OnPropertyChanged(nameof(ShowsVolumeBarForFiles));
+        if (_listMode == ListMode) return;
+        _listMode = ListMode;
+        OnPropertyChanged(nameof(ListMode));
+        OnPropertyChanged(nameof(IsBrief));
+        OnPropertyChanged(nameof(ShowsColumnHeaders));
     }
 
     /// <summary>Takes this side's part of the settings: the layout of its list and the colour rules.</summary>
