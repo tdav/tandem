@@ -36,14 +36,15 @@
             <Setter Property="StrokeJoin" Value="Round" />
             <Setter Property="StrokeLineCap" Value="Round" />
         </Style>
+        <!-- A hidden file: a pale page with a darker folded corner; a hidden folder: a darker body with a pale band. -->
         <Style Selector="Panel.hiddenIcon Path#HiddenIconBody">
             <Setter Property="Data" Value="{StaticResource HiddenFileBody}" />
-            <Setter Property="Fill" Value="{DynamicResource Tandem.HiddenIcon}" />
+            <Setter Property="Fill" Value="{DynamicResource Tandem.HiddenIconAccent}" />
             <Setter Property="Stroke" Value="{DynamicResource Tandem.HiddenIconBorder}" />
         </Style>
         <Style Selector="Panel.hiddenIcon Path#HiddenIconDetail">
             <Setter Property="Data" Value="{StaticResource HiddenFileDetail}" />
-            <Setter Property="Fill" Value="{DynamicResource Tandem.HiddenIconAccent}" />
+            <Setter Property="Fill" Value="{DynamicResource Tandem.HiddenIcon}" />
             <Setter Property="Stroke" Value="{DynamicResource Tandem.HiddenIconBorder}" />
         </Style>
         <Style Selector="Panel.hiddenIcon Path#HiddenIconLines">
@@ -52,9 +53,11 @@
         </Style>
         <Style Selector="Panel.hiddenIcon.folder Path#HiddenIconBody">
             <Setter Property="Data" Value="{StaticResource HiddenFolderBody}" />
+            <Setter Property="Fill" Value="{DynamicResource Tandem.HiddenIcon}" />
         </Style>
         <Style Selector="Panel.hiddenIcon.folder Path#HiddenIconDetail">
             <Setter Property="Data" Value="{StaticResource HiddenFolderDetail}" />
+            <Setter Property="Fill" Value="{DynamicResource Tandem.HiddenIconAccent}" />
             <Setter Property="StrokeThickness" Value="0" />
         </Style>
         <Style Selector="Panel.hiddenIcon.folder Path#HiddenIconLines">
