@@ -40,19 +40,21 @@ jobs:
         if: always()
         run: dotnet test tests/Tandem.App.Tests --no-restore --logger "console;verbosity=normal"
 
-      - name: Publish win-x64
+      - name: Publish win-x64 (Native AOT)
         if: always()
         shell: pwsh
         run: |
-          dotnet publish src/Tandem.App -c Release -r win-x64 --self-contained -p:PublishSingleFile=true `
-            -p:IncludeNativeLibrariesForSelfExtract=true -o publish/Tandem
-          Get-ChildItem publish/Tandem
+          dotnet publish src/Tandem.App -c Release -r win-x64 -p:DebugType=none -p:DebugSymbols=false -o publish/Tandem
+          Rename-Item publish/Tandem/Tandem.App.exe Tandem.exe
+          Get-ChildItem publish/Tandem | Format-Table Name, Length
+          # Native AOT leaves no managed assemblies: the exe must not be a .NET apphost with Tandem.App.dll beside it.
+          if (Test-Path publish/Tandem/Tandem.App.dll) { throw "not a Native AOT build" }
 
       - name: Smoke test the published exe
         if: always()
         shell: pwsh
         run: |
-          $exe = Resolve-Path publish/Tandem/Tandem.App.exe
+          $exe = Resolve-Path publish/Tandem/Tandem.exe
           $p = Start-Process -FilePath $exe -PassThru
           Start-Sleep -Seconds 20
           Add-Type -AssemblyName System.Windows.Forms, System.Drawing

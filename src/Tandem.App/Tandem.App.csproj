@@ -6,6 +6,14 @@
     <NeutralLanguage>en</NeutralLanguage>
   </PropertyGroup>
 
+  <!-- Windows: `dotnet publish -r win-x64` compiles natively (Native AOT) by default: one Tandem.App.exe plus the
+       native libraries of Skia, HarfBuzz and ANGLE beside it, no .NET to install. It needs a Windows host with the
+       MSVC build tools (the GitHub Actions windows runner); it cannot be cross-compiled from macOS. macOS publishes
+       choose AOT themselves (build/make-aot-app.sh). -->
+  <PropertyGroup Condition="$(RuntimeIdentifier.StartsWith('win'))">
+    <PublishAot>true</PublishAot>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Avalonia" />
     <PackageReference Include="Avalonia.Desktop" />
