@@ -82,6 +82,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         QuickView = new QuickViewViewModel(workspace, services.Providers, services.Temp, quickLookDelay,
             ReportFailure);
         RunCommand = new RunCommand(Commands, ExecuteCommandAsync);
+        FKeyCommand = new RunCommand(Commands, ExecuteCommandAsync, alwaysEnabled: true);
         Left = new SideViewModel(this, PanelSide.Left, workspace.Left);
         Right = new SideViewModel(this, PanelSide.Right, workspace.Right);
         Left.OnSettingsChanged(settings.Current, fileColorsChanged: false);
@@ -212,6 +213,10 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
     /// <summary>Runs the command whose id is the parameter; disabled while that command cannot run (including one not
     /// registered yet). For menus and buttons.</summary>
     public ICommand RunCommand { get; }
+
+    /// <summary>Runs an F-key bar button's command id; always enabled, so the buttons keep their look as the cursor
+    /// moves. An unavailable command does nothing when clicked.</summary>
+    public ICommand FKeyCommand { get; }
 
     public SideViewModel Left { get; }
 

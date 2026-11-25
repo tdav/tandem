@@ -170,13 +170,13 @@ public class MainWindowTests : LanguageTestBase
             (Key.End, PhysicalKey.End), (Key.PageUp, PhysicalKey.PageUp), (Key.PageDown, PhysicalKey.PageDown),
         };
         foreach (var modifiers in new[] { RawInputModifiers.Alt, RawInputModifiers.Meta, RawInputModifiers.Control })
-        foreach (var (key, physical) in moves)
-        {
-            app.Press(key, modifiers, physical);
-            await TestApp.WaitUntil(() => !app.Left.IsLoading); // Cmd+Up is nav.up: let the folder load
-            app.Pump();
-            AssertListFollowsCursor(app, list, $"{modifiers}+{key}");
-        }
+            foreach (var (key, physical) in moves)
+            {
+                app.Press(key, modifiers, physical);
+                await TestApp.WaitUntil(() => !app.Left.IsLoading); // Cmd+Up is nav.up: let the folder load
+                app.Pump();
+                AssertListFollowsCursor(app, list, $"{modifiers}+{key}");
+            }
 
         app.Type("z"); // no name starts with z
         AssertListFollowsCursor(app, list, "typed z");
@@ -420,8 +420,10 @@ public class MainWindowTests : LanguageTestBase
         await using var app = await TestApp.StartAsync();
         var f5 = app.Find<FKeyBar>("FKeyBar").GetVisualDescendants().OfType<Button>()
             .Single(b => b.Tag as string == CommandIds.FileCopy);
-        Assert.False(f5.IsEffectivelyEnabled); // the cursor is on "..": nothing to copy
-        app.Click(f5); // clicking a disabled command does nothing and throws nothing
+        Assert.False(app.Main.Commands.CanExecute(CommandIds.FileCopy)); // the cursor is on "..": nothing to copy
+        Assert.True(f5.IsEffectivelyEnabled); // the F-key bar stays enabled anyway
+        app.Click(f5); // clicking an unavailable command does nothing and throws nothing
+        app.Pump();
         Assert.Empty(app.Dialogs.Log);
 
         var copies = 0;
