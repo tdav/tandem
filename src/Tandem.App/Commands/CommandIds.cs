@@ -55,6 +55,8 @@ public static class CommandIds
     public const string FavoritesShow = "favorites.show";
     public const string ViewToggleHidden = "view.toggleHidden";
     public const string ViewQuickView = "view.quickView";
+    public const string ViewBrief = "view.brief";
+    public const string ViewFull = "view.full";
 
     // Settings track: the settings window (Cmd+,).
     public const string AppSettings = "app.settings";

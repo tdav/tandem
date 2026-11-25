@@ -533,12 +533,18 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         if (chord.Modifiers != KeyModifiers.None && !shift) return null;
 
         var panel = Workspace.ActivePanel;
+        // The brief view's columns: Left and Right go to the same row of the column before or after, a page is the
+        // columns shown. The full view leaves Left and Right alone.
+        var side = ActiveSide;
+        var page = side.IsBrief ? side.BriefPageSize : PageSize;
         int? move = chord.Key switch
         {
             Key.Up => -1,
             Key.Down => 1,
-            Key.PageUp => -PageSize,
-            Key.PageDown => PageSize,
+            Key.Left when side.IsBrief => -side.BriefRows,
+            Key.Right when side.IsBrief => side.BriefRows,
+            Key.PageUp => -page,
+            Key.PageDown => page,
             // Past the end on purpose: with Shift the move then marks through the first or last row.
             Key.Home => -panel.Rows.Count,
             Key.End => panel.Rows.Count,
@@ -610,6 +616,8 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
             () => Workspace.IsLoaded && !ActiveTabs().Active.IsTerminal);
         On(CommandIds.ViewToggleHidden, () => Workspace.ShowHidden = !Workspace.ShowHidden);
         On(CommandIds.ViewQuickView, QuickView.Toggle, () => Workspace.IsLoaded);
+        On(CommandIds.ViewBrief, () => ActiveSide.ListMode = ListMode.Brief);
+        On(CommandIds.ViewFull, () => ActiveSide.ListMode = ListMode.Full);
         On(CommandIds.SortByName, () => ActiveSide.SortBy(SortColumn.Name));
         On(CommandIds.SortByExtension, () => ActiveSide.SortBy(SortColumn.Extension));
         On(CommandIds.SortBySize, () => ActiveSide.SortBy(SortColumn.Size));

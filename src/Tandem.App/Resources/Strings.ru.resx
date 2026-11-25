@@ -1074,6 +1074,12 @@
   <data name="Menu_view_quickView" xml:space="preserve">
     <value>Панель просмотра</value>
   </data>
+  <data name="Menu_view_brief" xml:space="preserve">
+    <value>Краткий</value>
+  </data>
+  <data name="Menu_view_full" xml:space="preserve">
+    <value>Подробный</value>
+  </data>
   <data name="QuickView_Folder" xml:space="preserve">
     <value>{0}
 Папка</value>
